@@ -1,0 +1,624 @@
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+from torch.autograd import Variable
+import dla
+import pdb
+import numpy as np
+from generate_action_samples import *
+import random
+
+class atari_model(nn.Module):
+    def __init__(self, in_channels=12, num_actions=18):
+        super(atari_model, self).__init__()
+        self.conv1 = nn.Conv2d(in_channels, 32, kernel_size=8, stride=4)
+        self.conv2 = nn.Conv2d(32, 64, kernel_size=4, stride=2)
+        self.conv3 = nn.Conv2d(64, 64, kernel_size=3, stride=1)
+        self.fc4 = nn.Linear(7 * 7 * 64, 512)
+        self.fc5 = nn.Linear(512, num_actions)
+        self.num_actions = num_actions
+
+    def forward(self, x):
+        x = F.relu(self.conv1(x))
+        x = F.relu(self.conv2(x))
+        x = F.relu(self.conv3(x))
+        x = F.relu(self.fc4(x.view(x.size(0), -1)))
+        res = self.fc5(x)
+        return res
+
+class ConvLSTMCell(nn.Module):
+    def __init__(self, 
+                input_dim, 
+                hidden_dim, 
+                bias):
+        super(ConvLSTMCell, self).__init__()
+        self.input_dim  = input_dim
+        self.hidden_dim = hidden_dim
+        self.bias        = bias
+        self.fc1        = nn.Linear(input_dim+hidden_dim, 2 * hidden_dim, bias=self.bias)
+        self.fc2        = nn.Linear(2 * hidden_dim, 2 * hidden_dim, bias=self.bias)
+        self.fc3        = nn.Linear(2 * hidden_dim, 2 * hidden_dim, bias=self.bias)
+        self.fc4        = nn.Linear(2 * hidden_dim, 2 * hidden_dim, bias=self.bias)
+        self.W            = nn.Linear(2 * hidden_dim, 4 * hidden_dim, bias=self.bias)
+        
+    def forward(self, input_tensor, cur_state):
+        h_cur, c_cur = cur_state
+        combined = torch.cat([input_tensor, h_cur], dim=1) 
+        combined_conv = self.W(F.relu(self.fc4(F.relu(self.fc3(F.relu(self.fc2(F.relu(self.fc1(combined)))))))))
+        cc_i, cc_f, cc_o, cc_g = torch.split(combined_conv, self.hidden_dim, dim=1) 
+        i = torch.sigmoid(cc_i)
+        f = torch.sigmoid(cc_f)
+        o = torch.sigmoid(cc_o)
+        g = torch.tanh(cc_g)
+        c_next = f * c_cur + i * g
+        h_next = o * torch.tanh(c_next)
+        return h_next, c_next # h_next is the output
+
+    def init_hidden(self, batch_size):
+        use_cuda = torch.cuda.is_available()
+        if use_cuda:
+            return (Variable(torch.zeros(batch_size, self.hidden_dim)).cuda(),
+                    Variable(torch.zeros(batch_size, self.hidden_dim)).cuda())
+        else:
+            return (Variable(torch.zeros(batch_size, self.hidden_dim)),
+                    Variable(torch.zeros(batch_size, self.hidden_dim)))
+
+class ConvLSTMNet(nn.Module):
+    def __init__(self, in_channel=3, out_channel=3, num_actions=9,
+                pretrain=True, # use pretrained dla model 
+                with_lstm=True, # with lstm
+                multi_info=False, # multi features with input image feature
+                with_posinfo=False, # with xyz position information
+                use_pos_class=False, # convert regression problem into classification problem
+                with_speed=False,
+                with_pos=False,
+                frame_history_len=4,
+                freeze_dla=False): # using speed as input
+        super(ConvLSTMNet, self).__init__()
+        self.dla = dla.dla46x_c(pretrained=pretrain).cuda()
+        if freeze_dla:
+            for param in self.dla.parameters():
+                param.requires_grad = False
+        self.with_lstm = with_lstm
+        self.multi_info = multi_info
+        self.use_pos_class = use_pos_class
+        self.with_speed = with_speed
+        self.feature_encode = nn.Linear(256*frame_history_len, 512)
+        self.outfeature_encode = nn.Linear(512, 512)
+        self.hidden_dim = 512
+        self.num_actions = num_actions
+        self.with_posinfo = with_posinfo
+        self.with_pos = with_pos
+        self.info_dim = 0
+        self.frame_history_len = frame_history_len
+        self.act_encode = nn.Linear(num_actions, 64) # action encoding
+        self.act_bn = nn.BatchNorm1d(64)
+        self.info_dim += 64
+        if use_pos_class and with_pos:
+            self.pos_encode = nn.Linear(19, 32)
+            self.pos_bn = nn.BatchNorm1d(32)
+            self.info_dim += 32
+        else:
+            if with_pos:
+                self.pos_encode = nn.Linear(1, 16)
+                self.pos_bn = nn.BatchNorm1d(16)
+                self.info_dim += 16
+        if with_posinfo:
+            self.posxyz_encode = nn.Linear(3, 32)
+            self.posxyz_bn = nn.BatchNorm1d(32)
+            self.info_dim += 32
+        if with_speed:
+            self.speed_encode = nn.Linear(2, 16)
+            self.speed_bn = nn.BatchNorm1d(16)
+            self.info_dim += 16
+        if multi_info:
+            self.info_encode = nn.Linear(self.info_dim, self.hidden_dim)
+        else:
+            self.info_encode = nn.Linear(self.info_dim+self.hidden_dim, self.hidden_dim)
+        self.info_bn = nn.BatchNorm1d(self.hidden_dim)
+        if with_lstm:
+            self.lstm = ConvLSTMCell(self.hidden_dim, self.hidden_dim, True)
+        self.fc_coll_1 = nn.Linear(self.hidden_dim+self.info_dim, 128)
+        self.fc_coll_bn1 = nn.BatchNorm1d(128)
+        self.fc_coll_2 = nn.Linear(128, 32)
+        self.fc_coll_bn2 = nn.BatchNorm1d(32)
+        self.fc_coll_3 = nn.Linear(32, 2)
+        self.fc_off_1 = nn.Linear(self.hidden_dim+self.info_dim, 128)
+        self.fc_off_bn1 = nn.BatchNorm1d(128)
+        self.fc_off_2 = nn.Linear(128, 32)
+        self.fc_off_bn2 = nn.BatchNorm1d(32)
+        self.fc_off_3 = nn.Linear(32, 2)
+        if with_pos:
+            self.fc_pos_1 = nn.Linear(self.hidden_dim+self.info_dim, 32)
+            self.fc_pos_bn = nn.BatchNorm1d(32)
+            self.fc_pos_tanh = nn.Tanh()
+        if use_pos_class and with_pos:
+            self.fc_pos_2 = nn.Linear(32, 19)
+        else:
+            if with_pos:
+                self.fc_pos_2 = nn.Linear(32, 1)
+        self.fc_dist_1 = nn.Linear(self.hidden_dim+self.info_dim, 128)
+        self.fc_dist_bn1 = nn.BatchNorm1d(128)
+        self.fc_dist_2 = nn.Linear(128, 32)
+        self.fc_dist_bn2 = nn.BatchNorm1d(32)
+        self.fc_dist_3 = nn.Linear(32, 1)
+        if with_speed:
+            self.fc_speed_1 = nn.Linear(self.hidden_dim+self.info_dim, 32)
+            self.fc_speed_bn = nn.BatchNorm1d(32)
+            self.fc_speed_2 = nn.Linear(self.hidden_dim+self.info_dim, 2)
+        if with_posinfo:
+            self.fc_posxyz_1 = nn.Linear(self.hidden_dim+self.info_dim, 32)
+            self.fc_posxyz_bn = nn.BatchNorm1d(32)
+            self.fc_posxyz_2 = nn.Linear(32, 3)
+    
+    def get_feature(self, x):
+        res = []
+        for i in range(self.frame_history_len):
+            res.append(self.dla(x[:,i*3:(i+1)*3,:,:]))
+        res = torch.cat(res, dim=1)
+        res = self.feature_encode(res)
+        return res # batch * 512
+
+    def forward(self, x, action, speed=None, pos=None, posxyz=None, with_encode=False, hidden=None, cell=None):
+        if with_encode == False:
+            x = self.get_feature(x) # batch * 512
+        if self.with_lstm:
+            if hidden is None or cell is None:
+                hidden, cell = x, x # batch * 512
+        action_enc = F.relu(self.act_bn(self.act_encode(action))) # batch * 64
+        if self.with_pos:
+            pos_enc = F.relu(self.pos_bn(self.pos_encode(pos)))
+            info_enc = torch.cat([action_enc, pos_enc], dim=1)
+        else:
+            info_enc = action_enc
+        if self.with_speed:
+            speed_enc = F.relu(self.speed_bn(self.speed_encode(speed))) # batch * 16
+            info_enc = torch.cat([info_enc, speed_enc], dim=1)
+        if self.with_posinfo:
+            posxyz_enc = F.relu(self.posxyz_bn(self.posxyz_encode(posxyz)))
+            info_enc = torch.cat([info_enc, posxyz_enc], dim=1)
+        if self.multi_info == True:
+            encode = F.relu(self.info_bn(self.info_encode(info_enc)))
+            encode = F.relu(encode * x)  # batch * 256
+        else:
+            encode = torch.cat([x, info_enc], dim=1) # batch * 256
+            encode = F.relu(self.info_bn(self.info_encode(encode)))
+        if self.with_lstm:
+            hidden, cell = self.lstm(encode, [hidden, cell])
+            pred_encode_nx = hidden.view(-1, self.hidden_dim)
+            nx_feature_enc = self.outfeature_encode(F.relu(pred_encode_nx))
+        else:
+            pred_encode_nx = encode # batch * 256
+            nx_feature_enc = self.outfeature_encode(F.relu(pred_encode_nx))
+        hidden_enc = torch.cat([pred_encode_nx, info_enc], dim=1)
+
+        # outputs
+        coll_prob = nn.Softmax(dim=-1)(self.fc_coll_3(F.relu(self.fc_coll_bn2(self.fc_coll_2(F.relu(self.fc_coll_bn1(self.fc_coll_1(hidden_enc))))))))
+        if self.with_pos:
+            pos_pred = 20 * self.fc_pos_tanh(self.fc_pos_2(F.relu(self.fc_pos_bn(self.fc_pos_1(hidden_enc)))))
+        if self.use_pos_class and self.with_pos:
+            pos_pred = nn.Softmax(dim=-1)(pos_pred)
+        if self.with_pos == False:
+            pos_pred = None
+        offroad_prob = nn.Softmax(dim=-1)(self.fc_off_3(F.relu(self.fc_off_bn2(self.fc_off_2(F.relu(self.fc_off_bn1(self.fc_off_1(hidden_enc))))))))
+        dist = self.fc_dist_3(F.relu(self.fc_dist_bn2(self.fc_dist_2(F.relu(self.fc_dist_bn1(self.fc_dist_1(hidden_enc)))))))
+        if self.with_speed:
+            speed_pred = self.fc_speed_2(F.relu(self.fc_speed_bn(self.fc_speed_1(hidden_enc))))
+        else:
+            speed_pred = None
+        if self.with_posinfo:
+            posxyz_pred = self.fc_posxyz_2(F.relu(self.fc_posxyz_bn(self.fc_posxyz_1(hidden_enc))))
+        else:
+            posxyz_pred = None
+        return coll_prob, nx_feature_enc, offroad_prob, speed_pred, dist, pos_pred, posxyz_pred, hidden, cell
+
+class ConvLSTMMulti(nn.Module):
+    def __init__(self, inc, outc, na, pretrain=True, with_lstm=True, multi_info=False, with_posinfo=False, use_pos_class=False, with_speed=False, with_pos=False, frame_history_len=4):
+        super(ConvLSTMMulti, self).__init__()
+        self.conv_lstm = ConvLSTMNet(inc, outc, na, pretrain=pretrain, with_lstm=with_lstm, multi_info=multi_info, with_posinfo=with_posinfo, use_pos_class=use_pos_class, with_speed=with_speed, with_pos=with_pos, frame_history_len=frame_history_len)
+        self.with_posinfo = with_posinfo
+        self.use_pos_class = use_pos_class
+        self.with_speed = with_speed
+        self.with_pos = with_pos
+        self.frame_history_len = frame_history_len
+        self.num_actions = na
+
+    def get_feature(self, x):
+        feat = []
+        x = x.contiguous()
+        _,num_time,_,_,_ = int(x.size()[0]), int(x.size()[1]), int(x.size()[2]), int(x.size()[3]), int(x.size()[4])
+        for i in range(num_time):
+            feat.append(self.conv_lstm.get_feature(x[:,i,:,:,:].squeeze(1)))
+        return torch.stack(feat, dim=1)
+
+    def get_action_loss(self, imgs, actions, speed=None, pos=None, num_time=3, hidden=None, cell=None, posxyz=None):
+        batch_size = int(imgs.size()[0])
+        target_coll_np = np.zeros((batch_size, num_time, 2))
+        target_coll = Variable(torch.from_numpy(target_coll_np).type(dtype))
+        target_off = Variable(torch.from_numpy(target_coll_np).type(dtype))
+        weight = []
+        for i in range(num_time):
+            weight.append(0.97**i)
+        weight = Variable(torch.from_numpy(np.array(weight).reshape((1, num_time, 1))).type(dtype)).repeat(batch_size, num_time, 1)
+        outs = self.forward(imgs, actions, speed, pos, num_time=num_time, hidden=hidden, cell=cell, posxyz=posxyz)
+        coll_ls = nn.CrossEntropyLoss(reduce=False)(outs[0].view(-1,2), torch.max(target_coll.view(-1,2),-1)[1])
+        off_ls = nn.CrossEntropyLoss(reduce=False)(outs[2].view(-1,2), torch.max(target_off.view(-1,2),-1)[1])
+        coll_ls = (coll_ls.view(-1,num_steps,1)*weight).view(-1,num_steps).sum(-1)
+        off_ls = (off_ls.view(-1,num_steps,1)*weight).view(-1,num_steps).sum(-1)
+        dist_ls = (outs[4].view(1,num_steps,1)*weight).view(-1,num_steps).sum(-1)
+        return coll_ls.data.cpu().numpy().reshape((-1)), off_ls.data.cpu().numpy().reshape((-1)), dist_ls.data.cpu().numpy().reshape((-1))            
+     
+    def sample_action(self, imgs, prev_action, speed=None, pos=None, num_time=3, num_actions=9, hidden=None, cell=None, calculate_loss=False, posxyz=None, batch_step=200, hand=True):
+        use_cuda = torch.cuda.is_available()
+        imgs = imgs.contiguous()
+        if self.with_speed:
+            speed = speed.contiguous()
+            speed = speed.view(-1, 1, 2) 
+        batch_size, c, w, h = int(imgs.size()[0]), int(imgs.size()[-3]), int(imgs.size()[-2]), int(imgs.size()[-1])
+        imgs = imgs.view(batch_size, 1, c, w, h)
+        pos = pos.view(batch_size, 1, -1)
+        if self.with_posinfo:
+            posxyz = posxyz.view(batch_size, 1, 3)
+        if use_cuda:
+            dtype = torch.cuda.FloatTensor
+        else:
+            dtype = torch.FloatTensor
+       
+        if calculate_loss:
+            num_steps = 15
+            this_action = Variable(torch.randn(1, num_steps, self.num_actions), requires_grad=False)
+            this_action = self.quantize_action(this_action, batch_size, num_steps, self.num_actions, requires_grad=False, prev_action=prev_action)
+            target_coll_np = np.zeros((1, num_steps, 2))
+            target_coll = Variable(torch.from_numpy(target_coll_np).type(dtype))
+            target_off = Variable(torch.from_numpy(target_coll_np).type(dtype))
+            weight = []
+            for i in range(num_steps):
+                weight.append(1**i)
+            weight = Variable(torch.from_numpy(np.array(weight).reshape((1,num_steps, 1))).type(dtype))
+            outs = self.forward(imgs, this_action, speed, pos, num_time=num_steps,hidden=hidden,cell=cell,posxyz=posxyz)
+            coll_ls = nn.CrossEntropyLoss(reduce=False)(outs[0].view(-1,2), torch.max(target_coll.view(-1,2),-1)[1])
+            off_ls = nn.CrossEntropyLoss(reduce=False)(outs[2].view(-1,2), torch.max(target_off.view(-1,2),-1)[1])
+            coll_ls = (coll_ls.view(-1,num_steps,1)*weight).view(-1,num_steps).sum(-1)
+            off_ls = (off_ls.view(-1,num_steps,1)*weight).view(-1,num_steps).sum(-1)
+            if self.with_speed:
+                sp_ls = (outs[3][:,:,0].view(-1,num_steps,1)*torch.cos(outs[3][:,:,1].view(-1,num_steps,1))*weight).view(-1,num_steps).sum(-1)
+            else:
+                sp_ls = 0
+            dist_ls = (outs[4].view(1,num_steps,1)*weight).view(-1,num_steps).sum(-1)
+            if self.use_pos_class == False and self.with_pos:
+                pos_ls = (torch.abs(outs[5].view(-1,num_steps,1))*weight).view(-1,num_steps).sum(-1)
+            elif self.with_pos:
+                pos_ls = torch.abs((torch.max(outs[5].view(-1, num_steps, 19), -1)[1])-9).sum()
+            else:
+                pos_ls = Variable(torch.randn(1)).cuda()
+            if self.with_speed:
+                return outs[0][0,:,0].data.cpu().numpy(), outs[2][0,:,0].data.cpu().numpy(),outs[3][0,:,:].data.cpu().numpy(), outs[4][0,:].data.cpu().numpy(), outs[5][0,:,:].data.cpu().numpy(),\
+                    coll_ls.data.cpu().numpy(), off_ls.data.cpu().numpy(),sp_ls.data.cpu().numpy(),dist_ls.data.cpu().numpy(), pos_ls.data.cpu().numpy() 
+            else:
+                if self.with_pos:
+                    return outs[0][0, :, 0].data.cpu().numpy(), outs[2][0,:,0].data.cpu().numpy(), None, outs[4][0,:].data.cpu().numpy(), outs[5][0,:,:].data.cpu().numpy(), \
+                        coll_ls.data.cpu().numpy(), off_ls.data.cpu().numpy(), None, dist_ls.data.cpu().numpy(), pos_ls.data.cpu().numpy()
+                else:
+                    return outs[0][0,:,0].data.cpu().numpy(),outs[2][0,:,0].data.cpu().numpy(),None,outs[4][0,:].data.cpu().numpy(),None,coll_ls.data.cpu().numpy(),off_ls.data.cpu().numpy(),None,\
+                        dist_ls.data.cpu().numpy(),None
+        elif hand == True:
+            all_colls = []
+            all_offs = []
+            all_dists = []
+            for prev_act in range(self.num_actions):
+                num_steps = 5
+                this_action = Variable(torch.randn(1, num_steps, self.num_actions), requires_grad=False)
+                this_action = self.quantize_action(this_action, batch_size, num_steps, self.num_actions, requires_grad=False, prev_action=prev_act)
+                target_coll_np = np.zeros((1, num_steps, 2))
+                target_coll = Variable(torch.from_numpy(target_coll_np).type(dtype))
+                target_off = Variable(torch.from_numpy(target_coll_np).type(dtype))
+                weight = []
+                for i in range(num_steps):
+                    weight.append(0.97**i)
+                weight = Variable(torch.from_numpy(np.array(weight).reshape((1,num_steps, 1))).type(dtype))
+                outs = self.forward(imgs, this_action, speed, pos, num_time=num_steps,hidden=hidden,cell=cell,posxyz=posxyz)
+                all_colls.append(outs[0][0,:,0].data.cpu().numpy().mean())
+                all_offs.append(outs[2][0,:,0].data.cpu().numpy().mean())
+                all_dists.append(outs[4][0,:].data.cpu().numpy().mean())
+            off_rank = self.num_actions-1-np.array(all_offs).argsort().argsort()
+            coll_rank = self.num_actions-1-np.array(all_colls).argsort().argsort()
+            dist_rank = self.num_actions-1-np.array(all_dists).argsort().argsort()
+            all_rank = (self.num_actions-1-np.array(all_offs).argsort().argsort()+self.num_actions-1-np.array(all_dists).argsort().argsort()).argsort().argsort()
+            sign_act = True
+            if np.max(all_offs) < 0.7:# and all_dist[1] > 14:
+                action = np.argmin(off_rank)
+            else:
+                action = np.argmin(dist_rank)
+            cnt = 0
+            real_action = action.copy()
+            '''
+            while sign_act and cnt <= self.num_actions-2:
+                if off_rank[real_action] <=self.num_actions/2 and coll_rank[real_action]<=self.num_actions/2 and dist_rank[real_action] <=self.num_actions/2:
+                    sign_act = False
+                else:
+                    if np.mean(all_offs) <0.4:
+                        real_action = int(np.where(off_rank.reshape((-1))==(cnt+1))[0])
+                    else:
+                        real_action = int(np.where(all_rank.reshape((-1))==(cnt+1))[0])
+                cnt+= 1
+            if cnt <=self.num_actions-2:
+                action = real_action
+            '''
+            if np.max(all_offs) <=0.6:
+                curr_pos = float(pos[0,0,0].data.cpu().numpy()) 
+                curr_sp = float(speed[0,0].data.cpu().numpy())
+                if curr_pos <= -4:
+                    if curr_sp <= 3.0:
+                        action = 0
+                    else:
+                        action = 3
+                elif curr_pos <= -1.5 and curr_pos > -4:
+                    if prev_action != 3 and prev_action!=0:
+                        if curr_sp <= 3.0:
+                            action = 0
+                        else:
+                            action = 3
+                    else:
+                        action = 4
+                elif curr_pos >=1.5 and curr_pos < 4:
+                    if prev_action != 2 and prev_action!=5:
+                        if curr_sp <= 3.0:
+                            action = 2
+                        else:
+                            action = 5
+                    else:
+                        action = 4
+                elif curr_pos >= 4:
+                    if curr_sp <= 3.0:
+                        action = 2
+                    else:
+                        action = 5
+                else:
+                    if curr_sp <= 4:
+                        action = 1
+                    else:
+                        action = 4
+                print('hand select')
+            #curr_pos = float(pos[0,0,0].data.cpu().numpy())
+            #if curr_pos >= 3 and action != 5 and action!=2 and prev_action!=2 and prev_action!=5:
+            #    action = 2
+            #    print('hand select 2') 
+            #if curr_pos <= -3 and action != 3 and action!=0 and prev_action!=0 and prev_action!=3:
+            #    action = 0
+            #    print('hand select 3')
+            return action, None, None      
+        # new action sample function
+        
+        all_actions = get_action_sample(num_time, 3, num_actions=self.num_actions) # num_choice * num_time * 9
+        num_choice = all_actions.shape[0]
+        weight = []
+        for i in range(num_time):
+            weight.append(0.99**i)
+        weight = Variable(torch.from_numpy(np.array(weight).reshape((1,num_time, 1))).type(dtype))    
+        total_ls = 10000
+        which_action = 4
+        action_1_ls = 10000
+        action_4_ls = 10000
+        collprob = 0
+        offprob = 0
+        pospred = 0
+        batch_step = 10
+        curr_pos = abs(float(pos[0,0,0].data.cpu().numpy()))+0.001
+        all_off_loss, all_coll_loss, all_dist_loss = [], [], []
+        if self.use_pos_class:
+            curr_pos = float((torch.max(pos[0,0,:].view(-1, 19),-1)[1]-9).data.cpu().numpy())
+        for ii in range(int(num_choice/batch_step)):
+            this_action = Variable(torch.from_numpy(all_actions[ii*batch_step:min((ii+1)*batch_step, num_choice), :, :])).type(dtype)
+            this_imgs = imgs.repeat(int(this_action.size()[0]), 1,1,1,1)
+            if self.with_speed:
+                this_sp = speed.repeat(int(this_action.size()[0]), 1, 1)
+            else:
+                this_sp = None
+            this_pos = pos.repeat(int(this_action.size()[0]), 1, 1)
+            if self.with_posinfo:
+                this_posxyz = posxyz.repeat(int(this_action.size()[0]), 1, 1)
+                coll, _, offroad, speed_pred, dist, pos_pred, _,_, _ = self.forward(this_imgs, this_action, this_sp, this_pos, num_time=num_time, hidden=hidden, cell=cell, posxyz=this_posxyz)
+            else:
+                coll,_,offroad,speed_pred,dist,pos_pred,_,_,_=self.forward(this_imgs, this_action, this_sp,this_pos,num_time=num_time,hidden=hidden,cell=cell)
+            target_coll_np = np.zeros((int(this_action.size()[0]), num_time, 2))
+            target_coll = Variable(torch.from_numpy(target_coll_np).type(dtype))
+            target_off = Variable(torch.from_numpy(target_coll_np).type(dtype))
+            this_weight = weight.repeat(int(this_action.size()[0]), 1,1)
+            coll_ls = nn.CrossEntropyLoss(reduce=False)(coll.view(-1,2), torch.max(target_coll.view(-1,2), -1)[1])
+            off_ls = nn.CrossEntropyLoss(reduce=False)(offroad.view(-1,2), torch.max(target_off.view(-1,2),-1)[1])
+            coll_ls = (coll_ls.view(-1, num_time, 1)*this_weight).view(-1, num_time).sum(-1)
+            off_ls = (off_ls.view(-1, num_time, 1)*this_weight).view(-1, num_time).sum(-1)
+            dist_ls = (dist.view(int(this_action.size()[0]), num_time, 1)*this_weight).view(-1, num_time)
+            dist_ls = dist_ls.sum(-1)
+            batch_ls = (off_ls-dist_ls).data.cpu().numpy().reshape((-1))
+            idx = np.argmin(batch_ls)
+            this_loss = batch_ls[idx]
+            if this_loss < total_ls or ii == 0:
+                poss_action = np.argmax(this_action.data.cpu().numpy()[idx,0,:].squeeze())
+                if float(coll[idx, 0, 0].data.cpu().numpy()) > 0.4 and float(offroad[idx, 0, 0].data.cpu().numpy()) > 0.4 or ii==0: 
+                    #and abs(float(pos_pred[idx, 0, 0]))<=5.0 ) or ii == 0:
+                    total_ls = this_loss
+                    which_action = poss_action
+                    collprob = coll[idx, :, 0].data.cpu().numpy()
+                    offprob = offroad[idx, :, 0].data.cpu().numpy()
+                    if self.use_pos_class and self.with_pos:
+                        pospred = (torch.max(pos_pred[idx, :, :], -1)[1]-9).data.cpu().numpy().reshape((-1,))
+                    elif self.with_pos:
+                        pospred = pos_pred[idx,:,0].data.cpu().numpy().reshape((-1,))
+                    if poss_action == 1:
+                        action_1_ls = this_loss
+                    if poss_action == 4:
+                        action_4_ls = this_loss
+        ''' 
+        if np.mean(offprob[:5]) <= 0.70:
+            this_probs = 0
+            for i in range(9):
+                this_action = Variable(torch.randn(1, num_time, 9), requires_grad=False)
+                this_action = self.quantize_action(this_action, 1, num_time, 9, requires_grad=False, prev_action=i)
+                coll, _, offroad, speed_pred, dist, pos_pred, _, _ = self.forward(imgs, this_action, speed, pos, num_time, hidden=None, cell=None)
+                if float(offroad[0,0,0].data.cpu().numpy()) > this_probs:
+                    this_probs = float(offroad[0,0,0].data.cpu().numpy())
+                    collprob = coll[0,:,0].data.cpu().numpy()
+                    offprob = offroad[0,:,0].data.cpu().numpy()
+                    which_action = i
+        '''
+        # if np.mean(offprob[:5]) <= 0.60:
+        return which_action, None, None
+        if self.use_pos_class == False and hand==True and self.with_pos:
+            if abs(pospred[0]+pospred[1])>=6 or np.mean(offprob[:3])<=0.50:# or speed[0,0,0]*torch.cos(speed[0,0,1]) <= 0.005:
+                this_pos = float(pos.data.cpu().numpy()[0,0,0])
+                if this_pos <= -3 and (prev_action != 3 or this_pos<=-4):# and prev_action != 0:
+                    which_action = 3
+                elif this_pos >= 3 and (prev_action != 5 or this_pos>=4):# and prev_action != 2:
+                    which_action = 5
+                else:
+                    if action_4_ls <= action_1_ls:
+                        which_action = 4
+                    else:
+                        which_action = 1
+        elif hand == True:
+            if np.mean(offprob[:3])<=0.55: #abs(pospred[0]+pospred[1]) >= 6:
+                if  curr_pos <= -3:
+                    which_action = 3
+                elif curr_pos >= 3:
+                    which_action = 5
+                else:
+                    which_action = 4
+        if prev_action == 1 and which_action == 1:
+            which_action = 4
+        return which_action, collprob, (offprob, None) 
+        '''
+        action = Variable(torch.randn(batch_size, num_time, num_actions), requires_grad=False)
+        action = self.quantize_action(action, batch_size, num_time, num_actions, requires_grad=True, prev_action=prev_action)
+        final_action, final_loss, sign, i, last_loss = 0, 10000, True, 0, 10000
+        target_coll_np = np.zeros((batch_size, num_time, 2))
+        target_off_np = np.zeros((batch_size, num_time, 2))
+        target_coll_np[:,:,0] = 1.0
+        target_off_np[:,:,1] = 1.0
+        target_coll = Variable(torch.from_numpy(target_coll_np).type(dtype))
+        target_off = Variable(torch.from_numpy(target_off_np).type(dtype))
+        weight_coll = torch.from_numpy(np.array([1,1])).type(dtype)
+        weight_off = torch.from_numpy(np.array([1,1])).type(dtype)
+        weight = []
+        for i in range(num_time):
+            weight.append(0.99**i)
+        weight = Variable(torch.from_numpy(np.array(weight).reshape((1,num_time, 1))).type(dtype))
+        while sign:
+            self.zero_grad()
+            coll, _, offroad, speed_pred, dist,pos_pred,_,_ = self.forward(imgs, action, speed, pos, num_time, hidden=hidden, cell=cell)
+            coll_ls = nn.CrossEntropyLoss(weight=weight_coll, reduce=False)(coll.view(-1,2), torch.max(target_coll.view(-1,2),-1)[1])*weight.view(-1)
+            off_ls = nn.CrossEntropyLoss(weight=weight_off, reduce=False)(offroad.view(-1,2),torch.max(target_off.view(-1,2),-1)[1])*weight.view(-1)
+            loss = 2 * coll_ls.sum() + 2 * off_ls.sum() - 0.3 * (dist*weight).sum() +\
+                    (torch.abs(pos_pred)).sum() - 0.3*(speed_pred[:,:,0]*weight).sum()
+            this_loss = float(loss.data.cpu().numpy())
+            if calculate_loss == True:
+                return this_loss, coll.data.cpu().numpy()[0,:,0], offroad.data.cpu().numpy()[0,:,0], speed_pred[0,:,:], pos_pred[0,:,:]
+            if abs(this_loss-last_loss)/abs(last_loss) <= 0.01 and this_loss <= last_loss and i >= 20:
+                sign = False
+            if i >= 30:
+                sign = False
+            if this_loss < last_loss:
+                last_loss = this_loss
+            loss.backward()
+            action.data -= 0.01 * (action.grad.data)
+            i += 1
+            action_v = self.quantize_action(action, batch_size, num_time, num_actions, requires_grad=False)
+            coll2, _, offroad2, speed_pred2, dist2,_,_,_ = self.forward(imgs, action_v, speed, pos, 1, hidden=hidden, cell=cell) 
+            # loss2 = nn.CrossEntropyLoss(weight=weight_coll)(coll2.view(-1,2), torch.max(target_coll.view(-1,2),-1)[1])+\
+            #       10 * nn.CrossEntropyLoss(weight=weight_off)(offroad2.view(-1,2), torch.max(target_off.view(-1,2),-1)[1])-\
+            #        0.001*dist2.sum()
+            # i += 1
+            # this_loss2 = float(loss2.data.cpu().numpy())
+            # if this_loss2 < final_loss or i == 1:
+            #    final_loss = this_loss2
+            #    final_action = action_v
+            coll_final = coll2
+            offroad_final = offroad2 
+            if coll_final.data.cpu().numpy()[0,0,0] <=0.5 or offroad_final.data.cpu().numpy()[0,0,0] <=0.5:
+                sign = True
+        return torch.max(action, -1)[1].cpu().data.numpy(), coll_final.data.cpu().numpy()[0,:,0], offroad_final.data.cpu().numpy()[0,:,0]
+        # return action.cpu().data.numpy()[0,0,:], coll_final.data.cpu().numpy()[0,:,0], offroad_final.data.cpu().numpy()[0, :, 0]
+        '''
+
+    def quantize_action(self, action, batch_size, num_time, num_actions, requires_grad=False, prev_action=None):
+        use_cuda = torch.cuda.is_available()
+        if use_cuda:
+            dtype = torch.cuda.FloatTensor
+        else:
+            dtype = torch.FloatTensor
+        act = torch.max(action, -1)[1]
+        act_np = np.zeros((batch_size, num_time, num_actions))
+        if prev_action is None:
+            for j in range(batch_size):
+                act_np[j, np.arange(num_time), act.cpu().data.numpy().astype(np.uint8)[j,:]] = 1
+        elif prev_action == -1:
+            pass
+        else:
+            for j in range(batch_size):
+                act_np[j, np.arange(num_time), (np.arange(num_time)*0+prev_action).astype(np.uint8)] = 1
+        # act_np = np.exp(act_np)/np.repeat(np.exp(act_np).sum(-1), num_actions).reshape((batch_size, num_time, num_actions))
+        act_np = act_np.reshape((batch_size, num_time, num_actions))
+        action_v = Variable(torch.from_numpy(act_np).type(dtype), requires_grad=requires_grad)
+        return action_v
+
+    def forward(self, imgs, actions=None, speed=None, pos=None, num_time=None, hidden=None, cell=None, posxyz=None, get_feature=False):
+        # batch * time * c * w * h
+        if get_feature:
+            res = self.get_feature(imgs)
+            return res
+        batch_size, num_step, c, w, h = int(imgs.size()[0]), int(imgs.size()[1]), int(imgs.size()[-3]), int(imgs.size()[-2]), int(imgs.size()[-1])
+        if torch.cuda.is_available():
+            dtype = torch.cuda.FloatTensor
+        else:
+            dtype = torch.FloatTensor
+        if self.use_pos_class:
+            this_pos = pos[:,0,:].squeeze(1).view(-1,19)
+        else:
+            this_pos = pos[:,0,:].squeeze(1).view(-1,1)
+        if self.with_speed:
+            this_speed = speed[:,0,:].squeeze(1)
+        else:
+            this_speed = None
+        if self.with_posinfo:
+            this_posxyz = posxyz[:,0,:].squeeze(1)
+        else:
+            this_posxyz = None
+        coll, pred, offroad, speed_pred, dist, pos_pred, posxyz_pred, hidden, cell = self.conv_lstm(imgs[:,0,:,:,:].squeeze(1), actions[:,0,:].squeeze(1),this_speed, this_pos, this_posxyz, hidden=hidden, cell=cell) 
+        num_act = self.num_actions 
+        coll_list = [coll]
+        pred_list = [pred]
+        offroad_list = [offroad]
+        speed_list = [speed_pred]
+        dist_list = [dist]
+        pos_list = [pos_pred]
+        posxyz_list = [posxyz_pred]
+        for i in range(1, num_time):
+            if self.use_pos_class and self.with_pos:
+                mask = Variable(torch.zeros(batch_size, 19), requires_grad=False).type(dtype)
+                mask[torch.arange(batch_size).type(dtype).long(), torch.max(pos_pred,-1)[1].long()] = 1.0
+                pos_pred2 = torch.abs(mask * pos_pred)
+                pos_pred2[torch.arange(batch_size).type(dtype).long(), torch.max(pos_pred,-1)[1].long()] = 1.0
+            else:
+                pos_pred2 = pos_pred
+            coll, pred, offroad, speed_pred, dist, pos_pred, posxyz_pred, hidden, cell = self.conv_lstm(pred, actions[:,i,:].squeeze(1), speed_pred, pos_pred2, posxyz_pred, with_encode=True, hidden=hidden, cell=cell)
+            coll_list.append(coll)
+            pred_list.append(pred)
+            offroad_list.append(offroad)
+            speed_list.append(speed_pred)
+            dist_list.append(dist)
+            pos_list.append(pos_pred)
+            posxyz_list.append(posxyz_pred)
+        if self.with_speed == False:
+            speed_out = None
+        else:
+            speed_out = torch.stack(speed_list, dim=1)
+        if self.with_posinfo == False:
+            posxyz_out = None
+        else:
+            posxyz_out = torch.stack(posxyz_list, dim=1)
+        if self.with_pos:
+            pos_out = torch.stack(pos_list,dim=1)
+        else:
+            pos_out = None
+        return torch.stack(coll_list, dim=1), torch.stack(pred_list, dim=1), torch.stack(offroad_list,dim=1), \
+            speed_out, torch.stack(dist_list, dim=1), pos_out, posxyz_out, hidden, cell
