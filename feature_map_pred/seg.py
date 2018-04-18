@@ -1,15 +1,15 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import math
 import numpy as np
 import drn
-import data_transforms as transforms
 import os
 from scipy.misc import imsave
 from scipy.misc.pilutil import imshow
 import matplotlib.pyplot as plt
 
-train = False
+train = True
 
 def fill_up_weights(up):
     w = up.weight.data
@@ -44,7 +44,6 @@ class DRNSeg(nn.Module):
 
         self.seg = nn.Conv2d(model.out_dim, classes,
                              kernel_size=1, bias=True)
-        self.softmax = nn.LogSoftmax()
         m = self.seg
         n = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
         m.weight.data.normal_(0, math.sqrt(2. / n))
@@ -71,12 +70,24 @@ class DRNSeg(nn.Module):
             y = self.up4(x)
         elif action == 5:
             y = self.up5(x)
-        return self.softmax(y), x
+        return F.log_softmax(y, dim = 2), x
 
     def optim_parameters(self, memo=None):
         for param in self.base.parameters():
             yield param
         for param in self.seg.parameters():
+            yield param
+        for param in self.up0.parameters():
+            yield param
+        for param in self.up1.parameters():
+            yield param
+        for param in self.up2.parameters():
+            yield param
+        for param in self.up3.parameters():
+            yield param
+        for param in self.up4.parameters():
+            yield param
+        for param in self.up5.parameters():
             yield param
 
 def draw_from_pred(pred):
@@ -89,8 +100,8 @@ def draw_from_pred(pred):
     return illustration
 
 if __name__ == '__main__':
-    if os.path.exists('log.txt'):
-        os.system('rm log.txt')
+    if os.path.exists('seg_log.txt'):
+        os.system('rm seg_log.txt')
     model = DRNSeg('drn_d_22', 4)
     inputs = torch.autograd.Variable(torch.ones(1, 3, 480, 640), requires_grad = False)
     target = torch.autograd.Variable(torch.ones(1, 480, 640), requires_grad = False).type(torch.LongTensor)
@@ -109,8 +120,8 @@ if __name__ == '__main__':
         losses = 0
         epoch = 0
         while True:
-            for i in range(10000):
-                data = np.load('/home/cxy/semantic_pred/dataset/%d.npz' % i)
+            for i in range(6000):
+                data = np.load('dataset1/%d.npz' % i)
                 inputs[0] = torch.from_numpy(data['obs'].transpose(2, 0, 1))
                 action = data['action'][0]
                 target[0] = torch.from_numpy(data['seg']).type(torch.LongTensor)
@@ -122,7 +133,7 @@ if __name__ == '__main__':
                 optimizer.step()
                 if (i + 1) % 100 == 0:
                     print('iteration %d, mean loss %f' % (i + 1, losses / 100.0))
-                    with open('log.txt', 'a') as f:
+                    with open('seg_log.txt', 'a') as f:
                         f.write('iteration %d, mean loss %f\n' % (i + 1, losses / 100.0))
                     losses = 0
                 if (i + 1) % 1000 == 0:
@@ -141,7 +152,6 @@ if __name__ == '__main__':
             preds.append(pred)
             plt.imshow(draw_from_pred(pred))
         plt.savefig('pred.png', dpi = 300)
-
 
 
 '''

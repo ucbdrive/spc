@@ -93,36 +93,21 @@ num_steps = 12
 obs_avg = 112.62289744791671
 obs_std = 56.1524832523
 
-
-if __name__ == '__main__':
-    np.random.seed(0)
-    kill_torcses()
-
+def collect_feature_map(env):
     model = DRNSeg('drn_d_22', 4)
-    # model.load_state_dict(torch.load('models/epoch5.dat'))
+    model.load_state_dict(torch.load('models/epoch5.dat'))
     inputs = torch.autograd.Variable(torch.ones(1, 3, 480, 640), requires_grad = False)
     if torch.cuda.is_available():
         model = model.cuda()
         inputs = inputs.cuda()
 
-    envs = torcs_envs(num = 1)
-    env = envs.get_envs()[0]
-    '''
-    seg = env.get_segmentation().astype(np.uint8)
-    seg_list = np.repeat(np.expand_dims(seg, axis = 0), num_steps, axis = 0)
-    true_obs = np.repeat(obs, 3, axis = 0)
-    obs_list = [true_obs for i in range(num_steps)]
-    action_array = np.repeat(np.array([4]), num_steps)
-    '''
-
-
-    for i in range(2):
+    for i in range(2000):
         obs = env.reset()
         obs = (obs.transpose(2, 0, 1) - obs_avg) / obs_std
         inputs[0] = torch.from_numpy(obs)
         feature_map = model(inputs).detach().data.cpu().numpy()
         np.save('dataset/episode%d_step%d.npy' % (i, 0), feature_map)
-        for j in range(1, 101):
+        for j in range(1, 201):
             action = np.random.randint(6)
             obs, reward, done, info = env.step(action)
             obs = (obs.transpose(2, 0, 1) - obs_avg) / obs_std
@@ -130,8 +115,42 @@ if __name__ == '__main__':
             feature_map = model(inputs).detach().data.cpu().numpy()
             np.save('dataset/episode%d_step%d_action%d.npy' % (i, j, action), feature_map)
 
-    '''
-    for i in range(6):
+def collect_segmentation(env, dir = 'dataset'):
+    if not os.path.isdir(dir):
+        os.mkdir(dir)
+    os.system('rm ' + dir + '/*.npz')
+    obs = env.reset()
+    obs = (obs.transpose(2, 0, 1) - obs_avg) / obs_std
+    for i in range(6000):
+        old = obs
+        action = np.random.randint(6)
+        obs, reward, done, info = env.step(action)
+        obs = (obs.transpose(2, 0, 1) - obs_avg) / obs_std
+        seg = env.get_segmentation().astype(np.uint8)
+        np.savez(os.path.join(dir, '%d.npz' % i), obs = old, action = np.array([action]), seg = seg)
+        if done or reward <= -2.5:
+            obs = env.reset()
+            obs = (obs.transpose(2, 0, 1) - obs_avg) / obs_std
+
+
+if __name__ == '__main__':
+    np.random.seed(0)
+    kill_torcses()
+
+
+    envs = torcs_envs(num = 1)
+    env = envs.get_envs()[0]
+
+    # collect_segmentation(env, 'dataset1')
+    obs = env.reset()
+    obs = (obs.transpose(2, 0, 1) - obs_avg) / obs_std
+    seg = env.get_segmentation().astype(np.uint8)
+    seg_list = np.repeat(np.expand_dims(seg, axis = 0), num_steps, axis = 0)
+    true_obs = np.repeat(obs, 3, axis = 0)
+    obs_list = [true_obs for i in range(num_steps)]
+    action_array = np.repeat(np.array([4]), num_steps)
+
+    for i in range(2):
         action = np.random.randint(5)
         if action == 4:
             action = 5
@@ -140,7 +159,7 @@ if __name__ == '__main__':
         seg = np.expand_dims(env.get_segmentation().astype(np.uint8), axis = 0)
         seg_list = np.concatenate((seg_list[1:], seg), axis = 0)
         action_array = np.concatenate((action_array[1:], np.array([action])))
-        np.savez('dataset/%d.npz' % i, obs = obs_list[-num_steps], action = action_array, seg = seg_list)
+        np.savez('dataset2/%d.npz' % i, obs = obs_list[-num_steps], action = action_array, seg = seg_list)
         true_obs = np.concatenate((true_obs[3:], obs), axis=0)
         obs_list = obs_list[1:] + [true_obs]
         if done or reward <= -2.5:
@@ -150,5 +169,5 @@ if __name__ == '__main__':
             action_array = np.repeat(np.array([4]), num_steps)
             seg = env.get_segmentation().astype(np.uint8)
             seg_list = np.repeat(np.expand_dims(seg, axis = 0), num_steps, axis = 0)
-    '''
+
     env.close()
