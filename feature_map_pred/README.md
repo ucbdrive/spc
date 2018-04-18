@@ -1,0 +1,3 @@
+-`collect.py` collects data
+-`predict.py` End-to-end prediction training
+-`predict2.py` End-to-end prediction training mod 2
