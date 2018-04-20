@@ -10,6 +10,23 @@ import random
 from sklearn.metrics import confusion_matrix
 import pdb
 
+class MPCData(Dataset):
+    def __init__(self, mpc_buffer, batch_size=32):
+        self.mpc_buffer = mpc_buffer
+        self.batch_size = batch_size
+
+    def update_buffer(self, mpc_buffer):
+        self.mpc_buffer = mpc_buffer
+
+    def __len__(self):
+        return self.mpc_buffer.num_in_buffer
+
+    def __getitem__(self, idx):
+        x, idxes = self.mpc_buffer.sample(batch_size, sample_early = False)
+        x = list(x)
+        act_batch, coll_batch, offroad_batch, dist_batch, img_batch, nximg_batch = x[0], x[1], x[3], x[4], x[5], x[6]
+        return act_batch, coll_batch, offroad_batch, dist_batch, img_batch, nximg_batch
+
 def train_model(train_net, mpc_buffer, batch_size, epoch, avg_img_t, std_img_t, pred_step):
     if epoch % 20 == 0:
         x, idxes = mpc_buffer.sample(batch_size, sample_early = True)

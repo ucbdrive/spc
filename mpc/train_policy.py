@@ -37,10 +37,8 @@ def train_policy(args,
     obs, reward, done, info = env.step(1)
     prev_info = copy.deepcopy(info)
     obs = cv2.resize(obs, (256, 256))
-    use_cuda = torch.cuda.is_available()
     train_net = ConvLSTMMulti(num_total_act, pretrain = True, frame_history_len = frame_history_len)
-    if use_cuda:
-        train_net = train_net.cuda()
+    train_net = train_net.cuda()
 
     doneCond = DoneCondition(20)
     params = [param for param in train_net.parameters() if param.requires_grad]
@@ -71,6 +69,11 @@ def train_policy(args,
     else:
         num_imgs_start = 0
 
+    if args.same_step:
+        all_actions = pkl.load(open('acts_samestep.pkl','rb'))
+    else:
+        all_actions = pkl.load(open('acts_nosamestep.pkl','rb'))
+
     explore = 0.1
     last_ends = np.array([900, 200, 2])
     for tt in range(num_imgs_start, num_steps):
@@ -86,7 +89,7 @@ def train_policy(args,
         if rand_num <= 1-explore:
             with torch.no_grad():
                 train_net.eval()
-                action,_,_ = sample_action(train_net, obs_var, prev_action=prev_act, num_time=pred_step, batch_step=args.batch_step, gpu=0, same_step=args.same_step)
+                action,_,_ = sample_action(train_net, obs_var, prev_action=prev_act, num_time=pred_step, batch_step=args.batch_step, same_step=args.same_step, all_actions=all_actions[prev_act,:,:,:])
         else:
             action = np.random.randint(num_total_act)
         obs, reward, real_done, info = env.step(int(action))
@@ -105,7 +108,7 @@ def train_policy(args,
         rewards += reward
         epi_len += 1
         if tt % 100 == 0:
-            avg_img, std_img, avg_img_t, std_img_t = img_buffer.get_avg_std(gpu=0)
+            avg_img, std_img, avg_img_t, std_img_t = img_buffer.get_avg_std()
         if done:
             last_ends = np.array([info['pos'][0], info['pos'][1], info['pos'][2]])
             obs_buffer.clear()
@@ -143,6 +146,8 @@ def train_policy(args,
                 if num_epoch >= 10:
                     sign = False
                 if epoch % save_freq == 0:
+                    os.rename(args.save_path+'/model/pred_model_'+str(0).zfill(9)+'.pt', args.save_path+'/model/pred_model_'+str(0).zfill(9)+'.pt.old')
+                    os.rename(args.save_path+'/optimizer/optim_'+str(0).zfill(9)+'.pt', args.save_path+'/optimizer/optim_'+str(0).zfill(9)+'.pt.old')
                     torch.save(train_net.module.state_dict(), args.save_path+'/model/pred_model_'+str(0).zfill(9)+'.pt')
                     torch.save(optimizer.state_dict(), args.save_path+'/optimizer/optim_'+str(0).zfill(9)+'.pt')
                     pkl.dump(epoch, open(args.save_path+'/epoch.pkl', 'wb'))

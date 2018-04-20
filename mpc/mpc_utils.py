@@ -25,8 +25,8 @@ class IMGBuffer(object):
     def get_avg_std(self, gpu=0):
         avg = np.mean(self.imgs[:self.num_in_buffer],0)
         std = np.std(self.imgs[:self.num_in_buffer], 0)
-        avg_t = torch.from_numpy(avg.transpose(2,0,1)).float().repeat(self.frame_history_len, 1, 1).cuda(gpu)
-        std_t = torch.from_numpy(std.transpose(2,0,1)).float().repeat(self.frame_history_len, 1, 1).cuda(gpu)
+        avg_t = torch.from_numpy(avg.transpose(2,0,1)).float().repeat(self.frame_history_len, 1, 1).cuda()
+        std_t = torch.from_numpy(std.transpose(2,0,1)).float().repeat(self.frame_history_len, 1, 1).cuda()
         return avg, std, avg_t, std_t
     
 class MPCBuffer(object):
@@ -50,17 +50,10 @@ class MPCBuffer(object):
         self.loss     = np.ones(size)*1000
         self.rewards  = np.ones((size,1))
 
-    def sample_n_unique(self, sampling_f, n, sample_early=False):
+    def sample_n_unique(self, sampling_f, n):
         res = []
-        p = self.rewards[:self.num_in_buffer-2,0].reshape((-1))
-        if sample_early:
-            p = self.rewards[:int(self.num_in_buffer/3)-2] 
-        p = p-np.min(p)+2.0
-        p = np.log(p)
-        p = p/np.sum(p)
-        p = p.reshape(-1)
         while len(res) < n:
-            candidate = np.random.choice(len(p), p=p) 
+            candidate = sampling_f()
             done = self.sample_done(candidate)
             if candidate not in res and done:
                 res.append(candidate)
@@ -95,9 +88,9 @@ class MPCBuffer(object):
     def sample(self, batch_size, sample_early=False):
         assert self.can_sample(batch_size)
         if sample_early == False:
-            idxes = self.sample_n_unique(lambda: random.randint(0, self.num_in_buffer - 2), batch_size, sample_early)
+            idxes = self.sample_n_unique(lambda: random.randint(0, self.num_in_buffer - 2), batch_size)
         else:
-            idxes = self.sample_n_unique(lambda: random.randint(0, int(self.num_in_buffer/3)-2), batch_size, sample_early)
+            idxes = self.sample_n_unique(lambda: random.randint(0, int(self.num_in_buffer/3)-2), batch_size)
         return self._encode_sample(idxes), idxes
 
     def store_loss(self, losses, idxes):

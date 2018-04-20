@@ -144,10 +144,6 @@ class ConvLSTMMulti(nn.Module):
             res = self.get_feature(imgs)
             return res
         batch_size, num_step, c, w, h = int(imgs.size()[0]), int(imgs.size()[1]), int(imgs.size()[-3]), int(imgs.size()[-2]), int(imgs.size()[-1])
-        if torch.cuda.is_available():
-            dtype = torch.cuda.FloatTensor
-        else:
-            dtype = torch.FloatTensor
         coll, pred, offroad, dist, hidden, cell = self.conv_lstm(imgs[:,0,:,:,:].squeeze(1), actions[:,0,:].squeeze(1), hidden=hidden, cell=cell)
         num_act = self.num_actions
         coll_list = [coll]
@@ -167,16 +163,12 @@ def get_action_loss(net, imgs, actions, num_time = 3, hidden = None, cell = None
     batch_size = int(imgs.size()[0])
     target_coll_np = np.zeros((batch_size, num_time, 2))
     target_coll_np[:,:,0] = 1.0
-    if torch.cuda.is_available():
-        dtype = torch.cuda.FloatTensor
-    else:
-        dtype = torch.FloatTensor
-    target_coll = Variable(torch.from_numpy(target_coll_np).float()).cuda(gpu)
-    target_off = Variable(torch.from_numpy(target_coll_np).float()).cuda(gpu)
+    target_coll = Variable(torch.from_numpy(target_coll_np).float()).cuda()
+    target_off = Variable(torch.from_numpy(target_coll_np).float()).cuda()
     weight = []
     for i in range(num_time):
         weight.append(0.97**i)
-    weight = Variable(torch.from_numpy(np.array(weight).reshape((1, num_time, 1))).float().cuda(gpu)).repeat(batch_size, 1, 1)
+    weight = Variable(torch.from_numpy(np.array(weight).reshape((1, num_time, 1))).float().cuda()).repeat(batch_size, 1, 1)
     outs = net.forward(imgs, actions, num_time=num_time, hidden=hidden, cell=cell)
     coll_ls = nn.CrossEntropyLoss(reduce=False)(outs[0].view(-1,2), torch.max(target_coll.view(-1,2),-1)[1])
     off_ls = nn.CrossEntropyLoss(reduce=False)(outs[2].view(-1,2), torch.max(target_off.view(-1,2),-1)[1])
@@ -186,8 +178,7 @@ def get_action_loss(net, imgs, actions, num_time = 3, hidden = None, cell = None
     return coll_ls.data.cpu().numpy().reshape((-1)), off_ls.data.cpu().numpy().reshape((-1)), dist_ls.data.cpu().numpy().reshape((-1)),\
         outs[0][:,:,0].data.cpu().numpy(), outs[2][:,:,0].data.cpu().numpy(), outs[3][:,:,0].data.cpu().numpy()           
      
-def sample_action(net, imgs, prev_action, num_time=3, hidden=None, cell=None, num_actions = 6, calculate_loss=False, batch_step=200, gpu=2, same_step=False):
-    use_cuda = torch.cuda.is_available()
+def sample_action(net, imgs, prev_action, num_time=3, hidden=None, cell=None, num_actions = 6, calculate_loss=False, batch_step=200, gpu=2, same_step=False, all_actions=None):
     imgs = imgs.contiguous()
     batch_size, c, w, h = int(imgs.size()[0]), int(imgs.size()[-3]), int(imgs.size()[-2]), int(imgs.size()[-1])
     imgs = imgs.view(batch_size, 1, c, w, h)
@@ -198,12 +189,12 @@ def sample_action(net, imgs, prev_action, num_time=3, hidden=None, cell=None, nu
         coll_ls, off_ls, dist_ls, coll_prob, off_prob, distance = get_action_loss(net, imgs, this_action, num_time, hidden, cell, gpu=gpu)
         return coll_prob, off_prob, distance, coll_ls, off_ls, dist_ls
     else: # sample action
-        all_actions,_ = get_act_samps(num_time, num_actions, prev_action, 1500, same_step)
-        # all_actions = get_action_sample(num_time, 3, num_actions)
+        if all_actions is None:
+            all_actions,_ = get_act_samps(num_time, num_actions, prev_action, 1500, same_step)
         num_choice = all_actions.shape[0]
         total_ls = 100000000
         which_action = -1
-        all_actions = torch.from_numpy(all_actions).float().cuda(gpu)
+        all_actions = torch.from_numpy(all_actions).float().cuda()
         for ii in range(int(num_choice/batch_step)):
             this_action = Variable(all_actions[ii*batch_step:min((ii+1)*batch_step, num_choice),:,:])
             this_imgs = imgs.repeat(int(this_action.size()[0]), 1,1,1,1)
@@ -218,11 +209,6 @@ def sample_action(net, imgs, prev_action, num_time=3, hidden=None, cell=None, nu
         return which_action, None, None
 
 def quantize_action(action, batch_size, num_time, num_actions, requires_grad=False, prev_action=None):
-    use_cuda = torch.cuda.is_available()
-    if use_cuda:
-        dtype = torch.cuda.FloatTensor
-    else:
-        dtype = torch.FloatTensor
     act = torch.max(action, -1)[1]
     act_np = np.zeros((batch_size, num_time, num_actions))
     if prev_action is None:
@@ -234,5 +220,5 @@ def quantize_action(action, batch_size, num_time, num_actions, requires_grad=Fal
         for j in range(batch_size):
             act_np[j, np.arange(num_time), (np.arange(num_time)*0+prev_action).astype(np.uint8)] = 1
     act_np = act_np.reshape((batch_size, num_time, num_actions))
-    action_v = Variable(torch.from_numpy(act_np).type(dtype), requires_grad=requires_grad)
+    action_v = Variable(torch.from_numpy(act_np).float().cuda(), requires_grad=requires_grad)
     return action_v

@@ -8,8 +8,6 @@ import sys
 sys.path.append('/home/qizhicai/multitask/pyTORCS/py_TORCS')
 sys.path.append('/home/qizhicai/multitask/pyTORCS/')
 from py_TORCS import torcs_envs
-import multiprocessing as mp
-from mpc_agent import *
 
 parser = argparse.ArgumentParser(description = 'Train-torcs')
 parser.add_argument('--lr', type = float, default = 0.001, metavar = 'LR', help = 'learning rate')
@@ -38,8 +36,9 @@ if __name__ == '__main__':
                args.save_path+'/optimizer', \
                args.save_path+'/cnfmat'])
     
-    envs = torcs_envs(num = 1, game_config='/home/qizhicai/multitask/pyTORCS/game_config/michigan.xml', isServer = 1, screen_id = 162)
-    env = envs.get_envs()[0]
+    #envs = torcs_envs(num = 1, game_config='/home/qizhicai/multitask/pyTORCS/game_config/michigan.xml', isServer = 1, screen_id = 162)
+    #env = envs.get_envs()[0]
+    env = create_env(args.env, reward_ben=False, config='quickrace_discrete_single.xml', rescale=False, continuous=False)
     obs1 = env.reset()
     print(obs1.shape)
     obs, reward, done, info = env.step(1)
