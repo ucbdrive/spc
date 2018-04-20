@@ -3,7 +3,7 @@ cd ..
 python train_torcs.py \
     --lr 0.001 \
     --env 'torcs-v0' \
-    --save-path 'mpc_15_step_samestep' \
+    --save-path 'mpc_15_step_samestep_new' \
     --batch-size 32 \
     --pred-step 15 \
     --normalize \
@@ -16,5 +16,4 @@ python train_torcs.py \
     --frame-history-len 3 \
     --num-total-act 6 \
     --batch-step 350 \
-    --same-step \
-    --resume
+    --same-step
