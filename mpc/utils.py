@@ -11,7 +11,7 @@ from sklearn.metrics import confusion_matrix
 import pdb
 
 class MPCData(Dataset):
-    def __init__(self, mpc_buffer, batch_size=32):
+    def __init__(self, mpc_buffer, batch_size=4):
         self.mpc_buffer = mpc_buffer
         self.batch_size = batch_size
 
@@ -22,12 +22,12 @@ class MPCData(Dataset):
         return self.mpc_buffer.num_in_buffer
 
     def __getitem__(self, idx):
-        x, idxes = self.mpc_buffer.sample(batch_size, sample_early = False)
+        x, idxes = self.mpc_buffer.sample(self.batch_size, sample_early = False)
         x = list(x)
         act_batch, coll_batch, offroad_batch, dist_batch, img_batch, nximg_batch = x[0], x[1], x[3], x[4], x[5], x[6]
         return act_batch, coll_batch, offroad_batch, dist_batch, img_batch, nximg_batch
 
-def train_model(train_net, mpc_buffer, batch_size, epoch, avg_img_t, std_img_t, pred_step):
+def train_model(train_net, mpc_buffer, batch_size, epoch, avg_img_t, std_img_t, pred_step=15):
     if epoch % 20 == 0:
         x, idxes = mpc_buffer.sample(batch_size, sample_early = True)
     else:
@@ -43,6 +43,18 @@ def train_model(train_net, mpc_buffer, batch_size, epoch, avg_img_t, std_img_t, 
     img_batch = Variable(((x[5].float()-avg_img_t)/(std_img_t+0.0001)).type(dtype), requires_grad=False)
     nximg_batch = Variable(((x[6].float()-avg_img_t)/(std_img_t+0.0001)).type(dtype), requires_grad=False)
     pred_coll, pred_enc, pred_off, pred_dist,_,_ = train_net(img_batch, act_batch, int(act_batch.size()[1]))
+    '''
+    ch, he, wi = avg_img_t.size()[0], avg_img_t.size()[1], avg_img_t.size()[2]
+    for i_sample, x in enumerate(mpc_dataloader):
+        act_batch = x[0].view(-1, pred_step, 6).float().cuda()
+        coll_batch = x[1].view(-1, pred_step, 2).float().cuda()
+        offroad_batch = x[3].view(-1, pred_step, 2).float().cuda()
+        dist_batch = x[4].view(-1, pred_step, 1).float().cuda()
+        img_batch = (x[5].view(-1, pred_step, ch, he, wi).float().cuda()-avg_img_t)/(std_img_t+0.0001)
+        nximg_batch = (x[6].view(-1, pred_step, ch, he, wi).float().cuda()-avg_img_t)/(std_img_t+0.0001)
+        break
+    pdb.set_trace()
+    '''
     with torch.no_grad():
         nximg_enc = train_net(nximg_batch, get_feature=True)
         nximg_enc = nximg_enc.detach()
