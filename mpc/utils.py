@@ -11,7 +11,7 @@ from sklearn.metrics import confusion_matrix
 import pdb
 
 class MPCData(Dataset):
-    def __init__(self, mpc_buffer, batch_size=4):
+    def __init__(self, mpc_buffer, batch_size=1):
         self.mpc_buffer = mpc_buffer
         self.batch_size = batch_size
 
@@ -19,15 +19,18 @@ class MPCData(Dataset):
         self.mpc_buffer = mpc_buffer
 
     def __len__(self):
-        return self.mpc_buffer.num_in_buffer
+        return self.mpc_buffer.num_in_buffer-2
 
     def __getitem__(self, idx):
-        x, idxes = self.mpc_buffer.sample(self.batch_size, sample_early = False)
-        x = list(x)
+        done = self.mpc_buffer.sample_done(idx)
+        while done == False:
+            idx = random.randint(0, self.mpc_buffer.num_in_buffer-2)
+            done = self.mpc_buffer.sample_done(idx) 
+        x = list(self.mpc_buffer._encode_sample([idx]))
         act_batch, coll_batch, offroad_batch, dist_batch, img_batch, nximg_batch = x[0], x[1], x[3], x[4], x[5], x[6]
-        return act_batch, coll_batch, offroad_batch, dist_batch, img_batch, nximg_batch
+        return act_batch.squeeze(), coll_batch.squeeze(), offroad_batch.squeeze(), dist_batch.squeeze(0), img_batch.squeeze(), nximg_batch.squeeze()
 
-def train_model(train_net, mpc_buffer, batch_size, epoch, avg_img_t, std_img_t, pred_step=15):
+def train_model(train_net, mpc_buffer, batch_size, epoch, avg_img_t, std_img_t, pred_step=15, optimizer=None):
     if epoch % 20 == 0:
         x, idxes = mpc_buffer.sample(batch_size, sample_early = True)
     else:
@@ -35,38 +38,56 @@ def train_model(train_net, mpc_buffer, batch_size, epoch, avg_img_t, std_img_t, 
     x = list(x)
     for iii in range(len(x)):
         x[iii] = torch.from_numpy(x[iii]).float().cuda()
-    dtype = torch.cuda.FloatTensor
-    act_batch = Variable(x[0], requires_grad=False).type(dtype)
-    coll_batch = Variable(x[1], requires_grad=False).type(dtype)
-    offroad_batch = Variable(x[3], requires_grad=False).type(dtype)
-    dist_batch = Variable(x[4]).type(dtype)
-    img_batch = Variable(((x[5].float()-avg_img_t)/(std_img_t+0.0001)).type(dtype), requires_grad=False)
-    nximg_batch = Variable(((x[6].float()-avg_img_t)/(std_img_t+0.0001)).type(dtype), requires_grad=False)
-    pred_coll, pred_enc, pred_off, pred_dist,_,_ = train_net(img_batch, act_batch, int(act_batch.size()[1]))
+    act_batch = Variable(x[0], requires_grad=False)
+    coll_batch = Variable(x[1], requires_grad=False)
+    offroad_batch = Variable(x[3], requires_grad=False)
+    dist_batch = Variable(x[4])
+    img_batch = Variable(((x[5].float()-avg_img_t)/(std_img_t+0.0001)), requires_grad=False)
+    nximg_batch = Variable(((x[6].float()-avg_img_t)/(std_img_t+0.0001)), requires_grad=False)
     '''
-    ch, he, wi = avg_img_t.size()[0], avg_img_t.size()[1], avg_img_t.size()[2]
+    #mpc_data = MPCData(mpc_buffer)
+    #mpc_dataloader = DataLoader(dataset=mpc_data, batch_size=32, num_workers = 8)
     for i_sample, x in enumerate(mpc_dataloader):
-        act_batch = x[0].view(-1, pred_step, 6).float().cuda()
-        coll_batch = x[1].view(-1, pred_step, 2).float().cuda()
-        offroad_batch = x[3].view(-1, pred_step, 2).float().cuda()
-        dist_batch = x[4].view(-1, pred_step, 1).float().cuda()
-        img_batch = (x[5].view(-1, pred_step, ch, he, wi).float().cuda()-avg_img_t)/(std_img_t+0.0001)
-        nximg_batch = (x[6].view(-1, pred_step, ch, he, wi).float().cuda()-avg_img_t)/(std_img_t+0.0001)
+        optimizer.zero_grad()
+        act_batch = x[0].float().cuda()
+        coll_batch = x[1].float().cuda()
+        offroad_batch = x[2].float().cuda()
+        dist_batch = x[3].float().cuda()
+        img_batch = (x[4].float().cuda()-avg_img_t)/(std_img_t+0.0001)
+        nximg_batch = (x[5].float().cuda()-avg_img_t)/(std_img_t+0.0001)
+        with torch.no_grad():
+            nximg_enc = train_net(nximg_batch, get_feature=True)
+            nximg_enc = nximg_enc.detach()
+        pred_coll, pred_enc, pred_off, pred_dist,_,_ = train_net(img_batch, act_batch, int(act_batch.size()[1]))
+        coll_ls = Focal_Loss(pred_coll.view(-1,2), (torch.max(coll_batch.view(-1,2),-1)[1]).view(-1), reduce=True)
+        offroad_ls = Focal_Loss(pred_off.view(-1,2), (torch.max(offroad_batch.view(-1,2),-1)[1]).view(-1), reduce=True)
+        dist_ls = nn.MSELoss()(pred_dist.view(-1,pred_step), dist_batch[:,1:].view(-1,pred_step))
+        pred_ls = nn.L1Loss()(pred_enc, nximg_enc).sum()
+        loss = pred_ls + coll_ls + offroad_ls + dist_ls
+        loss.backward()
+        optimizer.step()
+        coll_acc, off_acc, total_dist_ls = log_info(pred_coll, coll_batch, pred_off, offroad_batch, \
+            float(coll_ls.data.cpu().numpy()), float(offroad_ls.data.cpu().numpy()),\
+            float(pred_ls.data.cpu().numpy()), float(dist_ls.data.cpu().numpy()), \
+            float(loss.data.cpu().numpy()), epoch, 1)
         break
-    pdb.set_trace()
     '''
+    optimizer.zero_grad()
     with torch.no_grad():
         nximg_enc = train_net(nximg_batch, get_feature=True)
         nximg_enc = nximg_enc.detach()
+    pred_coll, pred_enc, pred_off, pred_dist,_,_ = train_net(img_batch, act_batch, int(act_batch.size()[1]))
     coll_ls = Focal_Loss(pred_coll.view(-1,2), (torch.max(coll_batch.view(-1,2),-1)[1]).view(-1), reduce=True)
     offroad_ls = Focal_Loss(pred_off.view(-1,2), (torch.max(offroad_batch.view(-1,2),-1)[1]).view(-1), reduce=True)
     dist_ls = nn.MSELoss()(pred_dist.view(-1,pred_step), dist_batch[:,1:].view(-1,pred_step))
     pred_ls = nn.L1Loss()(pred_enc, nximg_enc).sum()
     loss = pred_ls + coll_ls + offroad_ls + dist_ls
+    loss.backward()
+    optimizer.step()
     coll_acc, off_acc, total_dist_ls = log_info(pred_coll, coll_batch, pred_off, offroad_batch, \
         float(coll_ls.data.cpu().numpy()), float(offroad_ls.data.cpu().numpy()),\
         float(pred_ls.data.cpu().numpy()), float(dist_ls.data.cpu().numpy()), \
-        float(loss.data.cpu().numpy()), epoch, 1) 
+        float(loss.data.cpu().numpy()), epoch, 1)
     return loss, coll_acc, off_acc, total_dist_ls
  
 class DoneCondition:

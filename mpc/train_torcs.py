@@ -36,9 +36,9 @@ if __name__ == '__main__':
                args.save_path+'/optimizer', \
                args.save_path+'/cnfmat'])
     
-    #envs = torcs_envs(num = 1, game_config='/home/qizhicai/multitask/pyTORCS/game_config/michigan.xml', isServer = 1, screen_id = 162)
-    #env = envs.get_envs()[0]
-    env = create_env(args.env, reward_ben=False, config='quickrace_discrete_single.xml', rescale=False, continuous=False)
+    envs = torcs_envs(num = 1, game_config='/home/qizhicai/multitask/pyTORCS/game_config/michigan.xml', isServer = 1, screen_id = 162)
+    env = envs.get_envs()[0]
+    #env = create_env(args.env, reward_ben=False, config='quickrace_discrete_single.xml', rescale=False, continuous=False)
     obs1 = env.reset()
     print(obs1.shape)
     obs, reward, done, info = env.step(1)

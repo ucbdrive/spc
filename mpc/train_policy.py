@@ -47,7 +47,6 @@ def train_policy(args,
     exploration = PiecewiseSchedule([
             (0, 1.0),
             (args.epsilon_frames, 0.05),
-            (num_steps/2, 0.05),
         ], outside_value=0.05
     )
 
@@ -63,7 +62,7 @@ def train_policy(args,
 
     mpc_buffer = MPCBuffer(buffer_size, frame_history_len, pred_step, num_total_act)
     prev_act, explore, epi_len = 1, 0.15, 0
-    # mpc_data = MPCData(mpc_buffer, 4)
+    #mpc_data = MPCData(mpc_buffer)
  
     if args.resume:
         num_imgs_start = max(int(open(args.save_path+'/log_train_torcs.txt').readlines()[-1].split(' ')[1])-3000,0)
@@ -132,12 +131,12 @@ def train_policy(args,
             num_epoch = 0
             while sign:
                 train_net.train()
-                optimizer.zero_grad()
+                #optimizer.zero_grad()
                 #mpc_data.update_buffer(mpc_buffer)
-                #mpc_dataloader = DataLoader(mpc_data, batch_size=8, shuffle=False, num_workers=8)
-                loss, coll_acc, off_acc, total_dist_ls = train_model(train_net, mpc_buffer, batch_size, epoch, avg_img_t, std_img_t, pred_step)
-                loss.backward()
-                optimizer.step()
+                #mpc_dataloader = DataLoader(mpc_data, batch_size=32, shuffle=True, num_workers=8)
+                loss, coll_acc, off_acc, total_dist_ls = train_model(train_net, mpc_buffer, batch_size, epoch, avg_img_t, std_img_t, pred_step, optimizer)
+                #loss.backward()
+                #optimizer.step()
        
                 # log loss
                 if epoch % 20 == 0:
