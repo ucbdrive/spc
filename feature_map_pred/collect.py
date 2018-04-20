@@ -93,6 +93,18 @@ num_steps = 12
 obs_avg = 112.62289744791671
 obs_std = 56.1524832523
 
+def collect_RGB(env, dir = 'dataset'):
+    if not os.path.isdir(dir):
+        os.mkdir(dir)
+    os.system('rm ' + dir + '/*.png')
+    obs = env.reset()
+    for i in range(100):
+        action = np.random.randint(6)
+        obs, reward, done, info = env.step(action)
+        imsave(os.path.join(dir, '%d.png' % i), obs)
+        if done or reward <= -2.5:
+            obs = env.reset()
+
 def collect_feature_map(env):
     model = DRNSeg('drn_d_22', 4)
     model.load_state_dict(torch.load('models/epoch5.dat'))
@@ -132,6 +144,46 @@ def collect_segmentation(env, dir = 'dataset'):
             obs = env.reset()
             obs = (obs.transpose(2, 0, 1) - obs_avg) / obs_std
 
+def collect_seq(env, dir = 'dataset2'):
+    if not os.path.isdir(dir):
+        os.mkdir(dir)
+    os.system('rm ' + dir + '/*.npz')
+    obs = env.reset()
+    obs = (obs.transpose(2, 0, 1) - obs_avg) / obs_std
+    seg = env.get_segmentation().astype(np.uint8)
+    seg_list = np.repeat(np.expand_dims(seg, axis = 0), num_steps + 1, axis = 0)
+    true_obs = np.repeat(obs, 3, axis = 0)
+    obs_list = [true_obs for i in range(num_steps)]
+    action_array = np.repeat(np.array([4]), num_steps)
+    offroad_array = np.zeros(num_steps + 1)
+    collision_array = np.zeros(num_steps + 1)
+    dist_array = np.zeros(num_steps + 1)
+
+    for i in range(2000):
+        action = np.random.randint(5)
+        if action == 4:
+            action = 5
+        obs, reward, done, info = env.step(action)
+        obs = (obs.transpose(2, 0, 1) - obs_avg) / obs_std
+        seg = np.expand_dims(env.get_segmentation().astype(np.uint8), axis = 0)
+        seg_list = np.concatenate((seg_list[1:], seg), axis = 0)
+        action_array = np.concatenate((action_array[1:], np.array([action])))
+        offroad = 1 - int(-1 < info['trackPos'] < 5)
+        offroad_array = np.concatenate((offroad_array[1:], np.array([offroad])))
+        collision = int(reward <= -2.5 or abs(info['trackPos']) > 7)
+        collision_array = np.concatenate((collision_array[1:], np.array([collision])))
+        dist = info['speed'] * (np.cos(info['angle']) - np.abs(np.sin(info['angle'])) - np.abs(info['trackPos']) / 9.0) / 40.0
+        dist_array = np.concatenate((dist_array[1:], np.array([dist])))
+        np.savez('dataset2/%d.npz' % i, obs = obs_list[-num_steps], action = action_array, seg = seg_list, off = offroad_array, coll = collision_array, dist = dist_array)
+        true_obs = np.concatenate((true_obs[3:], obs), axis=0)
+        obs_list = obs_list[1:] + [true_obs]
+        if done or reward <= -2.5:
+            obs = env.reset()
+            true_obs = np.repeat((obs.transpose(2, 0, 1) - obs_avg) / obs_std, 3, axis = 0)
+            obs_list = [true_obs for i in range(num_steps)]
+            action_array = np.repeat(np.array([4]), num_steps)
+            seg = env.get_segmentation().astype(np.uint8)
+            seg_list = np.repeat(np.expand_dims(seg, axis = 0), num_steps + 1, axis = 0)
 
 if __name__ == '__main__':
     np.random.seed(0)
@@ -141,33 +193,7 @@ if __name__ == '__main__':
     envs = torcs_envs(num = 1)
     env = envs.get_envs()[0]
 
-    # collect_segmentation(env, 'dataset1')
-    obs = env.reset()
-    obs = (obs.transpose(2, 0, 1) - obs_avg) / obs_std
-    seg = env.get_segmentation().astype(np.uint8)
-    seg_list = np.repeat(np.expand_dims(seg, axis = 0), num_steps, axis = 0)
-    true_obs = np.repeat(obs, 3, axis = 0)
-    obs_list = [true_obs for i in range(num_steps)]
-    action_array = np.repeat(np.array([4]), num_steps)
-
-    for i in range(2):
-        action = np.random.randint(5)
-        if action == 4:
-            action = 5
-        obs, reward, done, info = env.step(action)
-        obs = (obs.transpose(2, 0, 1) - obs_avg) / obs_std
-        seg = np.expand_dims(env.get_segmentation().astype(np.uint8), axis = 0)
-        seg_list = np.concatenate((seg_list[1:], seg), axis = 0)
-        action_array = np.concatenate((action_array[1:], np.array([action])))
-        np.savez('dataset2/%d.npz' % i, obs = obs_list[-num_steps], action = action_array, seg = seg_list)
-        true_obs = np.concatenate((true_obs[3:], obs), axis=0)
-        obs_list = obs_list[1:] + [true_obs]
-        if done or reward <= -2.5:
-            obs = env.reset()
-            true_obs = np.repeat((obs.transpose(2, 0, 1) - obs_avg) / obs_std, 3, axis = 0)
-            obs_list = [true_obs for i in range(num_steps)]
-            action_array = np.repeat(np.array([4]), num_steps)
-            seg = env.get_segmentation().astype(np.uint8)
-            seg_list = np.repeat(np.expand_dims(seg, axis = 0), num_steps, axis = 0)
+    collect_seq(env)
+    
 
     env.close()
