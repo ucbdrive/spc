@@ -175,10 +175,11 @@ def get_action_loss(net, imgs, actions, num_time = 3, hidden = None, cell = None
     coll_ls = (coll_ls.view(-1,num_time,1)*weight).view(-1,num_time).sum(-1)
     off_ls = (off_ls.view(-1,num_time,1)*weight).view(-1,num_time).sum(-1)
     dist_ls = (outs[3].view(-1,num_time,1)*weight).view(-1,num_time).sum(-1)
+    loss = off_ls + coll_ls - 0.1 * dist_ls
     return coll_ls.data.cpu().numpy().reshape((-1)), off_ls.data.cpu().numpy().reshape((-1)), dist_ls.data.cpu().numpy().reshape((-1)),\
-        outs[0][:,:,0].data.cpu().numpy(), outs[2][:,:,0].data.cpu().numpy(), outs[3][:,:,0].data.cpu().numpy()           
+        outs[0][:,:,0].data.cpu().numpy(), outs[2][:,:,0].data.cpu().numpy(), outs[3][:,:,0].data.cpu().numpy(), loss        
      
-def sample_action(net, imgs, prev_action, num_time=3, hidden=None, cell=None, num_actions = 6, calculate_loss=False, batch_step=200, gpu=2, same_step=False, all_actions=None):
+def sample_action(net, imgs, prev_action, num_time=3, hidden=None, cell=None, num_actions = 6, calculate_loss=False, batch_step=200, gpu=2, same_step=False, all_actions=None, use_optimize=False):
     imgs = imgs.contiguous()
     batch_size, c, w, h = int(imgs.size()[0]), int(imgs.size()[-3]), int(imgs.size()[-2]), int(imgs.size()[-1])
     imgs = imgs.view(batch_size, 1, c, w, h)
@@ -186,9 +187,9 @@ def sample_action(net, imgs, prev_action, num_time=3, hidden=None, cell=None, nu
     if calculate_loss:
         this_action = Variable(torch.randn(1, num_time, num_actions), requires_grad=False)
         this_action = quantize_action(this_action, batch_size, num_time, num_actions, requires_grad=False, prev_action=prev_action)
-        coll_ls, off_ls, dist_ls, coll_prob, off_prob, distance = get_action_loss(net, imgs, this_action, num_time, hidden, cell, gpu=gpu)
+        coll_ls, off_ls, dist_ls, coll_prob, off_prob, distance, _ = get_action_loss(net, imgs, this_action, num_time, hidden, cell, gpu=gpu)
         return coll_prob, off_prob, distance, coll_ls, off_ls, dist_ls
-    else: # sample action
+    elif use_optimize == False: # sample action
         if all_actions is None:
             all_actions,_ = get_act_samps(num_time, num_actions, prev_action, 1500, same_step)
         num_choice = all_actions.shape[0]
@@ -198,7 +199,7 @@ def sample_action(net, imgs, prev_action, num_time=3, hidden=None, cell=None, nu
         for ii in range(int(num_choice/batch_step)):
             this_action = Variable(all_actions[ii*batch_step:min((ii+1)*batch_step, num_choice),:,:])
             this_imgs = imgs.repeat(int(this_action.size()[0]), 1,1,1,1)
-            coll_ls, off_ls, dist_ls, coll_prob, off_prob, distance = get_action_loss(net, this_imgs, this_action, num_time, hidden, cell, gpu=gpu)
+            coll_ls, off_ls, dist_ls, coll_prob, off_prob, distance,_ = get_action_loss(net, this_imgs, this_action, num_time, hidden, cell, gpu=gpu)
             batch_ls = coll_ls + off_ls -0.1*dist_ls
             idx = np.argmin(batch_ls)
             this_loss = batch_ls[idx]
@@ -207,6 +208,17 @@ def sample_action(net, imgs, prev_action, num_time=3, hidden=None, cell=None, nu
                 total_ls = this_loss
                 which_action = poss_action
         return which_action, None, None
+    elif use_optimize:
+        this_action = Variable(torch.randn(1, num_time, num_actions), requires_grad=False)
+        this_action = quantize_action(this_action, batch_size, num_time, num_actions, requires_grad=True, prev_action=prev_action)
+        this_imgs = imgs.repeat(int(this_action.size()[0]), 1, 1, 1, 1)
+        for i in range(30):
+            net.zero_grad()
+            _, _, _, _, _, _, loss = get_action_loss(net, this_imgs, this_action, num_time, hidden, cell)
+            this_action.data -= 0.01 * this_action.grad.data
+        which_action = np.argmax(this_action.data.cpu().numpy(), -1)
+        which_action = which_action[0,0]
+        return which_action, None, None 
 
 def quantize_action(action, batch_size, num_time, num_actions, requires_grad=False, prev_action=None):
     act = torch.max(action, -1)[1]
