@@ -215,6 +215,7 @@ def sample_action(net, imgs, prev_action, num_time=3, hidden=None, cell=None, nu
         for i in range(30):
             net.zero_grad()
             _, _, _, _, _, _, loss = get_action_loss(net, this_imgs, this_action, num_time, hidden, cell)
+            loss.backward()
             this_action.data -= 0.01 * this_action.grad.data
         which_action = np.argmax(this_action.data.cpu().numpy(), -1)
         which_action = which_action[0,0]
