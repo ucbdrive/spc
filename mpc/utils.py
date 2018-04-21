@@ -30,7 +30,7 @@ class MPCData(Dataset):
         act_batch, coll_batch, offroad_batch, dist_batch, img_batch, nximg_batch = x[0], x[1], x[3], x[4], x[5], x[6]
         return act_batch.squeeze(), coll_batch.squeeze(), offroad_batch.squeeze(), dist_batch.squeeze(0), img_batch.squeeze(), nximg_batch.squeeze()
 
-def train_model(train_net, mpc_buffer, batch_size, epoch, avg_img_t, std_img_t, pred_step=15, optimizer=None):
+def train_model(train_net, mpc_buffer, batch_size, epoch, avg_img_t, std_img_t, pred_step=15):
     if epoch % 20 == 0:
         x, idxes = mpc_buffer.sample(batch_size, sample_early = True)
     else:
@@ -72,7 +72,6 @@ def train_model(train_net, mpc_buffer, batch_size, epoch, avg_img_t, std_img_t, 
             float(loss.data.cpu().numpy()), epoch, 1)
         break
     '''
-    optimizer.zero_grad()
     with torch.no_grad():
         nximg_enc = train_net(nximg_batch, get_feature=True)
         nximg_enc = nximg_enc.detach()
@@ -82,8 +81,6 @@ def train_model(train_net, mpc_buffer, batch_size, epoch, avg_img_t, std_img_t, 
     dist_ls = nn.MSELoss()(pred_dist.view(-1,pred_step), dist_batch[:,1:].view(-1,pred_step))
     pred_ls = nn.L1Loss()(pred_enc, nximg_enc).sum()
     loss = pred_ls + coll_ls + offroad_ls + dist_ls
-    loss.backward()
-    optimizer.step()
     coll_acc, off_acc, total_dist_ls = log_info(pred_coll, coll_batch, pred_off, offroad_batch, \
         float(coll_ls.data.cpu().numpy()), float(offroad_ls.data.cpu().numpy()),\
         float(pred_ls.data.cpu().numpy()), float(dist_ls.data.cpu().numpy()), \
@@ -201,7 +198,7 @@ def load_model(path, net, data_parallel = True, optimizer = None, resume=True):
     else:
         epoch = 0
     if torch.cuda.is_available():
-        net = torch.nn.DataParallel(net, device_ids=[0,1]) if data_parallel else net
+        net = torch.nn.DataParallel(net) if data_parallel else net
         net = net.cuda()
 
     if optimizer is not None and epoch > 0:

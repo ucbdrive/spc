@@ -5,7 +5,7 @@ from gym.spaces.box import Box
 import gym
 import sys
 import os
-env_path = os.path.realpath('/home/qizhicai/multitask/py-torcs')
+env_path = os.path.realpath('/media/xinleipan/data/py-torcs')
 sys.path.append(env_path)
 
 def create_env(env_id, reward_ben=False, config='quickrace_discrete_single.xml', rescale=False, continuous=False):

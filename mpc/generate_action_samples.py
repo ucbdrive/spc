@@ -25,20 +25,36 @@ def get_act_samps(num_time, num_actions=6, prev_act=0, num_samples=1000, same_st
 def get_act_seq(num_time, num_actions=6, prev_act=0, same_step=False):
     actions = []
     curr_act = prev_act
-    for i in range(num_time):
-        if curr_act in [1,4]:
-            p = np.ones(num_actions)/(num_actions*1.0)
-        elif curr_act in [0,2,3,5]:
-            p = np.zeros(num_actions)
-            if same_step == False:
-                p[1] = 0.5
-                p[4] = 0.5
-            else:
-                p[1] = 0.45
-                p[4] = 0.45
-                p[curr_act] = 0.1
-        curr_act = np.random.choice(num_actions, p=list(p/p.sum()))
-        actions.append(curr_act)
+    if num_actions == 6:
+        for i in range(num_time):
+            if curr_act in [1,4]:
+                p = np.ones(num_actions)/(num_actions*1.0)
+            elif curr_act in [0,2,3,5]:
+                p = np.zeros(num_actions)
+                if same_step == False:
+                    p[1] = 0.5
+                    p[4] = 0.5
+                else:
+                    p[1] = 0.45
+                    p[4] = 0.45
+                    p[curr_act] = 0.1
+            curr_act = np.random.choice(num_actions, p=list(p/p.sum()))
+            actions.append(curr_act)
+    elif num_actions == 4:
+        for i in range(num_time):
+            if curr_act in [0,2]:
+                p = np.ones(4)/4.0
+            elif curr_act in [1,3]:
+                p = np.zeros(4)
+                if same_step == False:
+                    p[0] = 0.5
+                    p[2] = 0.5
+                else:
+                    p[0] = 0.45
+                    p[2] = 0.45
+                    p[curr_act] = 0.1
+            curr_act = np.random.choice(num_actions, p=list(p/p.sum()))
+            actions.append(curr_act)
     return np.array(actions)
             
 def get_action_sample(num_time, num_step_per_time, num_actions=9):

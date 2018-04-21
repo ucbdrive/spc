@@ -62,17 +62,20 @@ def train_policy(args,
 
     mpc_buffer = MPCBuffer(buffer_size, frame_history_len, pred_step, num_total_act)
     prev_act, explore, epi_len = 1, 0.15, 0
-    #mpc_data = MPCData(mpc_buffer)
+    if num_total_act == 4:
+        prev_act = 0
  
     if args.resume:
         num_imgs_start = max(int(open(args.save_path+'/log_train_torcs.txt').readlines()[-1].split(' ')[1])-3000,0)
     else:
         num_imgs_start = 0
 
-    if args.same_step:
+    if args.same_step and num_total_act == 6:
         all_actions = pkl.load(open('acts_samestep.pkl','rb'))
-    else:
+    elif args.same_step == False and num_total_act == 6:
         all_actions = pkl.load(open('acts_nosamestep.pkl','rb'))
+    elif args.same_step == True and num_total_act == 4:
+        all_actions = pkl.load(open('acts_4_action_samestep.pkl', 'rb'))
 
     explore = 0.1
     last_ends = np.array([900, 200, 2])
@@ -89,19 +92,24 @@ def train_policy(args,
         if rand_num <= 1-explore:
             with torch.no_grad():
                 train_net.eval()
-                action,_,_ = sample_action(train_net, obs_var, prev_action=prev_act, num_time=pred_step, batch_step=args.batch_step, same_step=args.same_step, all_actions=all_actions[prev_act,:,:,:])
+                action,_,_ = sample_action(train_net, obs_var, prev_action=prev_act, num_time=pred_step, batch_step=args.batch_step, num_actions=num_total_act, same_step=args.same_step, all_actions=all_actions[prev_act,:,:,:])
         else:
             action = np.random.randint(num_total_act)
-        obs, reward, real_done, info = env.step(int(action))
+        if num_total_act == 4:
+            action_map = [1,3,4,5]
+            exe_action = action_map[action]
+        else:
+            exe_action = action
+        obs, reward, real_done, info = env.step(int(exe_action))
         
         reward = info['speed']*(np.cos(info['angle'])-np.abs(np.sin(info['angle']))-np.abs(info['trackPos'])/9.0)/40.0
         dist_this = info['speed']*(np.cos(info['angle'])-np.abs(np.sin(info['angle']))-np.abs(info['trackPos'])/9.0)
         prev_act = action
         done = doneCond.isdone(info['trackPos'], dist_this, info['pos']) or epi_len > 1000
-        print('step ', epi_len, 'action ', action, 'pos', info['trackPos'], ' dist ', dist_this, info['pos'], 'explore', explore)
+        print('step ', epi_len, 'action ', exe_action, 'pos', info['trackPos'], ' dist ', dist_this, info['pos'], 'explore', explore)
         obs = cv2.resize(obs, (256,256))
         speed_np, pos_np, posxyz_np = get_info_np(info, use_pos_class = False)
-        offroad_flag = int(info['trackPos']>=5 or info['trackPos']<=-1)
+        offroad_flag = int(info['trackPos']>=3 or info['trackPos']<=-1)
         coll_flag = int(reward==-2.5 or abs(info['trackPos'])>7)
         speed_list, pos_list = get_info_ls(prev_info)
         mpc_buffer.store_effect(ret, action, done, coll_flag, offroad_flag, speed_list[0], speed_list[1], pos_list[0])
@@ -116,12 +124,18 @@ def train_policy(args,
             obs = env.reset()
             obs, reward, done, info = env.step(1)
             prev_act = 1
+            if num_total_act == 4:
+                prev_act = 0
             obs = cv2.resize(obs, (256,256))
             speed_np, pos_np, posxyz_np = get_info_np(info, use_pos_class=False) 
             print('past 100 episode rewards is ', "{0:.3f}".format(np.mean(epi_rewards[-100:])),' std is ', "{0:.15f}".format(np.std(epi_rewards[-100:])))
             with open(args.save_path+'/log_train_torcs.txt', 'a') as fi:
                 fi.write('step '+str(tt)+' reward '+str(np.mean(epi_rewards[-10:]))+' std '+str(np.std(epi_rewards[-10:]))+'\n')
             epi_len, rewards = 0, 0
+            with torch.no_grad():
+                if len(epi_rewards) % 2 == 0 and mpc_buffer.can_sample(batch_size):
+                    loss, coll_acc, off_acc, total_dist_ls = train_model(train_net.eval(), mpc_buffer, batch_size, epoch, avg_img_t, std_img_t, pred_step)
+                    print('loss is', loss, 'coll off acc is ', coll_acc, off_acc, 'dist ls is', total_dist_ls) 
         prev_info = copy.deepcopy(info) 
 
         # start training
@@ -131,12 +145,10 @@ def train_policy(args,
             num_epoch = 0
             while sign:
                 train_net.train()
-                #optimizer.zero_grad()
-                #mpc_data.update_buffer(mpc_buffer)
-                #mpc_dataloader = DataLoader(mpc_data, batch_size=32, shuffle=True, num_workers=8)
-                loss, coll_acc, off_acc, total_dist_ls = train_model(train_net, mpc_buffer, batch_size, epoch, avg_img_t, std_img_t, pred_step, optimizer)
-                #loss.backward()
-                #optimizer.step()
+                optimizer.zero_grad()
+                loss, coll_acc, off_acc, total_dist_ls = train_model(train_net, mpc_buffer, batch_size, epoch, avg_img_t, std_img_t, pred_step)
+                loss.backward()
+                optimizer.step()
        
                 # log loss
                 if epoch % 20 == 0:
@@ -148,8 +160,11 @@ def train_policy(args,
                 if num_epoch >= 10:
                     sign = False
                 if epoch % save_freq == 0:
-                    os.rename(args.save_path+'/model/pred_model_'+str(0).zfill(9)+'.pt', args.save_path+'/model/pred_model_'+str(0).zfill(9)+'.pt.old')
-                    os.rename(args.save_path+'/optimizer/optim_'+str(0).zfill(9)+'.pt', args.save_path+'/optimizer/optim_'+str(0).zfill(9)+'.pt.old')
+                    try:
+                        os.rename(args.save_path+'/model/pred_model_'+str(0).zfill(9)+'.pt', args.save_path+'/model/pred_model_'+str(0).zfill(9)+'.pt.old')
+                        os.rename(args.save_path+'/optimizer/optim_'+str(0).zfill(9)+'.pt', args.save_path+'/optimizer/optim_'+str(0).zfill(9)+'.pt.old')
+                    except:
+                        pass
                     torch.save(train_net.module.state_dict(), args.save_path+'/model/pred_model_'+str(0).zfill(9)+'.pt')
                     torch.save(optimizer.state_dict(), args.save_path+'/optimizer/optim_'+str(0).zfill(9)+'.pt')
                     pkl.dump(epoch, open(args.save_path+'/epoch.pkl', 'wb'))
