@@ -118,7 +118,7 @@ def train_policy(args,
             prev_act = 1
             if num_total_act == 4:
                 prev_act = 0
-            obs = cv2.resize(obs, (256,256))
+            obs = cv2.resize(obs, (256, 256))
             speed_np, pos_np, posxyz_np = get_info_np(info, use_pos_class=False) 
             print('past 100 episode rewards is ', "{0:.3f}".format(np.mean(epi_rewards[-100:])),' std is ', "{0:.15f}".format(np.std(epi_rewards[-100:])))
             with open(args.save_path+'/log_train_torcs.txt', 'a') as fi:

@@ -195,13 +195,12 @@ def sample_action(net, imgs, num_time=3, hidden=None, cell=None, num_actions = 6
     coll_ls, off_ls, dist_ls, coll_prob, off_prob, distance, _ = get_action_loss(net, this_imgs, this_action, 1, hidden, cell, gpu=gpu)
     batch_ls = coll_ls + off_ls - 0.1 * dist_ls
     prob = F.softmax(-Variable(torch.from_numpy(batch_ls), requires_grad = False), dim = 0)
+    print(prob)
 
     action = prob.multinomial(num_samples = 1).data
     if torch.cuda.is_available():
         action = action.cpu()
     action = action.numpy()[0]
-
-    return action
 
     num_choices = 60
     if num_choices < batch_step:
