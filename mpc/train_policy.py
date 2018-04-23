@@ -16,7 +16,7 @@ from scipy.misc.pilutil import imshow
 from collections import OrderedDict
 from sklearn.metrics import confusion_matrix
 from mpc_utils import *
-from utils import make_dir, load_model, get_info_np, get_info_ls
+from utils import make_dir, load_model, get_info_np, get_info_ls, naive_driver
 from dqn_utils import *
 from torch.utils.data import Dataset, DataLoader
 
@@ -35,6 +35,8 @@ def train_policy(args,
     # prepare and start environment
     obs = env.reset()
     obs, reward, done, info = env.step(1)
+    for i in range(random.randint(0, 150)):
+        obs, reward, done, info = env.step(naive_driver(info))
     prev_info = copy.deepcopy(info)
     obs = cv2.resize(obs, (256, 256))
     train_net = ConvLSTMMulti(num_total_act, pretrain = True, frame_history_len = frame_history_len)
@@ -123,6 +125,8 @@ def train_policy(args,
             epi_rewards.append(rewards)
             obs = env.reset()
             obs, reward, done, info = env.step(1)
+            for i in range(random.randint(0, 150)):
+                obs, reward, done, info = env.step(naive_driver(info))
             prev_act = 1
             if num_total_act == 4:
                 prev_act = 0
