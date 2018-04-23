@@ -10,6 +10,13 @@ import random
 from sklearn.metrics import confusion_matrix
 import pdb
 
+def naive_driver(info):
+    if info['angle'] > 0.5 or (info['trackPos'] < -1 and info['angle'] > 0):
+        return 0
+    elif info['angle'] < -0.5 or (info['trackPos'] > 3 and info['angle'] < 0):
+        return 2
+    return 1
+
 class MPCData(Dataset):
     def __init__(self, mpc_buffer, batch_size=1):
         self.mpc_buffer = mpc_buffer
