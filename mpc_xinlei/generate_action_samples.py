@@ -22,15 +22,30 @@ def get_act_samps(num_time, num_actions=6, prev_act=0, num_samples=1000, same_st
     res = res.reshape((num_samples, num_time, num_actions))
     return res, 0
 
-def get_act_with_prob(num_time, num_actions=6, prev_act=0, prob=None):
+def get_act_with_prob(num_samples, num_time, num_actions=6, prev_act=0, prob=None):
     # get actions according to a specific distribution prob
     # prob is a matrix of size 6 x 6
-    actions = []
-    curr_act = prev_act
-    for i in range(num_time):
-        curr_act = np.random.choice(num_actions, p=list(prob[curr_act,:]/np.sum(prob[curr_act,:])))
-        actions.append(curr_act)
-    return np.array(actions)
+    acts = []
+    num, cnt = 0, 0
+    while num < num_samples:
+        actions = []
+        curr_act = prev_act
+        for i in range(num_time):
+            curr_act = np.random.choice(num_actions, p=list(prob[curr_act,:]/np.sum(prob[curr_act,:])))
+            actions.append(curr_act)
+        if actions not in acts:
+            acts.append(actions)
+            cnt = 0
+            num += 1
+        else:
+            cnt += 1
+        if cnt >= 100000:
+            break
+    acts = np.stack(acts).reshape((-1))
+    res = np.zeros((num_samples * num_time, num_actions))
+    res[np.arange(num_samples * num_time), acts] = 1
+    res = res.reshape((num_samples, num_time, num_actions)) 
+    return res
 
 def get_prob_with_act(act_seq, num_actions=6):
     # act_seq: of size num_sample x num_time
