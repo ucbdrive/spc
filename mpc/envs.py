@@ -22,6 +22,9 @@ def create_env(env_id, reward_ben=False, config='quickrace_discrete_single.xml',
     elif env_id == 'torcs-v1':
         from py_TORCS import torcs_env
         env = torcs_env(game_config = '/home/qizhicai/multitask/pyTORCS/game_config/' + config)
+    elif env_id == 'torcs-v2':
+        from py_TORCS import torcs_envs
+        env = torcs_envs(num = 1, game_config = '/home/cxy/pyTORCS/game_config/' + config).get_envs()[0]
     else:
         env = gym.make(env_id)
         env = AtariRescale42x42(env)

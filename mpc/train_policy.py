@@ -94,7 +94,7 @@ def train_policy(args,
         if rand_num <= 1-explore:
             with torch.no_grad():
                 train_net.eval()
-                action,_,_ = sample_action(train_net, obs_var, prev_action=prev_act, num_time=pred_step, batch_step=args.batch_step, num_actions=num_total_act, same_step=args.same_step, all_actions=all_actions[prev_act,:,:,:])
+                action,_,_ = sample_action(train_net, obs_var, prev_action=prev_act, num_time=pred_step, batch_step=args.batch_step, num_actions=num_total_act, same_step=args.same_step, all_actions=all_actions[prev_act,:,:,:], use_optimize = True)
         else:
             action = np.random.randint(num_total_act)
         if num_total_act == 4:
