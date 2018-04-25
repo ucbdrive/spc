@@ -16,7 +16,7 @@ from scipy.misc.pilutil import imshow
 from collections import OrderedDict
 from sklearn.metrics import confusion_matrix
 from mpc_utils import *
-from utils import make_dir, load_model, get_info_np, get_info_ls, naive_driver
+from utils import make_dir, load_model, get_info_np, get_info_ls
 from dqn_utils import *
 from torch.utils.data import Dataset, DataLoader
 
@@ -35,8 +35,6 @@ def train_policy(args,
     # prepare and start environment
     obs = env.reset()
     obs, reward, done, info = env.step(1)
-    for i in range(random.randint(0, 150)):
-        obs, reward, done, info = env.step(naive_driver(info))
     prev_info = copy.deepcopy(info)
     obs = cv2.resize(obs, (256, 256))
     train_net = ConvLSTMMulti(num_total_act, pretrain = True, frame_history_len = frame_history_len)
@@ -72,14 +70,7 @@ def train_policy(args,
     else:
         num_imgs_start = 0
 
-    if args.same_step and num_total_act == 6:
-        all_actions = pkl.load(open('acts_samestep.pkl','rb'))
-    elif args.same_step == False and num_total_act == 6:
-        all_actions = pkl.load(open('acts_nosamestep.pkl','rb'))
-    elif args.same_step == True and num_total_act == 4:
-        all_actions = pkl.load(open('acts_4_action_samestep.pkl', 'rb'))
-
-    explore = 0.1
+    explore = 1
     last_ends = np.array([900, 200, 2])
     for tt in range(num_imgs_start, num_steps):
         ret = mpc_buffer.store_frame(obs)
@@ -87,17 +78,16 @@ def train_policy(args,
         obs_var = Variable(torch.from_numpy(this_obs_np).unsqueeze(0)).float().cuda(0) 
         current_pos = np.array([info['pos'][0], info['pos'][1], info['pos'][2]])
         dist_to_pos = np.sqrt(np.sum((current_pos - last_ends)**2))
-        explore = max(0.1, (800-dist_to_pos)*0.0004)
-        if tt < args.epsilon_frames:
-            explore = exploration.value(tt)
+        explore *= 0.9999
         rand_num = random.random()
-        if rand_num <= 1-explore:
+        if rand_num <= explore:
+            action = np.random.randint(num_total_act)
+        else:
             with torch.no_grad():
                 train_net.eval()
-                action,_,_ = sample_action(train_net, obs_var, prev_action=prev_act, num_time=pred_step, batch_step=args.batch_step, num_actions=num_total_act, same_step=args.same_step, all_actions=all_actions[prev_act,:,:,:], use_optimize = True)
-        else:
-            action = np.random.randint(num_total_act)
+                action = sample_action(train_net, obs_var, num_time=pred_step, batch_step=args.batch_step, num_actions=num_total_act, same_step=args.same_step)
         if num_total_act == 4:
+            print('act=4')
             action_map = [1,3,4,5]
             exe_action = action_map[action]
         else:
@@ -125,12 +115,10 @@ def train_policy(args,
             epi_rewards.append(rewards)
             obs = env.reset()
             obs, reward, done, info = env.step(1)
-            for i in range(random.randint(0, 150)):
-                obs, reward, done, info = env.step(naive_driver(info))
             prev_act = 1
             if num_total_act == 4:
                 prev_act = 0
-            obs = cv2.resize(obs, (256,256))
+            obs = cv2.resize(obs, (256, 256))
             speed_np, pos_np, posxyz_np = get_info_np(info, use_pos_class=False) 
             print('past 100 episode rewards is ', "{0:.3f}".format(np.mean(epi_rewards[-100:])),' std is ', "{0:.15f}".format(np.std(epi_rewards[-100:])))
             with open(args.save_path+'/log_train_torcs.txt', 'a') as fi:

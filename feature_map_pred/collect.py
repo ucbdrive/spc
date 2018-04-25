@@ -185,15 +185,63 @@ def collect_seq(env, dir = 'dataset2'):
             seg = env.get_segmentation().astype(np.uint8)
             seg_list = np.repeat(np.expand_dims(seg, axis = 0), num_steps + 1, axis = 0)
 
+def collect_new(env, dir = 'dataset2'):
+    if not os.path.isdir(dir):
+        os.mkdir(dir)
+    os.system('rm ' + dir + '/*.npz')
+    obs = env.reset()
+    true_obs = np.repeat((obs.transpose(2, 0, 1) - obs_avg) / obs_std, 3, axis = 0)
+    obs_list = [true_obs for i in range(num_steps)]
+    seg = env.get_segmentation().astype(np.uint8)
+    seg_list = np.repeat(np.expand_dims(seg, axis = 0), num_steps + 1, axis = 0)
+    action_array = np.repeat(np.array([4]), num_steps)
+    pos_array = np.ones(num_steps + 1) * 0.431906836373
+    angle_array = np.ones(num_steps + 1) * 0.0201784928692
+    speed_array = np.zeros(num_steps + 1)
+
+    for i in range(2000):
+        action = np.random.randint(5)
+        if action == 4:
+            action = 5
+        obs, reward, done, info = env.step(action)
+        obs = (obs.transpose(2, 0, 1) - obs_avg) / obs_std
+        true_obs = np.concatenate((true_obs[3:], obs), axis=0)
+        obs_list = obs_list[1:] + [true_obs]
+
+        seg = np.expand_dims(env.get_segmentation().astype(np.uint8), axis = 0)
+        seg_list = np.concatenate((seg_list[1:], seg), axis = 0)
+
+        action_array = np.concatenate((action_array[1:], np.array([action])))
+
+        pos_array = np.concatenate((pos_array[1:], np.array([info['trackPos'] / 7.0])))
+        angle_array = np.concatenate((angle_array[1:], np.array([info['angle']])))
+        speed_array = np.concatenate((speed_array[1:], np.array([info['speed']])))
+
+        np.savez(dir + '/%d.npz' % i, obs = obs_list[-num_steps], 
+                                      action = action_array, 
+                                      seg = seg_list, 
+                                      pos = pos_array, 
+                                      angle = angle_array, 
+                                      speed = speed_array)
+        if done or reward <= -2.5:
+            obs = env.reset()
+            true_obs = np.repeat((obs.transpose(2, 0, 1) - obs_avg) / obs_std, 3, axis = 0)
+            obs_list = [true_obs for i in range(num_steps)]
+            seg = env.get_segmentation().astype(np.uint8)
+            seg_list = np.repeat(np.expand_dims(seg, axis = 0), num_steps + 1, axis = 0)
+            action_array = np.repeat(np.array([4]), num_steps)
+            pos_array = np.ones(num_steps + 1) * 0.431906836373
+            angle_array = np.ones(num_steps + 1) * 0.0201784928692
+            speed_array = np.zeros(num_steps + 1)
+
 if __name__ == '__main__':
     np.random.seed(0)
     kill_torcses()
 
 
-    envs = torcs_envs(num = 1)
+    envs = torcs_envs(num = 1, mkey_start = 1000)
     env = envs.get_envs()[0]
 
-    collect_seq(env)
+    collect_new(env)
     
-
     env.close()

@@ -11,7 +11,7 @@ from py_TORCS import torcs_envs
 
 parser = argparse.ArgumentParser(description = 'Train-torcs')
 parser.add_argument('--lr', type = float, default = 0.001, metavar = 'LR', help = 'learning rate')
-parser.add_argument('--env', type = str, default = 'torcs-v0', metavar = 'ENV', help = 'environment')
+parser.add_argument('--env', type = str, default = 'torcs-v2', metavar = 'ENV', help = 'environment')
 parser.add_argument('--save-path', type=str, default = 'mpc_12_step')
 parser.add_argument('--batch-size', type=int, default=10)
 parser.add_argument('--pred-step', type=int, default=15)
@@ -24,7 +24,7 @@ parser.add_argument('--epsilon-frames', type=int, default=50000)
 parser.add_argument('--learning-starts', type=int, default=100)
 parser.add_argument('--learning-freq', type=int, default=10)
 parser.add_argument('--target-update-freq', type=int, default=100)
-parser.add_argument('--batch-step', type=int, default=40)
+parser.add_argument('--batch-step', type=int, default=20)
 parser.add_argument('--with-dla', action='store_true')
 parser.add_argument('--resume', action='store_true')
 parser.add_argument('--same-step', action='store_true')
@@ -40,9 +40,9 @@ if __name__ == '__main__':
     #env = envs.get_envs()[0]
     env = create_env(args.env, reward_ben=False, config='quickrace_discrete_single.xml', rescale=False, continuous=False)
     obs1 = env.reset()
-    print(obs1.shape)
+    # print(obs1.shape)
     obs, reward, done, info = env.step(1)
-    print(obs.shape, reward, done, info)
+    # print(obs.shape, reward, done, info)
     train_policy(args, env, 4000000,  
                  batch_size = args.batch_size,
                  pred_step = args.pred_step,

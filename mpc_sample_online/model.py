@@ -1,4 +1,3 @@
-from __future__ import division, print_function
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -180,57 +179,51 @@ def get_action_loss(net, imgs, actions, num_time = 3, hidden = None, cell = None
     return coll_ls.data.cpu().numpy().reshape((-1)), off_ls.data.cpu().numpy().reshape((-1)), dist_ls.data.cpu().numpy().reshape((-1)),\
         outs[0][:,:,0].data.cpu().numpy(), outs[2][:,:,0].data.cpu().numpy(), outs[3][:,:,0].data.cpu().numpy(), loss        
      
-def sample_action(net, imgs, prev_action, num_time=3, hidden=None, cell=None, num_actions = 6, calculate_loss=False, batch_step=200, gpu=2, same_step=False, all_actions=None, use_optimize=False):
+def sample_action(net, imgs, num_time=3, hidden=None, cell=None, num_actions = 6, calculate_loss=False, batch_step=200, gpu=2, same_step=False, use_optimize=False):
     imgs = imgs.contiguous()
     batch_size, c, w, h = int(imgs.size()[0]), int(imgs.size()[-3]), int(imgs.size()[-2]), int(imgs.size()[-1])
     imgs = imgs.view(batch_size, 1, c, w, h)
 
-    if calculate_loss:
-        this_action = Variable(torch.randn(1, num_time, num_actions), requires_grad=False)
-        this_action = quantize_action(this_action, batch_size, num_time, num_actions, requires_grad=False, prev_action=prev_action)
-        coll_ls, off_ls, dist_ls, coll_prob, off_prob, distance, _ = get_action_loss(net, imgs, this_action, num_time, hidden, cell, gpu=gpu)
-        return coll_prob, off_prob, distance, coll_ls, off_ls, dist_ls
-    elif use_optimize == False: # sample action
-        if all_actions is None:
-            all_actions,_ = get_act_samps(num_time, num_actions, prev_action, 1500, same_step)
-        num_choice = all_actions.shape[0]
-        total_ls = 100000000
-        which_action = -1
-        all_actions = torch.from_numpy(all_actions).float().cuda()
-        for ii in range(int(num_choice/batch_step)):
-            this_action = Variable(all_actions[ii*batch_step:min((ii+1)*batch_step, num_choice),:,:])
-            this_imgs = imgs.repeat(int(this_action.size()[0]), 1,1,1,1)
-            coll_ls, off_ls, dist_ls, coll_prob, off_prob, distance,_ = get_action_loss(net, this_imgs, this_action, num_time, hidden, cell, gpu=gpu)
-            batch_ls = coll_ls + off_ls -0.1*dist_ls
-            idx = np.argmin(batch_ls)
-            this_loss = batch_ls[idx]
-            if this_loss < total_ls or ii == 0:
-                poss_action = np.argmax(this_action.data.cpu().numpy()[idx,0,:].squeeze())
-                total_ls = this_loss
-                which_action = poss_action
-        return which_action, None, None
-    elif use_optimize:
-        this_imgs = imgs.repeat(batch_step, 1, 1, 1, 1)
-        prob = torch.ones(num_actions, num_actions) / float(num_actions)
+    one_step = torch.zeros(6, 1, 6)
+    for i in range(6):
+        one_step[i, :, i] = 1
+    if torch.cuda.is_available():
+        one_step = one_step.cuda()
 
-        for i in range(6):
-            all_actions = generate_action_sample(prob, 6 * batch_step, num_time, prev_action)
-            all_losses = np.array(6 * batch_step)
+    this_action = Variable(one_step, requires_grad = False)
+    this_imgs = imgs.repeat(6, 1, 1, 1, 1)
+    coll_ls, off_ls, dist_ls, coll_prob, off_prob, distance, _ = get_action_loss(net, this_imgs, this_action, 1, hidden, cell, gpu=gpu)
+    batch_ls = coll_ls + off_ls - 0.1 * dist_ls
+    prob = F.softmax(-Variable(torch.from_numpy(batch_ls), requires_grad = False), dim = 0)
+    print(prob)
 
-            for ii in range(6):
-                this_action = Variable(all_actions[ii * batch_step: (ii + 1) * batch_step, :, :])
-                coll_ls, off_ls, dist_ls, coll_prob, off_prob, distance, _ = get_action_loss(net, this_imgs, this_action, num_time, hidden, cell, gpu=gpu)
-                batch_ls = coll_ls + off_ls - 0.1 * dist_ls
-                all_losses[ii * batch_step: (ii + 1) * batch_step] = batch_ls
+    action = prob.multinomial(num_samples = 1).data
+    if torch.cuda.is_available():
+        action = action.cpu()
+    action = action.numpy()[0]
 
-            if i < 5:
-                idxes = np.argsort(all_losses)[:batch_step]
-                prob = generate_probs(all_actions[idxes], prev_action)
-            else:
-                idx = np.argmin(all_losses)
-                which_action = np.argmax(this_action.data.cpu().numpy()[idx, 0, :].squeeze())
+    num_choices = 60
+    if num_choices < batch_step:
+        batch_step = num_choices
 
-        return which_action, None, None
+    all_actions = generate_action_sample(prob, num_choices, num_time)
+    this_imgs = imgs.repeat(batch_step, 1, 1, 1, 1)
+
+    min_ls = 100000000
+    which_action = -1
+    for ii in range(int(num_choices / batch_step)):
+        this_action = Variable(all_actions[ii * batch_step:min((ii + 1) * batch_step, num_choices), :, :])
+        if (ii + 1) * batch_step > num_choices:
+            this_imgs = imgs.repeat(int(this_action.size()[0]), 1, 1, 1, 1)
+        coll_ls, off_ls, dist_ls, coll_prob, off_prob, distance, _ = get_action_loss(net, this_imgs, this_action, num_time, hidden, cell, gpu=gpu)
+        # print(coll_ls.shape, off_ls.shape, dist_ls.shape, coll_prob.shape, off_prob.shape, distance.shape) # ((20,), (20,), (20,), (20, 15), (20, 15), (20, 15))
+        batch_ls = coll_ls + off_ls - 0.1 * dist_ls
+        idx = np.argmin(batch_ls)
+        this_loss = batch_ls[idx]
+        if this_loss < min_ls or ii == 0:
+            which_action = np.argmax(this_action.data.cpu().numpy()[idx,0,:].squeeze())
+            min_ls = this_loss
+    return which_action
 
 def quantize_action(action, batch_size, num_time, num_actions, requires_grad=False, prev_action=None):
     act = torch.max(action, -1)[1]
@@ -247,45 +240,19 @@ def quantize_action(action, batch_size, num_time, num_actions, requires_grad=Fal
     action_v = Variable(torch.from_numpy(act_np).float().cuda(), requires_grad=requires_grad)
     return action_v
 
-def generate_action_sample(prob, batch_size, length, LAST_ACTION = 1):
+def generate_action_sample(prob, batch_size, length):
     num_actions = prob.size(0)
     all_actions = torch.zeros(batch_size, length, num_actions)
 
     for i in range(batch_size):
-        last_action = LAST_ACTION
         for j in range(length):
-            action = prob[last_action].multinomial(num_samples = 1).data
+            action = prob.multinomial(num_samples = 1).data
             if torch.cuda.is_available():
                 action = action.cpu()
             action = action.numpy()[0]
             all_actions[i, j, action] = 1
-            last_action = action
 
     if torch.cuda.is_available():
         all_actions = all_actions.cuda()
 
     return all_actions
-
-def generate_probs(all_actions, last_action = 1):
-    n, length, num_actions = all_actions.size()
-    real_actions = np.argmax(all_actions.data.cpu().numpy(), 2) if torch.cuda.is_available() else np.argmax(all_actions.data.numpy(), 2)
-    prob = torch.zeros(num_actions, num_actions)
-    for i in range(n):
-        prob[last_action, real_actions[i, 0]] += 1
-        for j in range(length - 1):
-            prob[real_actions[i, j], real_actions[i, j + 1]] += 1
-
-    probs = prob.sum(dim = 1).unsqueeze(1)
-    probs[probs == 0] = 1
-    prob /= probs
-
-    if torch.cuda.is_available():
-        prob = prob.cuda()
-
-    return prob
-
-if __name__ == '__main__':
-    x = generate_action_sample(torch.ones(6, 6) / 6, 100, 15)
-    y = generate_probs(x)
-    print(y)
-    print(y.size())
