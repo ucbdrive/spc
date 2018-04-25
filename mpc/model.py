@@ -224,11 +224,11 @@ def sample_action(net, imgs, prev_action, num_time=3, hidden=None, cell=None, nu
                 all_losses[ii * batch_step: (ii + 1) * batch_step] = batch_ls
 
             if i < 5:
-                idxes = np.argsort(all_losses)[:batch_step]
-                prob = generate_probs(all_actions[idxes], prev_action)
+                indices = np.argsort(all_losses)[:batch_step]
+                prob = generate_probs(all_actions[indices], prev_action)
             else:
                 idx = np.argmin(all_losses)
-                which_action = np.argmax(this_action.data.cpu().numpy()[idx, 0, :].squeeze())
+                which_action = np.argmax(all_actions.data.cpu().numpy()[idx, 0, :].squeeze())
 
         return which_action, None, None
 
@@ -250,16 +250,14 @@ def quantize_action(action, batch_size, num_time, num_actions, requires_grad=Fal
 def generate_action_sample(prob, batch_size, length, LAST_ACTION = 1):
     num_actions = prob.size(0)
     all_actions = torch.zeros(batch_size, length, num_actions)
+    real_actions = prob[LAST_ACTION].multinomial(num_samples = batch_size, replacement=True).data
+    all_actions[torch.arange(batch_size).type(torch.LongTensor), 0, real_actions] = 1
 
-    for i in range(batch_size):
-        last_action = LAST_ACTION
-        for j in range(length):
-            action = prob[last_action].multinomial(num_samples = 1).data
-            if torch.cuda.is_available():
-                action = action.cpu()
-            action = action.numpy()[0]
-            all_actions[i, j, action] = 1
-            last_action = action
+    for step in range(1, length):
+        indices = [torch.nonzero(real_actions == x).squeeze() for x in range(num_actions)]
+        for action in range(num_actions):
+            real_actions[indices[action]] = prob[action].multinomial(num_samples = indices[action].size(0), replacement=True).data
+        all_actions[torch.arange(batch_size).type(torch.LongTensor), step, real_actions] = 1
 
     if torch.cuda.is_available():
         all_actions = all_actions.cuda()
@@ -269,14 +267,10 @@ def generate_action_sample(prob, batch_size, length, LAST_ACTION = 1):
 def generate_probs(all_actions, last_action = 1):
     n, length, num_actions = all_actions.size()
     real_actions = np.argmax(all_actions.data.cpu().numpy(), 2) if torch.cuda.is_available() else np.argmax(all_actions.data.numpy(), 2)
-    prob = torch.zeros(num_actions, num_actions)
-    for i in range(n):
-        prob[last_action, real_actions[i, 0]] += 1
-        for j in range(length - 1):
-            prob[real_actions[i, j], real_actions[i, j + 1]] += 1
+    prob_map = np.concatenate((np.expand_dims(last_action * num_actions + real_actions[:, 0], axis = 1), real_actions[:, :-1] * num_actions + real_actions[:, 1:]), axis = 1)
+    prob = torch.histc(torch.from_numpy(prob_map).type(torch.Tensor), bins = num_actions * num_actions).view(num_actions, num_actions)
 
     probs = prob.sum(dim = 1).unsqueeze(1)
-    probs[probs == 0] = 1
     prob /= probs
 
     if torch.cuda.is_available():
