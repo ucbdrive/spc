@@ -185,17 +185,17 @@ def sample_action_iterative(net, imgs, prev_action, num_time=3, num_actions=6, b
     imgs = imgs.view(batch_size, 1, c, w, h)
     
     prob = np.ones((num_actions, num_actions))/(num_actions*1.0)
-    all_actions = get_act_with_prob(300, num_time, num_actions, prev_action, prob)
-    this_imgs = imgs.repeat(300, 1, 1, 1, 1)
+    all_actions = get_act_with_prob(500, num_time, num_actions, prev_action, prob)
+    this_imgs = imgs.repeat(500, 1, 1, 1, 1)
     for itr in range(3):
         all_actions_var = torch.from_numpy(all_actions).float().cuda()
         this_action = Variable(all_actions_var, requires_grad=False)
         coll_ls, off_ls, dist_ls, _, _, _, _ = get_action_loss(net, this_imgs, this_action, num_time, None, None)
         batch_ls = (coll_ls + off_ls - 0.1 * dist_ls).reshape((-1))
-        idxes = batch_ls.argsort()[:150]
+        idxes = batch_ls.argsort()[:250]
         act_seq = np.argmax(all_actions[idxes, :, :], -1)
         prob = get_prob_with_act(act_seq, num_actions)
-        all_actions = get_act_with_prob(300, num_time, num_actions, prev_action, prob)
+        all_actions = get_act_with_prob(500, num_time, num_actions, prev_action, prob)
     idx = np.argmin(batch_ls)
     which_action = np.argmax(this_action.data.cpu().numpy()[idx, 0, :].squeeze())
     return which_action, None, None
