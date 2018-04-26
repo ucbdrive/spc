@@ -61,7 +61,7 @@ def train_policy(args,
     speed_np, pos_np, posxyz_np = get_info_np(info, use_pos_class = False)
 
     mpc_buffer = MPCBuffer(buffer_size, frame_history_len, pred_step, num_total_act, continuous=True)
-    prev_act, explore, epi_len = 1, 0.15, 0
+    prev_act, explore, epi_len = np.array([1.0, 0.0, 0.0]), 0.15, 0
  
     if args.resume:
         num_imgs_start = max(int(open(args.save_path+'/log_train_torcs.txt').readlines()[-1].split(' ')[1])-0,0)
@@ -76,13 +76,14 @@ def train_policy(args,
         explore = exploration.value(tt)
         rand_num = random.random()
         if rand_num <= 1-explore:
-            with torch.no_grad():
-                train_net.eval()
-                action, _, _ = sample_action(train_net, obs_var, prev_action=prev_act, num_time=pred_step, batch_step=args.batch_step, num_actions=num_total_act, same_step=args.same_step, all_actions=all_actions[prev_act,:,:,:], use_optimize=True)
+            train_net.eval()
+            action = sample_cont_action(train_net, obs_var, prev_action=prev_act, num_time=pred_step) 
         else:
             action = np.random.rand(3)*2-1
-            action[0] = np.abs(action[0])
-        obs, reward, real_done, info = env.step(action)
+        action = np.clip(action, -1, 1)
+        exe_action = action
+        exe_action[0] = np.abs(exe_action[0])
+        obs, reward, real_done, info = env.step(exe_action)
  
         reward = info['speed']*(np.cos(info['angle'])-np.abs(np.sin(info['angle']))-np.abs(info['trackPos'])/9.0)/40.0
         done = doneCond.isdone(info['trackPos'], dist_this, info['pos']) or epi_len > 1000
@@ -110,7 +111,7 @@ def train_policy(args,
             print('past 100 episode rewards is ', "{0:.3f}".format(np.mean(epi_rewards[-100:])),' std is ', "{0:.15f}".format(np.std(epi_rewards[-100:])))
             with open(args.save_path+'/log_train_torcs.txt', 'a') as fi:
                 fi.write('step '+str(tt)+' reward '+str(np.mean(epi_rewards[-10:]))+' std '+str(np.std(epi_rewards[-10:]))+' numhand '+str(num_hand)+'\n')
-            epi_len, rewards, num_hand = 0, 0, 0
+            epi_len, rewards = 0, 0 
         prev_info = copy.deepcopy(info) 
 
         # start training
