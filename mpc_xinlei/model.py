@@ -78,7 +78,7 @@ class ConvLSTMNet(nn.Module):
         self.fc_dist_1 = nn.Linear(self.hidden_dim + self.info_dim, 128)
         self.fc_dist_2 = nn.Linear(128+16, 32)
         self.fc_dist_3 = nn.Linear(32+16, 1)
-        self.fc_dist_tanh = nn.Tanh()
+        #self.fc_dist_tanh = nn.Tanh()
  
     def get_feature(self, x):
         res = []
@@ -121,7 +121,8 @@ class ConvLSTMNet(nn.Module):
         dist = torch.cat([dist, action_enc], dim=1)
         dist = F.relu(self.fc_dist_2(dist))
         dist = torch.cat([dist, action_enc], dim=1)
-        dist = self.fc_dist_tanh(F.relu(self.fc_dist_3(dist)))*100
+        #dist = self.fc_dist_tanh(F.relu(self.fc_dist_3(dist)))*100
+        dist = self.fc_dist_3(dist)
         return coll_prob, nx_feature_enc, offroad_prob, dist, hidden, cell
 
 class ConvLSTMMulti(nn.Module):
@@ -185,17 +186,17 @@ def sample_action_iterative(net, imgs, prev_action, num_time=3, num_actions=6, b
     imgs = imgs.view(batch_size, 1, c, w, h)
     
     prob = np.ones((num_actions, num_actions))/(num_actions*1.0)
-    all_actions = get_act_with_prob(500, num_time, num_actions, prev_action, prob)
-    this_imgs = imgs.repeat(500, 1, 1, 1, 1)
-    for itr in range(3):
+    all_actions = get_act_with_prob(300, num_time, num_actions, prev_action, prob)
+    this_imgs = imgs.repeat(300, 1, 1, 1, 1)
+    for itr in range(5):
         all_actions_var = torch.from_numpy(all_actions).float().cuda()
         this_action = Variable(all_actions_var, requires_grad=False)
         coll_ls, off_ls, dist_ls, _, _, _, _ = get_action_loss(net, this_imgs, this_action, num_time, None, None)
-        batch_ls = (coll_ls + off_ls - 0.1 * dist_ls).reshape((-1))
-        idxes = batch_ls.argsort()[:250]
+        batch_ls = (-0.1 * dist_ls).reshape((-1))
+        idxes = batch_ls.argsort()[:150]
         act_seq = np.argmax(all_actions[idxes, :, :], -1)
         prob = get_prob_with_act(act_seq, num_actions)
-        all_actions = get_act_with_prob(500, num_time, num_actions, prev_action, prob)
+        all_actions = get_act_with_prob(300, num_time, num_actions, prev_action, prob)
     idx = np.argmin(batch_ls)
     which_action = np.argmax(this_action.data.cpu().numpy()[idx, 0, :].squeeze())
     return which_action, None, None
@@ -213,7 +214,7 @@ def sample_action(net, imgs, prev_action, num_time=3, hidden=None, cell=None, nu
     elif use_optimize == False: # sample action
         if all_actions is None:
             all_actions,_ = get_act_samps(num_time, num_actions, prev_action, 1500, same_step)
-        all_actions = all_actions[np.random.randint(all_actions.shape[0], size=(500,)), :, :]
+        all_actions = all_actions[np.random.randint(all_actions.shape[0], size=(1000,)), :, :]
         num_choice = all_actions.shape[0]
         total_ls = 100000000
         which_action = -1
@@ -222,7 +223,8 @@ def sample_action(net, imgs, prev_action, num_time=3, hidden=None, cell=None, nu
             this_action = Variable(all_actions[ii*batch_step:min((ii+1)*batch_step, num_choice),:,:])
             this_imgs = imgs.repeat(int(this_action.size()[0]), 1,1,1,1)
             coll_ls, off_ls, dist_ls, coll_prob, off_prob, distance,_ = get_action_loss(net, this_imgs, this_action, num_time, hidden, cell, gpu=gpu)
-            batch_ls = coll_ls + off_ls -0.1*dist_ls
+            # batch_ls = coll_ls + off_ls -0.1*dist_ls
+            batch_ls = -1 * dist_ls
             idx = np.argmin(batch_ls)
             this_loss = batch_ls[idx]
             if this_loss < total_ls or ii == 0:
@@ -234,7 +236,6 @@ def sample_action(net, imgs, prev_action, num_time=3, hidden=None, cell=None, nu
         this_action = Variable(torch.randn(1, num_time, num_actions), requires_grad=False)
         this_action = quantize_action(this_action, batch_size, num_time, num_actions, requires_grad=True, prev_action=prev_action)
         this_imgs = imgs.repeat(int(this_action.size()[0]), 1, 1, 1, 1)
-        pdb.set_trace()
         for i in range(30):
             net.zero_grad()
             _, _, _, _, _, _, loss = get_action_loss(net, this_imgs, this_action, num_time, hidden, cell)
