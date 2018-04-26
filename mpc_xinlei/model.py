@@ -201,6 +201,20 @@ def sample_action_iterative(net, imgs, prev_action, num_time=3, num_actions=6, b
     which_action = np.argmax(this_action.data.cpu().numpy()[idx, 0, :].squeeze())
     return which_action, None, None
 
+def sample_cont_action(net, imgs, prev_action=None, num_time=15):
+    imgs = imgs.contiguous()
+    batch_size, c, w, h = int(imgs.size()[0]), int(imgs.size()[-3]), int(imgs.size()[-2]), int(imgs.size()[-1])
+    imgs = imgs.view(batch_size, 1, c, w, h)
+    this_action = Variable(torch.from_numpy(np.random.rand(1, num_time, 3)*2-1).cuda().float(), requires_grad=True)
+    this_action = torch.clamp(action, -1, 1)
+    for i in range(10):
+        net.zero_grad()
+        _, _, _, _, _, _, loss = get_action_loss(net, imgs, this_action, num_time, hidden=None, cell=None)
+        loss.backward()
+        this_action.data -= 0.01 * this_action.grad.data
+        this_action = torch.clamp(this_action, -1, 1)
+    return this_action.data.cpu().numpy()[0,0,:].reshape(-1) 
+    
 def sample_action(net, imgs, prev_action, num_time=3, hidden=None, cell=None, num_actions = 6, calculate_loss=False, batch_step=200, gpu=2, same_step=False, all_actions=None, use_optimize=False):
     imgs = imgs.contiguous()
     batch_size, c, w, h = int(imgs.size()[0]), int(imgs.size()[-3]), int(imgs.size()[-2]), int(imgs.size()[-1])
@@ -214,6 +228,7 @@ def sample_action(net, imgs, prev_action, num_time=3, hidden=None, cell=None, nu
     elif use_optimize == False: # sample action
         if all_actions is None:
             all_actions,_ = get_act_samps(num_time, num_actions, prev_action, 1500, same_step)
+        # all_actions = get_action_sample(num_time=12, num_step_per_time=3, num_actions=6)
         all_actions = all_actions[np.random.randint(all_actions.shape[0], size=(1000,)), :, :]
         num_choice = all_actions.shape[0]
         total_ls = 100000000
