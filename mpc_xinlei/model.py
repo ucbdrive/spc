@@ -157,8 +157,7 @@ class ConvLSTMMulti(nn.Module):
             pred_list.append(pred)
             offroad_list.append(offroad)
             dist_list.append(dist)
-        return torch.stack(coll_list, dim=1), torch.stack(pred_list, dim=1), torch.stack(offroad_list,dim=1), \
-            torch.stack(dist_list, dim=1), hidden, cell
+        return torch.stack(coll_list, dim=1), torch.stack(pred_list, dim=1), torch.stack(offroad_list,dim=1), torch.stack(dist_list, dim=1), hidden, cell
 
 def get_action_loss(net, imgs, actions, num_time = 3, hidden = None, cell = None, gpu=0):
     batch_size = int(imgs.size()[0])
@@ -170,15 +169,14 @@ def get_action_loss(net, imgs, actions, num_time = 3, hidden = None, cell = None
     for i in range(num_time):
         weight.append(0.97**i)
     weight = Variable(torch.from_numpy(np.array(weight).reshape((1, num_time, 1))).float().cuda()).repeat(batch_size, 1, 1)
-    outs = net.forward(imgs, actions, num_time=num_time, hidden=hidden, cell=cell)
+    outs = net(imgs, actions, num_time=num_time, hidden=hidden, cell=cell)
     coll_ls = nn.CrossEntropyLoss(reduce=False)(outs[0].view(-1,2), torch.max(target_coll.view(-1,2),-1)[1])
     off_ls = nn.CrossEntropyLoss(reduce=False)(outs[2].view(-1,2), torch.max(target_off.view(-1,2),-1)[1])
     coll_ls = (coll_ls.view(-1,num_time,1)*weight).view(-1,num_time).sum(-1)
     off_ls = (off_ls.view(-1,num_time,1)*weight).view(-1,num_time).sum(-1)
     dist_ls = (outs[3].view(-1,num_time,1)*weight).view(-1,num_time).sum(-1)
     loss = off_ls + coll_ls - 0.1 * dist_ls
-    return coll_ls.data.cpu().numpy().reshape((-1)), off_ls.data.cpu().numpy().reshape((-1)), dist_ls.data.cpu().numpy().reshape((-1)),\
-        outs[0][:,:,0].data.cpu().numpy(), outs[2][:,:,0].data.cpu().numpy(), outs[3][:,:,0].data.cpu().numpy(), loss        
+    return coll_ls.data.cpu().numpy().reshape((-1)), off_ls.data.cpu().numpy().reshape((-1)), dist_ls.data.cpu().numpy().reshape((-1)), outs[0][:,:,0].data.cpu().numpy(), outs[2][:,:,0].data.cpu().numpy(), outs[3][:,:,0].data.cpu().numpy(), loss        
 
 def sample_action_iterative(net, imgs, prev_action, num_time=3, num_actions=6, batch_step=300):
     imgs = imgs.contiguous()
@@ -205,14 +203,18 @@ def sample_cont_action(net, imgs, prev_action=None, num_time=15):
     imgs = imgs.contiguous()
     batch_size, c, w, h = int(imgs.size()[0]), int(imgs.size()[-3]), int(imgs.size()[-2]), int(imgs.size()[-1])
     imgs = imgs.view(batch_size, 1, c, w, h)
-    this_action = Variable(torch.from_numpy(np.random.rand(1, num_time, 3)*2-1).cuda().float(), requires_grad=True)
-    this_action = torch.clamp(action, -1, 1)
+    prev_action = prev_action.reshape((1,1,3))
+    prev_action = np.repeat(prev_action, num_time, axis=1) 
+    this_action = torch.from_numpy(prev_action).float()
+    this_action = Variable(this_action.cuda(), requires_grad=True)
+    this_action.data.clamp(-1,1)
+    #this_action = torch.clamp(this_action, -1, 1)
     for i in range(10):
         net.zero_grad()
-        _, _, _, _, _, _, loss = get_action_loss(net, imgs, this_action, num_time, hidden=None, cell=None)
+        _, _, _, _, _, _, loss = get_action_loss(net, imgs, this_action, num_time, None, None)
         loss.backward()
         this_action.data -= 0.01 * this_action.grad.data
-        this_action = torch.clamp(this_action, -1, 1)
+        this_action.data.clamp(-1,1)# = torch.clamp(this_action, -1, 1)
     return this_action.data.cpu().numpy()[0,0,:].reshape(-1) 
     
 def sample_action(net, imgs, prev_action, num_time=3, hidden=None, cell=None, num_actions = 6, calculate_loss=False, batch_step=200, gpu=2, same_step=False, all_actions=None, use_optimize=False):
