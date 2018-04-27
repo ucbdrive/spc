@@ -9,6 +9,7 @@ import PIL.Image as Image
 import random
 from sklearn.metrics import confusion_matrix
 import pdb
+from model import *
 
 class MPCData(Dataset):
     def __init__(self, mpc_buffer, batch_size=1):
@@ -30,6 +31,40 @@ class MPCData(Dataset):
         act_batch, coll_batch, offroad_batch, dist_batch, img_batch, nximg_batch = x[0], x[1], x[3], x[4], x[5], x[6]
         return act_batch.squeeze(), coll_batch.squeeze(), offroad_batch.squeeze(), dist_batch.squeeze(0), img_batch.squeeze(), nximg_batch.squeeze()
 
+def train_model_imitation(train_net, mpc_buffer, batch_size, epoch, avg_img_t, std_img_t, pred_step=15):
+    if epoch % 20 == 0:
+        x, idxes = mpc_buffer.sample(batch_size, sample_early = True)
+    else:
+        x, idxes = mpc_buffer.sample(batch_size, sample_early = False)
+    x = list(x)
+    for ii in range(len(x)):
+        x[ii] = torch.from_numpy(x[ii]).float().cuda()
+    act_batch = Variable(x[0], requires_grad = False)
+    coll_batch = Variable(x[1], requires_grad=False)
+    offroad_batch = Variable(x[3], requires_grad=False)
+    dist_batch = Variable(x[4])
+    img_batch = Variable(((x[5].float()-avg_img_t)/(std_img_t+0.0001)), requires_grad=False)
+    nximg_batch = Variable(((x[6].float()-avg_img_t)/(std_img_t+0.0001)), requires_grad=False)
+    with torch.no_grad():
+        nximg_enc = train_net(nximg_batch, get_feature=True)
+        nximg_enc = nximg_enc.detach()
+    actions = torch.rand(*act_batch.size()).float()
+    actions = Variable(actions.cuda(), requires_grad=True)
+    actions.data.clamp(-1,1)
+    train_net.zero_grad()
+    for i in range(10):
+        pred_coll, pred_enc, pred_off, pred_dist, _, _ = train_net(img_batch,actions, pred_step)
+        coll_ls = Focal_Loss(pred_coll.view(-1,2), (torch.max(coll_batch.view(-1,2),-1)[1]).view(-1), reduce=True)
+        offroad_ls = Focal_Loss(pred_off.view(-1,2), (torch.max(offroad_batch.view(-1,2),-1)[1]).view(-1), reduce=True)
+        dist_ls = torch.sqrt(nn.MSELoss()(pred_dist.view(-1,pred_step), dist_batch[:,1:].view(-1,pred_step)))
+        pred_ls = nn.L1Loss()(pred_enc, nximg_enc).sum()
+        loss = pred_ls + coll_ls + offroad_ls + dist_ls
+        loss.backward(retain_variables=True)
+        actions.data -= 0.001 * actions.grad.data
+        actions.data.clamp(-1,1)
+    action_loss = torch.sqrt(nn.MSELoss()(actions, act_batch))
+    return action_loss 
+    
 def train_model(train_net, mpc_buffer, batch_size, epoch, avg_img_t, std_img_t, pred_step=15):
     if epoch % 20 == 0:
         x, idxes = mpc_buffer.sample(batch_size, sample_early = True)
