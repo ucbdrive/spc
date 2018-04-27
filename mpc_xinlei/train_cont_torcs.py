@@ -2,7 +2,7 @@ import pdb
 import os
 import argparse
 from envs import create_env
-from train_policy import train_policy
+from train_cont_policy import train_policy
 from utils import init_dirs
 import sys
 sys.path.append('/home/xinleipan/pyTORCS/py_TORCS')
@@ -40,7 +40,7 @@ if __name__ == '__main__':
     
     #envs = torcs_envs(num = 1, game_config='/home/xinleipan/pyTORCS/game_config/michigan.xml', isServer = 1, screen_id = 162)
     #env = envs.get_envs()[0]
-    env = create_env(args.env, reward_ben=True, config='quickrace_continuous_single.xml', rescale=False, continuous=True)
+    env = create_env(args.env, reward_ben=False, config='quickrace_continuous_single.xml', rescale=False, continuous=True)
     obs1 = env.reset()
     print(obs1.shape)
     obs, reward, done, info = env.step(np.array([1.0,0.0,0.0]))

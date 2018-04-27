@@ -39,6 +39,7 @@ def train_policy(args,
     obs = cv2.resize(obs, (256, 256))
     train_net = ConvLSTMMulti(num_total_act, pretrain = True, frame_history_len = frame_history_len)
     train_net = train_net.cuda()
+    net = ConvLSTMMulti(num_total_act, pretrain=True, frame_history_len = frame_history_len)
 
     doneCond = DoneCondition(20)
     params = [param for param in train_net.parameters() if param.requires_grad]
@@ -53,7 +54,13 @@ def train_policy(args,
     epi_rewards, rewards = [], 0.0
     train_net, epoch, optimizer = load_model(args.save_path, train_net, data_parallel = True, optimizer=optimizer, resume=args.resume)
     train_net.train()
-        
+    net.load_state_dict(train_net.module.state_dict())
+    net.float().cuda()
+  
+    net.eval()
+    for param in net.parameters():
+        param.requires_grad = False
+ 
     img_buffer = IMGBuffer(1000)
     obs_buffer = ObsBuffer(frame_history_len)
     img_buffer.store_frame(obs)
@@ -76,8 +83,7 @@ def train_policy(args,
         explore = exploration.value(tt)
         rand_num = random.random()
         if rand_num <= 1-explore:
-            train_net.eval()
-            action = sample_cont_action(train_net, obs_var, prev_action=prev_act, num_time=pred_step) 
+            action = sample_cont_action(net, obs_var, prev_action=prev_act, num_time=pred_step) 
         else:
             action = np.random.rand(3)*2-1
         action = np.clip(action, -1, 1)
@@ -85,10 +91,10 @@ def train_policy(args,
         exe_action[0] = np.abs(exe_action[0])
         obs, reward, real_done, info = env.step(exe_action)
  
+        dist_this = info['speed']*(np.cos(info['angle'])-np.abs(np.sin(info['angle']))-np.abs(info['trackPos'])/9.0)
         reward = info['speed']*(np.cos(info['angle'])-np.abs(np.sin(info['angle']))-np.abs(info['trackPos'])/9.0)/40.0
         done = doneCond.isdone(info['trackPos'], dist_this, info['pos']) or epi_len > 1000
         prev_act = action
-        dist_this = info['speed']*(np.cos(info['angle'])-np.abs(np.sin(info['angle']))-np.abs(info['trackPos'])/9.0)
         print('step ', epi_len, 'action ', action, 'pos', info['trackPos'], ' dist ', dist_this, info['pos'], info['angle'], 'explore', explore)
         obs = cv2.resize(obs, (256,256))
         speed_np, pos_np, posxyz_np = get_info_np(info, use_pos_class = False)
@@ -110,7 +116,7 @@ def train_policy(args,
             speed_np, pos_np, posxyz_np = get_info_np(info, use_pos_class=False) 
             print('past 100 episode rewards is ', "{0:.3f}".format(np.mean(epi_rewards[-100:])),' std is ', "{0:.15f}".format(np.std(epi_rewards[-100:])))
             with open(args.save_path+'/log_train_torcs.txt', 'a') as fi:
-                fi.write('step '+str(tt)+' reward '+str(np.mean(epi_rewards[-10:]))+' std '+str(np.std(epi_rewards[-10:]))+' numhand '+str(num_hand)+'\n')
+                fi.write('step '+str(tt)+' reward '+str(np.mean(epi_rewards[-10:]))+' std '+str(np.std(epi_rewards[-10:]))+'\n')
             epi_len, rewards = 0, 0 
         prev_info = copy.deepcopy(info) 
 
@@ -120,12 +126,18 @@ def train_policy(args,
             sign = True
             num_epoch = 0
             while sign:
-                train_net.train()
                 optimizer.zero_grad()
                 loss, coll_acc, off_acc, total_dist_ls = train_model(train_net, mpc_buffer, batch_size, epoch, avg_img_t, std_img_t, pred_step)
                 loss.backward()
                 optimizer.step()
-       
+
+                optimizer.zero_grad()
+                loss = train_model_imitation(train_net, mpc_buffer, batch_size, epoch, avg_img_t, std_img_t, pred_step)
+                loss.backward()
+                optimizer.step()
+
+                net.load_state_dict(train_net.module.state_dict()) 
+
                 # log loss
                 if epoch % 200 == 0:
                     if total_dist_ls > 15:
