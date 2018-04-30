@@ -27,6 +27,7 @@ if __name__ == '__main__':
     np.random.seed(args.seed)
     torch.manual_seed(args.seed)
     init_dirs(args)
+    np.set_printoptions(formatter = {'float_kind': lambda x: "%.6f" % x})
 
     model = DRNSeg('drn_d_22', args.semantic_classes)
     up = UP_Samper()

@@ -100,7 +100,7 @@ class PRED(nn.Module):
         self.action_encoder7.weight.data.normal_(0, math.sqrt(2. / (4*1*1)))
         # self.action_encoder7.weight.data[:] += 1 / (64*5*5)
 
-    def forward(self, x, action):
+    def single_forward(self, x, action):
         one_hot = torch.zeros(1, self.num_actions)
         one_hot[0, action] = 1
         one_hot = Variable(one_hot, requires_grad = False)
@@ -122,6 +122,11 @@ class PRED(nn.Module):
         result = self.bn6(F.conv2d(result, y6, stride = 1, padding = 2))
         result = F.conv2d(result, y7, stride = 1, padding = 0)
         return result
+
+
+    def forward(self, x, action):
+        result = torch.stack([self.single_forward(x[batch_id].unsqueeze(0), action[batch_id]).squeeze(0) for batch_id in range(action.size(0))], dim = 0)
+        return result + x
 
 class FURTHER(nn.Module):
     def __init__(self):
@@ -175,7 +180,7 @@ class FURTHER(nn.Module):
         x = x.view(x.size(0), -1) # 1024
         x = F.relu(self.fc1(x))
         x = F.relu(self.fc2(x))
-        pos = self.fc5_1(F.relu(self.fc4_1(F.relu(self.fc3_1(x))))).view(-1)
-        angle = self.fc5_2(F.relu(self.fc4_2(F.relu(self.fc3_2(x))))).view(-1)
+        pos = F.tanh(self.fc5_1(F.tanh(self.fc4_1(F.tanh(self.fc3_1(x))))).view(-1))
+        angle = F.tanh(self.fc5_2(F.tanh(self.fc4_2(F.tanh(self.fc3_2(x))))).view(-1))
         # speed = self.fc5_3(F.relu(self.fc4_3(F.relu(self.fc3_3(x))))).view(1)
         return pos, angle
