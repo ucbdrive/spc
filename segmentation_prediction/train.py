@@ -50,8 +50,8 @@ def train_data(args, inputs, prediction, output_pos, output_angle, targets, targ
     output_pos[0], output_angle[0] = _output_pos, _output_angle
 
     loss0 = criterion['CE'](_prediction, targets[0])
-    loss2 = criterion['L2'](_output_pos, target_pos[0]) / 10
-    loss3 = criterion['L2'](_output_angle, target_angle[0]) / 10
+    loss2 = criterion['L2'](_output_pos, target_pos[0])
+    loss3 = criterion['L2'](_output_angle, target_angle[0])
     loss = loss0 + loss2 + loss3
     LOSS[0, 0] = from_variable_to_numpy(loss0)
     LOSS[0, 2] = from_variable_to_numpy(loss2)
@@ -67,8 +67,8 @@ def train_data(args, inputs, prediction, output_pos, output_angle, targets, targ
         output_pos[i], output_angle[i] = _output_pos, _output_angle
         loss0 = criterion['CE'](_outputs, targets[i])
         loss1 = criterion['CE'](_prediction, targets[i]) / 10
-        loss2 = criterion['L2'](_output_pos, target_pos[i]) / 10
-        loss3 = criterion['L2'](_output_angle, target_angle[i]) / 10
+        loss2 = criterion['L2'](_output_pos, target_pos[i])
+        loss3 = criterion['L2'](_output_angle, target_angle[i])
         loss += loss0 + weight * (loss1 + loss2 + loss3)
         LOSS[i, 0] = from_variable_to_numpy(loss0)
         LOSS[i, 1] = from_variable_to_numpy(loss1)

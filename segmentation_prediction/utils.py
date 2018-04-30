@@ -122,8 +122,8 @@ def from_variable_to_numpy(x):
 def generate_action_sample(args, prob, batch_size, length, LAST_ACTION = 1):
     all_actions = torch.zeros(length, batch_size).type(torch.LongTensor)
     all_actions[0] = prob[LAST_ACTION].multinomial(num_samples = batch_size, replacement=True).data
-    if torch.cuda.is_available():
-        all_actions = all_actions.cuda()
+    # if torch.cuda.is_available():
+    #     all_actions = all_actions.cuda()
 
     for step in range(1, length):
         indices = [torch.nonzero(all_actions[step - 1] == x).squeeze() for x in range(args.num_actions)]
@@ -131,19 +131,15 @@ def generate_action_sample(args, prob, batch_size, length, LAST_ACTION = 1):
             if indices[action].numel() > 0:
                 all_actions[step, indices[action]] = prob[action].multinomial(num_samples = indices[action].numel(), replacement=True).data
 
-    if torch.cuda.is_available():
-        all_actions = all_actions.cuda()
-
     return all_actions
 
 def generate_probs(args, all_actions, last_action = 1):
-    n, length = all_actions.size()
     all_actions = from_variable_to_numpy(all_actions)
     prob_map = np.concatenate((np.expand_dims(last_action * args.num_actions + all_actions[:, 0], axis = 1), all_actions[:, :-1] * args.num_actions + all_actions[:, 1:]), axis = 1)
     prob = torch.histc(torch.from_numpy(prob_map).type(torch.Tensor), bins = args.num_actions * args.num_actions).view(args.num_actions, args.num_actions)
 
-    if torch.cuda.is_available():
-        prob = prob.cuda()
+    # if torch.cuda.is_available():
+    #     prob = prob.cuda()
 
     prob[prob.sum(dim = 1) == 0, :] = 1
     prob /= prob.sum(dim = 1).unsqueeze(1)
@@ -154,11 +150,10 @@ def sample_action(args, true_obs, model, predictor, further, prev_action = 1):
     # start_time = time.time()
     obs = np.repeat(np.expand_dims(true_obs, axis = 0), args.batch_size, axis = 0)
     obs = Variable(torch.from_numpy(obs), requires_grad = False).type(torch.Tensor)
-    if torch.cuda.is_available():
-        obs = obs.cuda()
     prob = torch.ones(args.num_actions, args.num_actions) / float(args.num_actions)
-    if torch.cuda.is_available():
-        prob = prob.cuda()
+    # if torch.cuda.is_available():
+    #     obs = obs.cuda()
+    #     prob = prob.cuda()
 
     with torch.no_grad():
         for i in range(6):
@@ -172,7 +167,7 @@ def sample_action(args, true_obs, model, predictor, further, prev_action = 1):
 
             if i < 5:
                 indices = np.argsort(all_losses)[:args.batch_size]
-                prob = generate_probs(args, all_actions[indices], prev_action)
+                prob = generate_probs(args, all_actions[:, indices], prev_action)
             else:
                 idx = np.argmin(all_losses)
                 which_action = int(from_variable_to_numpy(all_actions)[0, idx])
