@@ -16,16 +16,16 @@ def sample_one_step(args, true_obs, inputs, targets, target_pos, target_angle, a
     action = sample_action(args, true_obs, model, predictor, further) if np.random.random() > exploration else naive_driver(args, env.get_info())
     obs, reward, done, info = env.step(action)
     obs = (obs.transpose(2, 0, 1) - args.obs_avg) / args.obs_std
-    true_obs[:] = np.concatenate((true_obs[args.frame_len:], obs), axis = 0)
+    true_obs[:] = obs # np.concatenate((true_obs[args.frame_len:], obs), axis = 0)
 
     inputs[args.step, args.batch_id] = torch.from_numpy(true_obs)
     targets[args.step, args.batch_id] = torch.from_numpy(env.get_segmentation().astype(np.uint8))
-    target_pos[args.step, args.batch_id] = info['trackPos'] / args.pos_rescale
-    target_angle[args.step, args.batch_id] = info['angle'] / args.angle_rescale
+    target_pos[args.step, args.batch_id] = torch.clamp(torch.tensor(info['trackPos'] / args.pos_rescale), -1, 1)
+    target_angle[args.step, args.batch_id] = torch.clamp(torch.tensor(info['angle'] / args.angle_rescale), -1, 1)
     if args.step > 0:
         actions[args.step - 1, args.batch_id] = action
     
-    done = done or reward <= -2.5 or abs(info['trackPos']) > args.pos_rescale or abs(info['angle']) > args.angle_rescale
+    done = done or reward <= -2.5 # or abs(info['trackPos']) > args.pos_rescale or abs(info['angle']) > args.angle_rescale
     if done:
         true_obs[:] = reset_env(args, env)
     return done
@@ -43,13 +43,18 @@ def train_data(args, inputs, prediction, output_pos, output_angle, targets, targ
     LOSS = np.zeros((args.num_steps + 1, 4))
     weight = 1
 
+    print(target_angle)
     _feature_map = model(inputs[0])
     _prediction = up(_feature_map)
+    print(_prediction[0, :, 128, 128])
     prediction[0] = _prediction
+    loss0 = criterion['CE'](_prediction, targets[0])
+    _feature_map = _feature_map.detach()
+    _feature_map.requires_grad = False
+
     _output_pos, _output_angle = further(_feature_map)
     output_pos[0], output_angle[0] = _output_pos, _output_angle
 
-    loss0 = criterion['CE'](_prediction, targets[0])
     loss2 = criterion['L2'](_output_pos, target_pos[0])
     loss3 = criterion['L2'](_output_angle, target_angle[0])
     loss = loss0 + loss2 + loss3
@@ -59,17 +64,25 @@ def train_data(args, inputs, prediction, output_pos, output_angle, targets, targ
 
     for i in range(1, args.num_steps + 1):
         weight *= args.loss_decay
-        _outputs = up(model(inputs[i]))
+        __feature_map = model(inputs[i])
+        _outputs = up(__feature_map)
+        loss0 = criterion['CE'](_outputs, targets[i])
+        __feature_map = __feature_map.detach()
+        __feature_map.requires_grad = False
+
         _feature_map = predictor(_feature_map, actions[i - 1])
         _prediction = up(_feature_map)
+        print(_prediction[0, :, 128, 128])
         prediction[i] = _prediction
-        _output_pos, _output_angle = further(_feature_map)
+        loss1 = criterion['CE'](_prediction, targets[i])
+
+        _output_pos, _output_angle = further(__feature_map)
         output_pos[i], output_angle[i] = _output_pos, _output_angle
-        loss0 = criterion['CE'](_outputs, targets[i])
-        loss1 = criterion['CE'](_prediction, targets[i]) / 10
+
         loss2 = criterion['L2'](_output_pos, target_pos[i])
         loss3 = criterion['L2'](_output_angle, target_angle[i])
         loss += loss0 + weight * (loss1 + loss2 + loss3)
+
         LOSS[i, 0] = from_variable_to_numpy(loss0)
         LOSS[i, 1] = from_variable_to_numpy(loss1)
         LOSS[i, 2] = from_variable_to_numpy(loss2)
@@ -81,7 +94,6 @@ def train_data(args, inputs, prediction, output_pos, output_angle, targets, targ
     return LOSS, from_variable_to_numpy(loss)
 
 def visualize_data(args, inputs, prediction, output_pos, output_angle, targets, target_pos, target_angle, actions):
-    print('Visualizing data.')
     clear_visualization_dir(args)
     batch_id = np.random.randint(args.batch_size)
     pred = torch.argmax(prediction[:, batch_id, :, :, :], dim = 1)
@@ -125,7 +137,8 @@ def train(args, model, up, predictor, further, env):
         with open('pred_log.txt', 'a') as f:
             f.write('%s\nIteration %d, mean loss %f\n' % (str(LOSS), args.epoch, losses))
 
-        if args.epoch % 20 == 0:
+        if args.epoch % 10 == 0:
+            print('Visualizing data.')
             visualize_data(args, inputs, prediction, output_pos, output_angle, targets, target_pos, target_angle, actions)
         
         if args.epoch % 20 == 0:

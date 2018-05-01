@@ -45,6 +45,11 @@ class PRED(nn.Module):
         super(PRED, self).__init__()
         self.num_actions = num_actions
 
+        self.bn0 = nn.BatchNorm2d(4)
+        self.bn0.weight.data.fill_(1)
+        self.bn0.bias.data.zero_()
+
+
         self.action_encoder1 = nn.Linear(num_actions, 16*4*5*5)
         self.action_encoder1.weight.data.normal_(0, math.sqrt(2. / (16*5*5)))
         # self.action_encoder1.weight.data[:] += 1 / (4*5*5)
@@ -114,7 +119,7 @@ class PRED(nn.Module):
         y6 = self.action_encoder6(one_hot).view(64, 64, 5, 5)
         y7 = self.action_encoder7(one_hot).view(4, 64, 1, 1)
 
-        result = F.relu(self.bn1(F.conv2d(x, y1, stride = 1, padding = 4, dilation = 2)))
+        result = F.relu(self.bn1(F.conv2d(self.bn0(x), y1, stride = 1, padding = 4, dilation = 2)))
         result = self.bn2(F.conv2d(result, y2, stride = 1, padding = 2))
         result = F.relu(self.bn3(F.conv2d(result, y3, stride = 1, padding = 4, dilation = 2)))
         result = self.bn4(F.conv2d(result, y4, stride = 1, padding = 2))
@@ -124,7 +129,7 @@ class PRED(nn.Module):
         return result
 
 
-    def forward(self, x, action):
+    def forward(self, x, action):        
         result = torch.stack([self.single_forward(x[batch_id].unsqueeze(0), action[batch_id]).squeeze(0) for batch_id in range(action.size(0))], dim = 0)
         return result + x
 
@@ -165,10 +170,10 @@ class FURTHER(nn.Module):
         # self.fc4_3.weight.data.normal_(0, math.sqrt(2. / 16))
 
         self.fc5_1 = nn.Linear(16, 1)
-        self.fc5_1.weight.data.normal_(0, math.sqrt(2. / 1))
+        self.fc5_1.weight.data.normal_(0, math.sqrt(2. / 16))
 
         self.fc5_2 = nn.Linear(16, 1)
-        self.fc5_2.weight.data.normal_(0, math.sqrt(2. / 1))
+        self.fc5_2.weight.data.normal_(0, math.sqrt(2. / 16))
 
         # self.fc5_3 = nn.Linear(16, 1)
         # self.fc5_3.weight.data.normal_(0, math.sqrt(2. / 1))
@@ -180,7 +185,7 @@ class FURTHER(nn.Module):
         x = x.view(x.size(0), -1) # 1024
         x = F.relu(self.fc1(x))
         x = F.relu(self.fc2(x))
-        pos = F.tanh(self.fc5_1(F.tanh(self.fc4_1(F.tanh(self.fc3_1(x))))).view(-1))
-        angle = F.tanh(self.fc5_2(F.tanh(self.fc4_2(F.tanh(self.fc3_2(x))))).view(-1))
+        pos = self.fc5_1(F.tanh(self.fc4_1(F.tanh(self.fc3_1(x))))).view(-1)
+        angle = self.fc5_2(F.tanh(self.fc4_2(F.tanh(self.fc3_2(x))))).view(-1)
         # speed = self.fc5_3(F.relu(self.fc4_3(F.relu(self.fc3_3(x))))).view(1)
         return pos, angle
