@@ -9,6 +9,24 @@ from generate_action_samples import *
 import random
 import pickle as pkl
 
+class atari_model(nn.Module):
+    def __init__(self, inc=12, num_actions=9, frame_history_len=4)
+        super(atari_model, self).__init__()
+        self.conv1 = nn.Conv2d(inc, 32, kernel_size=8, stride=4)
+        self.conv2 = nn.Conv2d(32, 64, kernel_size=4, stride=2)
+        self.conv3 = nn.Conv2d(64, 64, kernel_size=3, stride=1)
+        self.fc4 = nn.Linear(7 * 7 * 64, 512)
+        self.fc5 = nn.Linear(512, num_actions)
+        self.frame_history_len = frame_history_len
+        
+    def forward(self, x):
+        x = F.relu(self.conv1(x))
+        x = F.relu(self.conv2(x))
+        x = F.relu(self.conv3(x))
+        x = F.relu(self.fc4(x.view(x.size(0), -1)))
+        res = self.fc5(x)
+        return res
+
 class ConvLSTMCell(nn.Module):
     def __init__(self, input_dim, hidden_dim, bias):
         super(ConvLSTMCell, self).__init__()
@@ -175,7 +193,8 @@ def get_action_loss(net, imgs, actions, num_time = 3, hidden = None, cell = None
     coll_ls = (coll_ls.view(-1,num_time,1)*weight).view(-1,num_time).sum(-1)
     off_ls = (off_ls.view(-1,num_time,1)*weight).view(-1,num_time).sum(-1)
     dist_ls = (outs[3].view(-1,num_time,1)*weight).view(-1,num_time).sum(-1)
-    loss = off_ls + coll_ls - 0.1 * dist_ls
+    #loss = off_ls + coll_ls - 0.1 * dist_ls
+    loss = -1*dist_ls
     return coll_ls.data.cpu().numpy().reshape((-1)), off_ls.data.cpu().numpy().reshape((-1)), dist_ls.data.cpu().numpy().reshape((-1)), outs[0][:,:,0].data.cpu().numpy(), outs[2][:,:,0].data.cpu().numpy(), outs[3][:,:,0].data.cpu().numpy(), loss        
 
 def sample_action_iterative(net, imgs, prev_action, num_time=3, num_actions=6, batch_step=300):
@@ -203,18 +222,26 @@ def sample_cont_action(net, imgs, prev_action=None, num_time=15):
     imgs = imgs.contiguous()
     batch_size, c, w, h = int(imgs.size()[0]), int(imgs.size()[-3]), int(imgs.size()[-2]), int(imgs.size()[-1])
     imgs = imgs.view(batch_size, 1, c, w, h)
-    prev_action = prev_action.reshape((1,1,3))
+    prev_action = prev_action.reshape((1,1,2))
     prev_action = np.repeat(prev_action, num_time, axis=1) 
     this_action = torch.from_numpy(prev_action).float()
     this_action = Variable(this_action.cuda(), requires_grad=True)
     this_action.data.clamp(-1,1)
-    #this_action = torch.clamp(this_action, -1, 1)
-    for i in range(10):
+    prev_loss = 1000
+    sign = True
+    cnt = 0
+    while sign:
         net.zero_grad()
         _, _, _, _, _, _, loss = get_action_loss(net, imgs, this_action, num_time, None, None)
         loss.backward()
+        this_loss = float(loss.data.cpu().numpy())
+        if cnt >= 10 and (np.abs(prev_loss-this_loss)/prev_loss <= 0.0005 or this_loss > prev_loss):
+            sign = False
+            return this_action.data.cpu().numpy()[0,0,:].reshape(-1)
+        cnt += 1 
         this_action.data -= 0.01 * this_action.grad.data
         this_action.data.clamp(-1,1)# = torch.clamp(this_action, -1, 1)
+        prev_loss = this_loss
     return this_action.data.cpu().numpy()[0,0,:].reshape(-1) 
     
 def sample_action(net, imgs, prev_action, num_time=3, hidden=None, cell=None, num_actions = 6, calculate_loss=False, batch_step=200, gpu=2, same_step=False, all_actions=None, use_optimize=False):
