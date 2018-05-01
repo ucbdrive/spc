@@ -5,11 +5,22 @@ import math
 import numpy as np
 import drn
 import os
+import random
 from scipy.misc import imsave
 from scipy.misc.pilutil import imshow
 import matplotlib.pyplot as plt
+from py_TORCS import torcs_envs
 
 train = True
+batch_size = 16
+seed = 233
+
+def naive_driver(info):
+    if info['angle'] > 0.5 or (info['trackPos'] < -1 and info['angle'] > 0):
+        return 0
+    elif info['angle'] < -0.5 or (info['trackPos'] > 3 and info['angle'] < 0):
+        return 2
+    return 1
 
 def fill_up_weights(up):
     w = up.weight.data
@@ -48,50 +59,24 @@ class DRNSeg(nn.Module):
         n = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
         m.weight.data.normal_(0, math.sqrt(2. / n))
         m.bias.data.zero_()
-        self.up0 = up_sampler(classes)
-        self.up1 = up_sampler(classes)
-        self.up2 = up_sampler(classes)
-        self.up3 = up_sampler(classes)
-        self.up4 = up_sampler(classes)
-        self.up5 = up_sampler(classes)
+        self.up = up_sampler(classes)
 
-    def forward(self, x, action):
+    def forward(self, x):
         x = self.base(x)
         x = self.seg(x)
-        if action == 0:
-            y = self.up0(x)
-        elif action == 1:
-            y = self.up1(x)
-        elif action == 2:
-            y = self.up2(x)
-        elif action == 3:
-            y = self.up3(x)
-        elif action == 4:
-            y = self.up4(x)
-        elif action == 5:
-            y = self.up5(x)
-        return F.log_softmax(y, dim = 2), x
+        y = self.up(x)
+        return F.log_softmax(y, dim = 1)
 
     def optim_parameters(self, memo=None):
         for param in self.base.parameters():
             yield param
         for param in self.seg.parameters():
             yield param
-        for param in self.up0.parameters():
-            yield param
-        for param in self.up1.parameters():
-            yield param
-        for param in self.up2.parameters():
-            yield param
-        for param in self.up3.parameters():
-            yield param
-        for param in self.up4.parameters():
-            yield param
-        for param in self.up5.parameters():
+        for param in self.up.parameters():
             yield param
 
 def draw_from_pred(pred):
-    pred = pred.data.cpu().numpy()[0]
+    pred = pred.data.cpu().numpy()
     illustration = np.zeros((480, 640, 3)).astype(np.uint8)
     illustration[:, :, 0] = 255
     illustration[pred == 1] = np.array([0, 255, 0])
@@ -99,59 +84,88 @@ def draw_from_pred(pred):
     illustration[pred == 3] = np.array([0, 0, 255])
     return illustration
 
+def reduce(pred):
+    pred[pred != 2] = 0
+    pred[pred == 2] = 1
+    return pred
+
 if __name__ == '__main__':
+    random.seed(seed)
+    torch.manual_seed(seed)
     if os.path.exists('seg_log.txt'):
         os.system('rm seg_log.txt')
     model = DRNSeg('drn_d_22', 4)
-    inputs = torch.autograd.Variable(torch.ones(1, 3, 480, 640), requires_grad = False)
-    target = torch.autograd.Variable(torch.ones(1, 480, 640), requires_grad = False).type(torch.LongTensor)
+    if not train:
+        batch_size = 1
+    inputs = torch.autograd.Variable(torch.ones(batch_size, 3, 480, 640), requires_grad = False)
+    target = torch.autograd.Variable(torch.ones(batch_size, 480, 640), requires_grad = False).type(torch.LongTensor)
     criterion = nn.NLLLoss2d()
-    optimizer = torch.optim.SGD(model.optim_parameters(),
-                                0.01,
-                                momentum=0.9,
-                                weight_decay=1e-4)
+    optimizer = torch.optim.Adam(model.optim_parameters(), 0.001, amsgrad = True)
     if torch.cuda.is_available():
         model = model.cuda()
         inputs = inputs.cuda()
         target = target.cuda()
         criterion = criterion.cuda()
 
+    env = torcs_envs(num = 1, isServer = 0, mkey_start = 899).get_envs()[0]
+    obs = env.reset()
+    obs, reward, done, info = env.step(1)
+    obs = (obs.transpose(2, 0, 1) - 112.62289744791671) / 56.1524832523
+
     if train:
+        model.train()
         losses = 0
         epoch = 0
+        all_obs = np.zeros((batch_size, 480, 640, 3))
         while True:
-            for i in range(6000):
-                data = np.load('dataset1/%d.npz' % i)
-                inputs[0] = torch.from_numpy(data['obs'].transpose(2, 0, 1))
-                action = data['action'][0]
-                target[0] = torch.from_numpy(data['seg']).type(torch.LongTensor)
-                output, _ = model(inputs, action)
-                loss = criterion(output, target)
-                losses += loss.data.cpu().numpy()[0]
-                optimizer.zero_grad()
-                loss.backward()
-                optimizer.step()
-                if (i + 1) % 100 == 0:
-                    print('iteration %d, mean loss %f' % (i + 1, losses / 100.0))
-                    with open('seg_log.txt', 'a') as f:
-                        f.write('iteration %d, mean loss %f\n' % (i + 1, losses / 100.0))
-                    losses = 0
-                if (i + 1) % 1000 == 0:
-                    torch.save(model.state_dict(), os.path.join('models', 'epoch%d.dat' % epoch))
+            for i in range(batch_size):
+                action = random.randint(0, 5) if random.random() < 0.5 else naive_driver(info)
+                obs, reward, done, info = env.step(action)
+                all_obs[i] = obs
+                obs = (obs.transpose(2, 0, 1) - 112.62289744791671) / 56.1524832523
+                inputs[i] = torch.from_numpy(obs)
+                target[i] = torch.from_numpy(env.get_segmentation().astype(np.uint8))
+                if done or reward <= -2.5:
+                    obs = env.reset()
+                    obs, reward, done, info = env.step(1)
+                    obs = (obs.transpose(2, 0, 1) - 112.62289744791671) / 56.1524832523
+            output = model(inputs)
+            loss = criterion(output, target)
+            print('iteration %d, loss %f' % (i + 1, loss.data.cpu().numpy()))
+            with open('seg_log.txt', 'a') as f:
+                f.write('iteration %d, loss %f\n' % (i + 1, loss.data.cpu().numpy()))
+
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
             epoch += 1
+            if (epoch + 1) % 100 == 0:
+                torch.save(model.state_dict(), os.path.join('models', 'epoch%d.dat' % epoch))
+            if (epoch + 1) % 20 == 0:
+                pred = torch.argmax(output, dim = 1)
+                print('Saving images.')
+                for i in range(batch_size):
+                    imsave('images/%d.png' % i, np.concatenate((all_obs[i], draw_from_pred(target[i]), draw_from_pred(pred[i])), axis = 1))
+
     else:
-        model.load_state_dict(torch.load('models/epoch5.dat'))
-        print(model.up1.weight)
-        data = np.load('/home/cxy/semantic_pred/dataset/50.npz')  
-        inputs[0] = torch.from_numpy(data['obs'].transpose(2, 0, 1))
-        preds = []
-        for action in range(6):
-            plt.subplot(2, 3, action + 1)
-            output, _ = model(inputs, action)
-            _, pred = torch.max(output, 1)
-            preds.append(pred)
-            plt.imshow(draw_from_pred(pred))
-        plt.savefig('pred.png', dpi = 300)
+        # model.load_state_dict(torch.load('models/epoch15329.dat'))
+        for i in range(5):
+            action = random.randint(0, 5) if random.random() < 0.5 else naive_driver(info)
+            obs, reward, done, info = env.step(action)
+            obs = (obs.transpose(2, 0, 1) - 112.62289744791671) / 56.1524832523
+            inputs[0] = torch.from_numpy(obs)
+            output = model(inputs)
+            pred = torch.argmax(output, dim = 1)
+            imsave('images/%d.png' % i, draw_from_pred(pred[0]))
+        # preds = []
+        # for action in range(6):
+        #     plt.subplot(2, 3, action + 1)
+        #     output, _ = model(inputs, action)
+        #     _, pred = torch.max(output, 1)
+        #     preds.append(pred)
+        #     plt.imshow(draw_from_pred(pred))
+        # plt.savefig('pred.png', dpi = 300)
+    env.close()
 
 
 '''
