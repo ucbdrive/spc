@@ -1,5 +1,6 @@
 def init_parser(parser):
     parser.add_argument('--train', type = bool, default = True, metavar = 'T', help = 'train mode')
+    parser.add_argument('--use-seg', type = bool, default = False, metavar = 'T', help = 'train mode')
 
     parser.add_argument('--seed', type = float, default = 233, metavar = 'SEED', help = 'seed')
     parser.add_argument('--lr', type = float, default = 0.0001, metavar = 'LR', help = 'learning rate')

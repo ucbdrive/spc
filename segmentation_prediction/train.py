@@ -43,14 +43,17 @@ def train_data(args, inputs, prediction, output_pos, output_angle, targets, targ
     LOSS = np.zeros((args.num_steps + 1, 4))
     weight = 1
 
-    print(target_angle)
     _feature_map = model(inputs[0])
-    _prediction = up(_feature_map)
-    print(_prediction[0, :, 128, 128])
-    prediction[0] = _prediction
-    loss0 = criterion['CE'](_prediction, targets[0])
-    _feature_map = _feature_map.detach()
-    _feature_map.requires_grad = False
+    if args.use_seg:
+        _prediction = up(_feature_map)
+        prediction[0] = _prediction
+        loss0 = criterion['CE'](_prediction, targets[0])
+        _feature_map = _feature_map.detach()
+        _feature_map.requires_grad = False
+    else:
+        loss0 = Variable(torch.tensor(0.0))
+        if torch.cuda.is_available():
+            loss0 = loss0.cuda()
 
     _output_pos, _output_angle = further(_feature_map)
     output_pos[0], output_angle[0] = _output_pos, _output_angle
@@ -64,17 +67,27 @@ def train_data(args, inputs, prediction, output_pos, output_angle, targets, targ
 
     for i in range(1, args.num_steps + 1):
         weight *= args.loss_decay
+
         __feature_map = model(inputs[i])
-        _outputs = up(__feature_map)
-        loss0 = criterion['CE'](_outputs, targets[i])
-        __feature_map = __feature_map.detach()
-        __feature_map.requires_grad = False
+        if args.use_seg:
+            _outputs = up(__feature_map)
+            loss0 = criterion['CE'](_outputs, targets[i])
+            __feature_map = __feature_map.detach()
+            __feature_map.requires_grad = False
+        else:
+            loss0 = Variable(torch.tensor(0.0))
+            if torch.cuda.is_available():
+                loss0 = loss0.cuda()
 
         _feature_map = predictor(_feature_map, actions[i - 1])
-        _prediction = up(_feature_map)
-        print(_prediction[0, :, 128, 128])
-        prediction[i] = _prediction
-        loss1 = criterion['CE'](_prediction, targets[i])
+        if args.use_seg:
+            _prediction = up(_feature_map)
+            prediction[i] = _prediction
+            loss1 = criterion['CE'](_prediction, targets[i])
+        else:
+            loss1 = Variable(torch.tensor(0.0))
+            if torch.cuda.is_available():
+                loss1 = loss1.cuda()
 
         _output_pos, _output_angle = further(__feature_map)
         output_pos[i], output_angle[i] = _output_pos, _output_angle

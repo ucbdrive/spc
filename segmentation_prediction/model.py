@@ -41,7 +41,7 @@ class UP_Samper(nn.Module):
         return y
 
 class PRED(nn.Module):
-    def __init__(self, classes,  num_actions):
+    def __init__(self, classes, num_actions):
         super(PRED, self).__init__()
         self.classes = classes
         self.num_actions = num_actions
@@ -104,7 +104,7 @@ class PRED(nn.Module):
 
         self.up = nn.UpsamplingBilinear2d(scale_factor = 2)
 
-        self.action_encoder7 = nn.Linear(num_actions, 4*64*1*1)
+        self.action_encoder7 = nn.Linear(num_actions, classes*64*1*1)
         self.action_encoder7.weight.data.normal_(0, math.sqrt(2. / (4*1*1)))
         # self.action_encoder7.weight.data[:] += 1 / (64*5*5)
 
@@ -120,7 +120,7 @@ class PRED(nn.Module):
         y4 = self.action_encoder4(one_hot).view(32, 32, 5, 5)
         y5 = self.action_encoder5(one_hot).view(64, 32, 5, 5)
         y6 = self.action_encoder6(one_hot).view(64, 64, 5, 5)
-        y7 = self.action_encoder7(one_hot).view(4, 64, 1, 1)
+        y7 = self.action_encoder7(one_hot).view(self.classes, 64, 1, 1)
 
         result = F.relu(self.bn1(F.conv2d(self.bn0(x), y1, stride = 1, padding = 4, dilation = 2)))
         result = self.bn2(F.conv2d(result, y2, stride = 1, padding = 2))

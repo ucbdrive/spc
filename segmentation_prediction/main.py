@@ -28,6 +28,8 @@ if __name__ == '__main__':
     np.random.seed(args.seed)
     torch.manual_seed(args.seed)
     init_dirs(args)
+    if args.use_seg:
+        args.semantic_classes = 16
     
     model = DRNSeg('drn_d_22', args.semantic_classes)
     up = UP_Samper()
@@ -35,10 +37,10 @@ if __name__ == '__main__':
     further = FURTHER()
     env = torcs_envs(num = 1, isServer = 0, mkey_start = 800, resize = True).get_envs()[0]
 
-    model.load_state_dict(load(os.path.join('pretrained_models', '005', 'model.dat')))
-    up.load_state_dict(load(os.path.join('pretrained_models', '005', 'up.dat')))
-    predictor.load_state_dict(load(os.path.join('pretrained_models', '005', 'predictor.dat')))
-    further.load_state_dict(load(os.path.join('pretrained_models', '005', 'further.dat')))
+    # model.load_state_dict(load(os.path.join('pretrained_models', '006', 'model.dat')))
+    # up.load_state_dict(load(os.path.join('pretrained_models', '006', 'up.dat')))
+    # predictor.load_state_dict(load(os.path.join('pretrained_models', '006', 'predictor.dat')))
+    # further.load_state_dict(load(os.path.join('pretrained_models', '006', 'further.dat')))
 
     # if not args.train or args.load:
     #     model.load_state_dict(torch.load(os.path.join(args.model_dir, 'model_epoch%d.dat' % latest_epoch)))
