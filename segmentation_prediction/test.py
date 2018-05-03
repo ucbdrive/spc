@@ -1,3 +1,7 @@
+import os
+import cv2
+from utils import sample_action, reset_env
+
 def turn_off_grad(model):
     for param in model.parameters():
         param.requires_grad = False
@@ -5,26 +9,23 @@ def turn_off_grad(model):
 
 def test(args, model, up, predictor, further, env):
     turn_off_grad(model)
+    turn_off_grad(up)
     turn_off_grad(predictor)
     turn_off_grad(further)
-    '''
-        inputs = torch.autograd.Variable(torch.ones(1, 9, 480, 640), requires_grad = False)
-        obs = env.reset()
-        obs, reward, done, info = env.step(1)
-        true_obs = np.repeat((obs.transpose(2, 0, 1) - obs_avg) / obs_std, 3, axis = 0)
-        for i in range(300):
-            inputs[:] = torch.from_numpy(true_obs)
-            if torch.cuda.is_available():
-                inputs = inputs.cuda()
-            output, feature_map = model(inputs)
-            pos, angle, speed = further(feature_map)
-            print(pos.data.cpu().numpy() * 7, angle.data.cpu().numpy(), speed.data.cpu().numpy())
-            print(info['trackPos'], info['angle'], info['speed'])
-            print()
-            action = naive_driver({'trackPos': pos.data.cpu().numpy() * 7, 'angle':angle.data.cpu().numpy()})
+    print('Testing model.')
+    v = cv2.VideoWriter('Sample.avi', cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'), 50.0, (256, 256), True)
 
-            obs, reward, done, info = env.step(action)
-            obs = (obs.transpose(2, 0, 1) - obs_avg) / obs_std
-            true_obs = np.concatenate((true_obs[3:], obs), axis = 0)
-    '''
+    obs = reset_env(args, env)
+    done = False
+    cnt = 0
+    while not done:
+        cnt += 1
+        action = sample_action(args, obs, model, predictor, further)
+        obs, reward, done, info = env.step(action)
+        bgr = cv2.cvtColor(obs, cv2.COLOR_BGR2RGB)
+        obs = (obs.transpose(2, 0, 1) - args.obs_avg) / args.obs_std
+        done = done or reward <= -2.5
     env.close()
+    v.release()
+    os.system('ffmpeg -i Sample.avi Sample.mp4 -y')
+    print('Episode length: %d steps.' % cnt)

@@ -41,16 +41,17 @@ class UP_Samper(nn.Module):
         return y
 
 class PRED(nn.Module):
-    def __init__(self, num_actions):
+    def __init__(self, classes,  num_actions):
         super(PRED, self).__init__()
+        self.classes = classes
         self.num_actions = num_actions
 
-        self.bn0 = nn.BatchNorm2d(4)
+        self.bn0 = nn.BatchNorm2d(classes)
         self.bn0.weight.data.fill_(1)
         self.bn0.bias.data.zero_()
 
 
-        self.action_encoder1 = nn.Linear(num_actions, 16*4*5*5)
+        self.action_encoder1 = nn.Linear(num_actions, 16*classes*5*5)
         self.action_encoder1.weight.data.normal_(0, math.sqrt(2. / (16*5*5)))
         # self.action_encoder1.weight.data[:] += 1 / (4*5*5)
 
@@ -101,6 +102,8 @@ class PRED(nn.Module):
         self.bn6.weight.data.fill_(1)
         self.bn6.bias.data.zero_()
 
+        self.up = nn.UpsamplingBilinear2d(scale_factor = 2)
+
         self.action_encoder7 = nn.Linear(num_actions, 4*64*1*1)
         self.action_encoder7.weight.data.normal_(0, math.sqrt(2. / (4*1*1)))
         # self.action_encoder7.weight.data[:] += 1 / (64*5*5)
@@ -111,7 +114,7 @@ class PRED(nn.Module):
         one_hot = Variable(one_hot, requires_grad = False)
         if torch.cuda.is_available():
             one_hot = one_hot.cuda()
-        y1 = self.action_encoder1(one_hot).view(16, 4, 5, 5)
+        y1 = self.action_encoder1(one_hot).view(16, self.classes, 5, 5)
         y2 = self.action_encoder2(one_hot).view(16, 16, 5, 5)
         y3 = self.action_encoder3(one_hot).view(32, 16, 5, 5)
         y4 = self.action_encoder4(one_hot).view(32, 32, 5, 5)
@@ -121,11 +124,12 @@ class PRED(nn.Module):
 
         result = F.relu(self.bn1(F.conv2d(self.bn0(x), y1, stride = 1, padding = 4, dilation = 2)))
         result = self.bn2(F.conv2d(result, y2, stride = 1, padding = 2))
+        result = F.avg_pool2d(result, kernel_size = 2, stride = 2)
         result = F.relu(self.bn3(F.conv2d(result, y3, stride = 1, padding = 4, dilation = 2)))
         result = self.bn4(F.conv2d(result, y4, stride = 1, padding = 2))
         result = F.relu(self.bn5(F.conv2d(result, y5, stride = 1, padding = 4, dilation = 2)))
         result = self.bn6(F.conv2d(result, y6, stride = 1, padding = 2))
-        result = F.conv2d(result, y7, stride = 1, padding = 0)
+        result = self.up(F.conv2d(result, y7, stride = 1, padding = 0))
         return result
 
 
@@ -179,9 +183,9 @@ class FURTHER(nn.Module):
         # self.fc5_3.weight.data.normal_(0, math.sqrt(2. / 1))
 
     def forward(self, x):
-        x = F.relu(F.max_pool2d(self.conv1(x), kernel_size = 2, stride = 2))
-        x = F.relu(F.max_pool2d(self.conv2(x), kernel_size = 2, stride = 2))
-        x = F.relu(F.max_pool2d(self.conv3(x), kernel_size = 2, stride = 2)) # 1x64x4x4
+        x = F.tanh(F.max_pool2d(self.conv1(x), kernel_size = 2, stride = 2))
+        x = F.tanh(F.max_pool2d(self.conv2(x), kernel_size = 2, stride = 2))
+        x = F.tanh(F.max_pool2d(self.conv3(x), kernel_size = 2, stride = 2)) # 1x64x4x4
         x = x.view(x.size(0), -1) # 1024
         x = F.relu(self.fc1(x))
         x = F.relu(self.fc2(x))

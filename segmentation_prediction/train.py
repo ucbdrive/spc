@@ -20,7 +20,7 @@ def sample_one_step(args, true_obs, inputs, targets, target_pos, target_angle, a
 
     inputs[args.step, args.batch_id] = torch.from_numpy(true_obs)
     targets[args.step, args.batch_id] = torch.from_numpy(env.get_segmentation().astype(np.uint8))
-    target_pos[args.step, args.batch_id] = torch.clamp(torch.tensor(info['trackPos'] / args.pos_rescale), -1, 1)
+    target_pos[args.step, args.batch_id] = -torch.clamp(torch.tensor(info['trackPos'] / args.pos_rescale), -1, 1)
     target_angle[args.step, args.batch_id] = torch.clamp(torch.tensor(info['angle'] / args.angle_rescale), -1, 1)
     if args.step > 0:
         actions[args.step - 1, args.batch_id] = action
@@ -55,8 +55,8 @@ def train_data(args, inputs, prediction, output_pos, output_angle, targets, targ
     _output_pos, _output_angle = further(_feature_map)
     output_pos[0], output_angle[0] = _output_pos, _output_angle
 
-    loss2 = criterion['L2'](_output_pos, target_pos[0])
-    loss3 = criterion['L2'](_output_angle, target_angle[0])
+    loss2 = criterion['L2'](_output_pos, target_pos[0]) * 10
+    loss3 = criterion['L2'](_output_angle, target_angle[0]) * 10
     loss = loss0 + loss2 + loss3
     LOSS[0, 0] = from_variable_to_numpy(loss0)
     LOSS[0, 2] = from_variable_to_numpy(loss2)
@@ -79,8 +79,8 @@ def train_data(args, inputs, prediction, output_pos, output_angle, targets, targ
         _output_pos, _output_angle = further(__feature_map)
         output_pos[i], output_angle[i] = _output_pos, _output_angle
 
-        loss2 = criterion['L2'](_output_pos, target_pos[i])
-        loss3 = criterion['L2'](_output_angle, target_angle[i])
+        loss2 = criterion['L2'](_output_pos, target_pos[i]) * 10
+        loss3 = criterion['L2'](_output_angle, target_angle[i]) * 10
         loss += loss0 + weight * (loss1 + loss2 + loss3)
 
         LOSS[i, 0] = from_variable_to_numpy(loss0)

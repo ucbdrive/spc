@@ -1,10 +1,11 @@
 def init_parser(parser):
+    parser.add_argument('--train', type = bool, default = True, metavar = 'T', help = 'train mode')
+
     parser.add_argument('--seed', type = float, default = 233, metavar = 'SEED', help = 'seed')
     parser.add_argument('--lr', type = float, default = 0.0001, metavar = 'LR', help = 'learning rate')
     parser.add_argument('--log', type = str, default = 'pred_log.txt', metavar = 'LOG', help = 'log file')
     parser.add_argument('--model-dir', type = str, default = 'pred_models', metavar = 'MD', help = 'model saving path')
     parser.add_argument('--visualize-dir', type = str, default = 'pred_images', metavar = 'VD', help = 'visualizing path')
-    parser.add_argument('--train', type = bool, default = True, metavar = 'T', help = 'train mode')
     parser.add_argument('--load', type = bool, default = False, metavar = 'L', help = 'load model')
     parser.add_argument('--epoch', type = int, default = 0, metavar = 'E', help = 'initial epoch')
     parser.add_argument('--step', type = int, default = 0, metavar = 'S', help = 'initial step, to simplify training code')
@@ -13,6 +14,7 @@ def init_parser(parser):
     parser.add_argument('--num-actions', type = int, default = 3, metavar = 'NA', help = 'number of actions')
     parser.add_argument('--num-steps', type = int, default = 12, metavar = 'NS', help = 'number of prediction steps')
     parser.add_argument('--batch-size', type = int, default = 16, metavar = 'BS', help = 'batch size')
+    parser.add_argument('--action-batch-size', type = int, default = 30, metavar = 'BS', help = 'action batch size')
     parser.add_argument('--frame-len', type = int, default = 3, metavar = 'FL', help = 'frame length')
     parser.add_argument('--obs-avg', type = float, default = 112.62289744791671, metavar = 'OA', help = 'observation mean')
     parser.add_argument('--obs-std', type = float, default = 56.1524832523, metavar = 'OS', help = 'observation std')
@@ -21,5 +23,5 @@ def init_parser(parser):
 
     parser.add_argument('--pos-rescale', type = float, default = 7, metavar = 'PR', help = 'trackPos rescale to [-1, 1]')
     parser.add_argument('--angle-rescale', type = float, default = 0.3, metavar = 'AR', help = 'angle rescale')
-    parser.add_argument('--safe-pos', type = float, default = 3, metavar = 'SP', help = 'safe pos for naive driver')
+    parser.add_argument('--safe-pos', type = float, default = 2, metavar = 'SP', help = 'safe pos for naive driver')
     parser.add_argument('--safe-angle', type = float, default = 0.3, metavar = 'SA', help = 'safe angle for naive driver')
