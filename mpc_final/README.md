@@ -9,3 +9,4 @@ An implementation of flexible semantic prediction learning
     5. Option to predict x,y,z relative movement for flexible control
     6. Option to choose whether to use distance to center of the road as a metric for traveling distance
     7. Option to train and test separately, so that exploration won't affect performance
+    8. Option to choose frame history length
