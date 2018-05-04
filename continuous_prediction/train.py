@@ -60,7 +60,7 @@ def train_data(args, train_data, model, dqn, optimizer): # need updating
     criterion = init_criteria()
     weight, loss = 1, 0
 
-    hx, cx = Variable(torch.zeros(args.batch_size, args.hidden_dim)), Variable(torch.zeros(args.batch_size, args.hidden_dim))
+    
     for step in range(args.num_steps):
         hx, cx, (coll_prob, offroad_prob, dist) = model(inputs[step], actions[step], hx, cx)
         output_coll[step] = coll_prob

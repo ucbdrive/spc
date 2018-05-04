@@ -33,7 +33,7 @@ class hybrid_net(nn.Module):
             self.feature_encoder = nn.Linear(256 * args.frame_len, args.hidden_dim)
             self.predictor = RNN(args)
             self.further = FURTHER_continuous(args)
-            
+
 
     def forward(self, obs, action, hx = None, cx = None):
         if self.args.continuous:
@@ -41,15 +41,45 @@ class hybrid_net(nn.Module):
         else:
             action = one_hot(self.args, action)
 
+        coll_list, off_list, dist_list = []
+        if self.args.use_xyz:
+            xyz_list = []
+
         if self.args.use_seg:
+            feature_map_list, segmentation_list = [], []
             feature_map = self.feature_encoder(obs)
-            segmentation = self.up_sampler(feature_map)
-            prediction = self.predictor(feature_map, action)
+            for i in range(self.args.num_steps):
+                feature_map = self.predictor(feature_map, action[i])
+                segmentation = self.up_sampler(feature_map)
+                output_dict = self.further(feature_map)
+                feature_map_list.append(feature_map)
+                segmentation_list.append(segmentation)
+                coll_list.append(output_dict['collison'])
+                off_list.append(output_dict['offroad'])
+                dist_list.append(output_dict['distance'])
+                if self.args.use_xyz:
+                    xyz_list.append(output_dict['xyz'])
             return feature_map, segmentation, prediction, self.further(feature_map)
         else:
-            feature = self.feature_encoder(self.dla(obs))
-            hx, cx = self.predictor(feature, action, hx, cx)
-            return hx, cx, self.further(hx, action)
+            hx, cx = Variable(torch.zeros(self.args.batch_size, self.args.hidden_dim)), Variable(torch.zeros(self.args.batch_size, self.args.hidden_dim))
+
+            for i in range(self.args.num_steps):
+                feature = self.feature_encoder(self.dla(obs)) if i == 0 else hx
+                hx, cx = self.predictor(feature, action, hx, cx)
+                output_dict = self.further(hx, action)
+                coll_list.append(output_dict['collison'])
+                off_list.append(output_dict['offroad'])
+                dist_list.append(output_dict['distance'])
+                if self.args.use_xyz:
+                    xyz_list.append(output_dict['xyz'])
+
+        output_dict = {'output_coll': torch.stack(coll_list, dim = 0),
+                       'output_off': torch.stack(off_list, dim = 0),
+                       'output_dist': torch.stack(dist_list, dim = 0)}
+        if self.args.use_xyz:
+            output_dict['output_xyz'] = torch.stack(xyz_list, dim = 0)
+
+        return output_dist
 
 if __name__ == '__main__':
     dqn = DQN().cuda()
