@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 from torch.autograd import Variable
 import torch.nn.functional as F
-from utils import from_variable_to_numpy
+from utils import from_variable_to_numpy, one_hot
 
 from models.DRNSeg import DRNSeg
 from models.UP_Samper import UP_Samper
@@ -35,11 +35,11 @@ class hybrid_net(nn.Module):
             self.further = FURTHER_continuous(args)
 
 
-    def forward(self, obs, action, hx = None, cx = None):
+    def forward(self, obs, action):
         if self.args.continuous:
             action = self.action_encoder(action)
         else:
-            action = one_hot(self.args, action)
+            action = torch.stack([one_hot(self.args, action[i]) for i in range(self.args.num_steps)], dim = 0)
 
         coll_list, off_list, dist_list = []
         if self.args.use_xyz:
@@ -59,7 +59,6 @@ class hybrid_net(nn.Module):
                 dist_list.append(output_dict['distance'])
                 if self.args.use_xyz:
                     xyz_list.append(output_dict['xyz'])
-            return feature_map, segmentation, prediction, self.further(feature_map)
         else:
             hx, cx = Variable(torch.zeros(self.args.batch_size, self.args.hidden_dim)), Variable(torch.zeros(self.args.batch_size, self.args.hidden_dim))
 
@@ -76,6 +75,9 @@ class hybrid_net(nn.Module):
         output_dict = {'output_coll': torch.stack(coll_list, dim = 0),
                        'output_off': torch.stack(off_list, dim = 0),
                        'output_dist': torch.stack(dist_list, dim = 0)}
+        if self.args.use_seg:
+            output_dict['output_feature_map'] = torch.stack(feature_map_list, dim = 0)
+            output_dict['output_seg'] = torch.stack(segmentation_list, dim = 0)
         if self.args.use_xyz:
             output_dict['output_xyz'] = torch.stack(xyz_list, dim = 0)
 

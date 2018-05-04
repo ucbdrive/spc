@@ -126,11 +126,11 @@ def init_training_variables(args):
     return data_dict
 
 def init_criteria():
-    NLL = nn.NLLLoss()
-    CE = nn.CrossEntropyLoss()
-    L1 = nn.SmoothL1Loss()
-    L2 = nn.MSELoss()
-    BCE = nn.BCELoss()
+    NLL = nn.NLLLoss(reduce = False)
+    CE = nn.CrossEntropyLoss(reduce = False)
+    L1 = nn.SmoothL1Loss(reduce = False)
+    L2 = nn.MSELoss(reduce = False)
+    BCE = nn.BCELoss(reduce = False)
 
     if torch.cuda.is_available():
         NLL = NLL.cuda()
@@ -180,7 +180,7 @@ def generate_probs(args, all_actions, last_action = 1):
 
     return prob
 
-def sample_action(args, true_obs, model, predictor, further, prev_action = 1):
+def sample_action(args, true_obs, model, prev_action = 1):
     start_time = time.time()
     obs = np.repeat(np.expand_dims(true_obs, axis = 0), args.action_batch_size, axis = 0)
     obs = Variable(torch.from_numpy(obs), requires_grad = False).type(torch.Tensor)
@@ -196,8 +196,8 @@ def sample_action(args, true_obs, model, predictor, further, prev_action = 1):
 
             for ii in range(6):
                 actions = Variable(all_actions[:, ii * args.action_batch_size: (ii + 1) * args.action_batch_size], requires_grad = False)
-                coll_loss, off_loss = get_action_loss(args, model, predictor, further, obs, actions)
-                all_losses[ii * args.action_batch_size: (ii + 1) * args.action_batch_size] = coll_loss + off_loss
+                loss_dict = get_action_loss(args, model, obs, actions, args.action_batch_size) # needs updating
+                all_losses[ii * args.action_batch_size: (ii + 1) * args.action_batch_size] = from_variable_to_numpy(loss_dict['coll_loss']) + from_variable_to_numpy(loss_dict['off_loss']) - 0.1 * from_variable_to_numpy(loss_dict['dist_loss'])
 
             if i < 5:
                 indices = np.argsort(all_losses)[:args.action_batch_size]
@@ -209,33 +209,25 @@ def sample_action(args, true_obs, model, predictor, further, prev_action = 1):
     print('Sampling takes %0.2f seconds, selected action: %d.' % (time.time() - start_time, which_action))
     return which_action
 
-def get_action_loss(args, model, predictor, further, obs, actions):
-    output_coll = Variable(torch.zeros(args.num_steps + 1, args.action_batch_size), requires_grad = False)
-    output_off = Variable(torch.zeros(args.num_steps + 1, args.action_batch_size), requires_grad = False)
-    target_coll = Variable(torch.zeros(args.action_batch_size), requires_grad = False)
-    target_off = Variable(torch.zeros(args.action_batch_size), requires_grad = False)
+def get_action_loss(args, model, obs, actions, batch_size):
+    output = model(obs, actions)
+    target_coll = Variable(torch.zeros(args.num_steps, batch_size), requires_grad = False)
+    target_off = Variable(torch.zeros(args.num_steps, batch_size), requires_grad = False)
+    target_dist = Variable(torch.zeros(args.num_steps, batch_size), requires_grad = False)
+    weight = Variable(args.loss_decay ** torch.arange(args.num_steps), requires_grad = False).view(args.num_steps, 1)
     if torch.cuda.is_available():
-        output_coll = output_coll.cuda()
-        output_off = output_off.cuda()
         target_coll = target_coll.cuda()
         target_off = target_off.cuda()
+        weight = weight.cuda()
 
-    weight = 1
     L2 = nn.MSELoss(reduce = False)
+    BCE = nn.BCELoss(reduce = False)
 
-    feature_map = model(obs)
-    output_coll, output_off = further(feature_map)
-    coll_loss = L2(output_coll, target_coll)
-    off_loss = L2(output_off, target_off)
+    coll_loss = torch.sum(BCE(output['output_coll'], target_coll) * weight)
+    off_loss = torch.sum(BCE(output['output_off'], target_off) * weight)
+    dist_loss = torch.sum(BCE(output['output_dist'], target_dist) * weight)
 
-    for i in range(1, args.num_steps + 1):
-        weight *= args.loss_decay
-        feature_map = predictor(feature_map, actions[i - 1])
-        output_coll, output_off = further(feature_map)
-        coll_loss += L2(output_coll, target_coll)
-        off_loss += L2(output_off, target_off)
-
-    return from_variable_to_numpy(coll_loss), from_variable_to_numpy(off_loss)
+    return {'coll_loss': coll_loss, 'off_loss': off_loss, 'dist_loss': dist_loss}
 
 def load(path):
     state_dict = torch.load(path)
@@ -254,7 +246,7 @@ def sample_dqn_action(args, obs, dqn):
     if np.random.random() < args.exploration_decay ** args.epoch:
         action = np.random.randint(9) 
     else:
-        action = dqn(Variable(obs, requires_grad=False)).data.max(1)[1]
+        action = dqn(Variable(torch.from_numpy(obs), requires_grad = False)).data.max(1)[1]
         if torch.cuda.is_available():
             action = action.cpu()
         action = int(action.numpy())
@@ -266,7 +258,7 @@ def sample_continuous_action(args, true_obs, model):
     else:
         action = sample_cont_action(args, obs, model)
         action = np.clip(action, -1.0, 1.0)
-    dqn_action = sample_dqn_action(args, obs, dqn)
+    dqn_action = sample_dqn_action(args, obs, model.module.dqn.dqn)
 
     return action
 
@@ -275,42 +267,28 @@ def sample_cont_action(args, obs, model):
     obs = np.repeat(np.expand_dims(true_obs, axis = 0), args.action_batch_size, axis = 0)
     obs = Variable(torch.from_numpy(obs), requires_grad = False).type(torch.Tensor)
 
-    with torch.no_grad():
-        all_actions = np.random.rand(args.num_steps, args.action_batch_size, 2) * 2 - 1
-
-        actions = Variable(all_actions, requires_grad = False)
-        coll_loss, off_loss, dist_loss = get_cont_action_loss(args, obs, model, actions)
-        all_losses = coll_loss + off_loss - 0.1 * dist_loss
-
-        idx = np.argmin(all_losses)
-        which_action = from_variable_to_numpy(all_actions)[0, idx]
-
+    this_action = torch.from_numpy(np.random.rand(2 * args.num_steps) * 2 - 1)
+    this_action = Variable(this_action, requires_grad = True).view(args.num_steps, 1, 2)
+    if torch.cuda.is_available():
+        this_action = this_action.cuda()
+    prev_loss = 1000
+    cnt = 0
+    while sign:
+        this_action.zero_grad()
+        loss = get_action_loss(args, model, obs, this_action, 1)
+        loss = loss_dict['coll_loss'] + loss_dict['off_loss'] - 0.1 * loss_dict['dist_loss']
+        loss.backward()
+        this_loss = float(from_variable_to_numpy(loss))
+        if cnt >= 10 and (np.abs(prev_loss - this_loss) <= 0.0005 * prev_loss or this_loss > prev_loss):
+            which_action = from_variable_to_numpy(this_action)[0, 0, :]
+            break
+        cnt += 1 
+        this_action.data -= 0.01 * this_action.grad.data
+        this_action.data.clamp(-1, 1)# = torch.clamp(this_action, -1, 1)
+        prev_loss = this_loss
+    model.zero_grad()
     print('Sampling takes %0.2f seconds, selected action: %d.' % (time.time() - start_time, which_action))
     return which_action
-
-def get_cont_action_loss(args, obs, model, actions):
-    target_coll = Variable(torch.zeros(args.action_batch_size), requires_grad = False)
-    target_off = Variable(torch.zeros(args.action_batch_size), requires_grad = False)
-    target_dist = Variable(torch.zeros(args.action_batch_size), requires_grad = False)
-    if torch.cuda.is_available():
-        target_coll = target_coll.cuda()
-        target_off = target_off.cuda()
-        target_dist = target_dist.cuda()
-
-    weight = 1
-    coll_loss, off_loss, dist_loss = 0
-    L2 = nn.MSELoss(reduce = False)
-    BCE = nn.BCELoss(reduce = False)
-    hx, cx = Variable(torch.zeros(args.batch_size, args.hidden_dim)), Variable(torch.zeros(args.batch_size, args.hidden_dim))
-
-    for i in range(args.num_steps):
-        hx, cx, (coll_prob, offroad_prob, dist) = model(obs, actions[step], hx, cx)
-        coll_loss += BCE(coll_prob, target_coll) * weight
-        off_loss += BCE(offroad_prob, target_off) * weight
-        dist_loss += L2(dist, target_dist) * weight
-        weight *= args.loss_decay
-
-    return from_variable_to_numpy(coll_loss), from_variable_to_numpy(off_loss), from_variable_to_numpy(dist_loss)
 
 def one_hot(args, action):
     one_hot_vector = Variable(torch.zeros(args.batch_size, self.num_actions), requires_grad = False)
