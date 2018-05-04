@@ -40,7 +40,7 @@ def up_sampler(classes, use_torch_up=False):
     if use_torch_up:
         up = nn.UpsamplingBilinear2d(scale_factor=8)
     else:
-        up = nn.ConvTranscolle2d(classes, classes, 16, stride=8, padding=4,
+        up = nn.ConvTranspose2d(classes, classes, 16, stride=8, padding=4,
                                 output_padding=0, groups=classes, bias=False)
         fill_up_weights(up)
     return up
@@ -61,21 +61,22 @@ def reset_env(args, env):
     obs = env.reset()
     for i in range(np.random.randint(300)):
         obs, reward, done, info = env.step(naive_driver(args, env.get_info()))
-    true_obs = (obs.transcolle(2, 0, 1) - args.obs_avg) / args.obs_std
+    true_obs = (obs.transpose(2, 0, 1) - args.obs_avg) / args.obs_std
 
-    # true_obs = np.zeros((3 * args.frame_len, 256, 256))
-    # for i in range(args.frame_len):
-    #     obs, reward, done, info = env.step(np.random.randint(args.num_actions))
-    #     true_obs[i * 3: (i + 1) * 3] = (obs.transcolle(2, 0, 1) - args.obs_avg) / args.obs_std
+    if args.frame_len > 1:
+        true_obs = np.zeros((3 * args.frame_len, 256, 256))
+        for i in range(args.frame_len):
+            obs, reward, done, info = env.step(np.random.rand(2) * 2 - 1 if args.continuous else np.random.randint(args.num_actions))
+            true_obs[i * 3: (i + 1) * 3] = (obs.transpose(2, 0, 1) - args.obs_avg) / args.obs_std
 
-    return true_obs
+    return true_obs, np.array(info['pos'])
 
 def naive_driver(args, info):
-    if info['off'] > args.safe_off or (info['trackPos'] < -args.safe_coll and info['off'] > 0):
-        return 0
-    elif info['off'] < -args.safe_off or (info['trackPos'] > args.safe_coll and info['off'] < 0):
-        return 2
-    return 1 # np.random.randint(args.num_actions)
+    if info['angle'] > args.safe_angle or (info['trackPos'] < -args.safe_pos and info['angle'] > 0):
+        return np.array([1, 0, -1]) if args.continuous else 0
+    elif info['angle'] < -args.safe_angle or (info['trackPos'] > args.safe_pos and info['angle'] < 0):
+        return np.array([1, 0, 1]) if args.continuous else 2
+    return np.array([1, 0, 0]) if args.continuous else 1 # np.random.randint(args.num_actions)
 
 def init_dirs(args):
     if os.path.exists(args.log):
@@ -93,44 +94,36 @@ def clear_visualization_dir(args):
     if os.listdir(args.visualize_dir):
         os.system('rm %s/*' % args.visualize_dir)
 
-def init_variables(args):
-    # inputs = Variable(torch.ones(args.num_steps + 1, args.batch_size, 3, 256, 256), requires_grad = False)
-    # rewards = Variable(torch.ones(args.num_steps + 1, args.batch_size), requires_grad = False)
-    # outputs = Variable(torch.ones(args.num_steps + 1, args.batch_size, 4, 256, 256), requires_grad = False)
-    # prediction = Variable(torch.ones(args.num_steps + 1, args.batch_size, 4, 256, 256), requires_grad = False)
-    # feature_map = Variable(torch.ones(args.num_steps + 1, args.batch_size, 4, 32, 32), requires_grad = False)
-    # output_coll = Variable(torch.zeros(args.num_steps + 1, args.batch_size), requires_grad = False)
-    # output_off = Variable(torch.zeros(args.num_steps + 1, args.batch_size), requires_grad = False)
-    # targets = Variable(torch.ones(args.num_steps + 1, args.batch_size, 256, 256), requires_grad = False).type(torch.LongTensor)
-    # target_coll = Variable(torch.zeros(args.num_steps + 1, args.batch_size), requires_grad = False)
-    # target_off = Variable(torch.zeros(args.num_steps + 1, args.batch_size), requires_grad = False)
-    # actions  = Variable(torch.zeros(args.num_steps, args.batch_size), requires_grad = False).type(torch.LongTensor)
-    inputs = Variable(torch.ones(args.num_steps, args.batch_size, 3, 256, 256), requires_grad = False)
-    rewards = Variable(torch.ones(args.num_steps, args.batch_size), requires_grad = False)
-    output_coll = Variable(torch.zeros(args.num_steps, args.batch_size), requires_grad = False)
-    output_off = Variable(torch.zeros(args.num_steps, args.batch_size), requires_grad = False)
-    output_dist = Variable(torch.zeros(args.num_steps, args.batch_size), requires_grad = False)
-    target_coll = Variable(torch.zeros(args.num_steps, args.batch_size), requires_grad = False)
-    target_off = Variable(torch.zeros(args.num_steps, args.batch_size), requires_grad = False)
-    target_dist = Variable(torch.zeros(args.num_steps, args.batch_size), requires_grad = False)
-    actions  = Variable(torch.zeros(args.num_steps, args.batch_size, 2), requires_grad = False)
-    dqn_actions  = Variable(torch.zeros(args.num_steps, args.batch_size, 1), requires_grad = False).type(torch.LongTensor)
-
+def init_variable(*kwargs):
+    result = Variable(torch.zeros(*kwargs), requires_grad = False)
     if torch.cuda.is_available():
-        inputs = inputs.cuda()
-        rewards = rewards.cuda()
-        # outputs = outputs.cuda()
-        # prediction = prediction.cuda()
-        # feature_map = feature_map.cuda()
-        output_coll = output_coll.cuda()
-        output_off = output_off.cuda()
-        # targets = targets.cuda()
-        target_coll = target_coll.cuda()
-        target_off = target_off.cuda()
-        actions = actions.cuda()
-        dqn_actions = dqn_actions.cuda()
+        result = result.cuda()
+    return result
 
-    return inputs, rewards, output_coll, output_off, output_dist, target_coll, target_off, target_dist, actions, dqn_actions
+def init_training_variables(args):
+    data_dict = dict()
+    data_dict['obs'] = init_variable(args.num_steps, args.batch_size, 3 * args.frame_len, 256, 256)
+
+    if args.continuous:
+        data_dict['action'] = init_variable(args.num_steps, args.batch_size, args.action_dim)
+    else:
+        data_dict['action'] = init_variable(args.num_steps, args.batch_size).type(torch.LongTensor)
+
+    if args.use_dqn:
+        data_dict['dqn_action'] = init_variable(args.num_steps, args.batch_size, 1).type(torch.LongTensor)
+        data_dict['reward'] = init_variable(args.num_steps, args.batch_size)
+
+    if args.use_seg:
+        data_dict['seg'] = init_variable(args.num_steps, args.batch_size, args.semantic_classes, 256, 256)
+
+    data_dict['target_coll'] = init_variable(args.num_steps, args.batch_size)
+    data_dict['target_off'] = init_variable(args.num_steps, args.batch_size)
+    data_dict['target_dist'] = init_variable(args.num_steps, args.batch_size)
+
+    if args.use_xyz:
+        data_dict['target_xyz'] = init_variable(args.num_steps, args.batch_size, 3)
+
+    return data_dict
 
 def init_criteria():
     NLL = nn.NLLLoss()
@@ -267,7 +260,7 @@ def sample_dqn_action(args, obs, dqn):
         action = int(action.numpy())
     return action
 
-def sample_continuous_action(args, obs, model, dqn):
+def sample_continuous_action(args, true_obs, model):
     if np.random.random() < args.exploration_decay ** args.epoch:
         action = np.random.rand(2) * 2 - 1
     else:
@@ -318,3 +311,10 @@ def get_cont_action_loss(args, obs, model, actions):
         weight *= args.loss_decay
 
     return from_variable_to_numpy(coll_loss), from_variable_to_numpy(off_loss), from_variable_to_numpy(dist_loss)
+
+def one_hot(args, action):
+    one_hot_vector = Variable(torch.zeros(args.batch_size, self.num_actions), requires_grad = False)
+    one_hot_vector[torch.arange(args.batch_size).type(torch.LongTensor), action] = 1
+    if torch.cuda.is_available():
+        one_hot_vector = one_hot_vector.cuda()
+    return one_hot_vector

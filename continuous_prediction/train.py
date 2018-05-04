@@ -4,52 +4,60 @@ import torch.nn as nn
 from torch.autograd import Variable
 import torch.nn.functional as F
 import os
-from model import DQN
-from utils import clear_visualization_dir, reset_env, naive_driver, init_variables, init_criteria, draw_from_pred, from_variable_to_numpy, sample_action, sample_continuous_action, convert_state_dict
+from replay_buffer import replay_buffer
+from utils import clear_visualization_dir, reset_env, naive_driver, init_criteria, draw_from_pred, from_variable_to_numpy, sample_action, sample_continuous_action, convert_state_dict
 
 from scipy.misc import imsave
 from scipy.misc.pilutil import imshow
 import matplotlib.pyplot as plt
 
-def sample_one_step(args, true_obs, inputs, rewards, target_coll, target_off, target_dist, actions, dqn_actions, env, model, dqn):
-    # exploration = args.exploration_decay ** args.epoch
-    inputs[args.step, args.batch_id] = torch.from_numpy(true_obs)
+def sample_one_step(args, true_obs, env, model, posxyz):
+    exploration = args.exploration_decay ** args.epoch
+    data = {'obs': true_obs}
 
-    action, dqn_action = sample_continuous_action(args, true_obs, model, dqn) # if np.random.random() > exploration else np.random.rand(3) * 2 - 1# naive_driver(args, env.get_info())
+    if args.continuous:
+        action, dqn_action = sample_continuous_action(args, true_obs, model) # need updating
+        data['dqn_action'] = dqn_action
+    else:
+        action = sample_action(args, true_obs, model) # need updating
+    data['action'] = action
+
     obs, reward, done, info = env.step(action)
     with open('env_log.txt', 'a') as f:
         f.write('reward = %0.4f\n' % reward)
     obs = (obs.transpose(2, 0, 1) - args.obs_avg) / args.obs_std
-    true_obs[:] = obs # np.concatenate((true_obs[args.frame_len:], obs), axis = 0)
+    if args.frame_len > 1:
+        true_obs = np.concatenate((true_obs[3:], obs), axis = 0)
+    else:
+        true_obs = obs
 
-    rewards[args.step, args.batch_id] = reward
-    # targets[args.step, args.batch_id] = torch.from_numpy(env.get_segmentation().astype(np.uint8))
-    target_coll[args.step, args.batch_id] = int(reward <= -2.5 or abs(info['trackPos']) > 7)
-    target_off[args.step, args.batch_id] = int(info['trackPos'] >= 3 or info['trackPos'] <= -1)
-    target_dist[args.step, args.batch_id] = info['speed'] * (np.cos(info['angle']) - np.abs(np.sin(info['angle'])) - np.abs(info['trackPos']) / 9.0)
-    actions[args.step, args.batch_id] = action
-    dqn_actions[args.step, args.batch_id] = dqn_action
-    # if args.step > 0:
-    #     actions[args.step - 1, args.batch_id] = action
+    if args.use_dqn:
+        data['reward'] = reward
+    if args.use_seg:
+        data['target_seg'] = env.get_segmentation().astype(np.uint8)
+
+    data['target_coll'] = int(reward <= -2.5 or abs(info['trackPos']) > 7)
+    data['target_off'] = int(info['trackPos'] >= 3 or info['trackPos'] <= -1)
+    if args.use_center_dist:
+        data['target_dist'] = abs(info['trackPos'])
+    else:
+        data['target_dist'] = info['speed'] * (np.cos(info['angle']) - np.abs(np.sin(info['angle'])) - np.abs(info['trackPos']) / 9.0)
+
+    if args.use_xyz:
+        data['target_xyz'] = np.array(info['pos']) - posxyz
+        posxyz = np.array(info['pos'])
     
     done = done or reward <= -2.5 # or abs(info['trackPos']) > args.coll_rescale or abs(info['off']) > args.off_rescale
     if done:
         with open('env_log.txt', 'a') as f:
             f.write('done')
-        true_obs[:] = reset_env(args, env)
-    return done
+        true_obs, posxyz = reset_env(args, env)
+    data['done'] = int(done)
+    return data, true_obs, posxyz
 
-
-def collect_data(args, true_obs, inputs, rewards, target_coll, target_off, actions, dqn_actions, env, model, dqn):
-    args.step = 0
-    while args.step < args.num_steps: # <=
-        terminal = sample_one_step(args, true_obs, inputs, rewards, target_coll, target_off, target_dist, actions, dqn_actions, env, model, dqn)
-        args.step += 1
-        if terminal and args.step < args.num_steps:
-            args.step = 0
-
-def train_data(args, inputs, rewards, output_coll, output_off, output_dist, target_coll, target_off, target_dist, actions, dqn_actions, model, dqn, target_Q, optimizer, criterion):
+def train_data(args, train_data, model, dqn, optimizer): # need updating
     LOSS = np.zeros((args.num_steps + 1, 3))
+    criterion = init_criteria()
     weight, loss = 1, 0
 
     hx, cx = Variable(torch.zeros(args.batch_size, args.hidden_dim)), Variable(torch.zeros(args.batch_size, args.hidden_dim))
@@ -119,7 +127,7 @@ def train_data(args, inputs, rewards, output_coll, output_off, output_dist, targ
 
     return LOSS, from_variable_to_numpy(loss)
 
-def visualize_data(args, inputs, output_coll, output_off, output_dist, target_coll, target_off, target_dist):
+def visualize_data(args, train_data): # need updating
     clear_visualization_dir(args)
     # batch_id = np.random.randint(args.batch_size)
     # pred = torch.argmax(prediction[:, batch_id, :, :, :], dim = 1)
@@ -138,23 +146,21 @@ def visualize_data(args, inputs, output_coll, output_off, output_dist, target_co
     #     imsave(os.path.join(args.visualize_dir, '%d.png' % i), np.concatenate((all_obs[i], draw_from_pred(targets[i, batch_id]), draw_from_pred(pred[i])), axis = 1))
 
 
-def train(args, model, dqn, env):
+def train(args, model, env):
     model.train()
-    dqn.train()
-    target_Q = DQN()
-    target_Q.load_state_dict(convert_state_dict(dqn.state_dict()))
-    target_Q.eval()
+    model.module.dqn.target_Q.eval()
 
-    inputs, rewards, output_coll, output_off, output_dist, target_coll, target_off, target_dist, actions, dqn_actions = init_variables(args)
-    criterion = init_criteria()
-    optimizer = torch.optim.Adam(list(model.parameters()) + list(dqn.parameters()),
-                                 args.lr, amsgrad = True)
-    true_obs = reset_env(args, env)
+    buffer = replay_buffer(args)
+    optimizer = torch.optim.Adam(list(model.parameters()), args.lr, amsgrad = True)
+    true_obs, posxyz = reset_env(args, env)
 
     while True:
-        for args.batch_id in range(args.batch_size):
-            collect_data(args, true_obs, inputs, rewards, target_coll, target_off, target_dist, actions, dqn_actions, env, model, dqn)
-        LOSS, loss = train_data(args, inputs, rewards, output_coll, output_off, output_dist, target_coll, target_off, target_dist, actions, dqn_actions, model, dqn, target_Q, optimizer, criterion)
+        for i in range(50): # args.collect_steps
+            data, true_obs, posxyz = sample_one_step(args, true_obs, env, model, posxyz)
+            buffer.store(data)
+        train_data = buffer.sample()
+        return
+        LOSS, loss = train_data(args, train_data, model, optimizer)
         args.epoch += 1
 
         print(LOSS)
@@ -164,11 +170,10 @@ def train(args, model, dqn, env):
 
         if args.epoch % 10 == 0:
             print('Visualizing data.')
-            visualize_data(args, inputs, output_coll, output_off, output_dist, target_coll, target_off, target_dist)
+            visualize_data(args, train_data)
         
         if args.epoch % 20 == 0:
             target_Q.load_state_dict(convert_state_dict(dqn.state_dict()))
             torch.save(model.state_dict(), os.path.join(args.model_dir, 'model_epoch%d.dat' % args.epoch))
-            torch.save(dqn.state_dict(), os.path.join(args.model_dir, 'dqn_epoch%d.dat' % args.epoch))
     #     break
     # env.close()
