@@ -102,7 +102,7 @@ def init_variable(*kwargs):
 
 def init_training_variables(args):
     data_dict = dict()
-    data_dict['obs'] = init_variable(args.num_steps, args.batch_size, 3 * args.frame_len, 256, 256)
+    data_dict['obs'] = init_variable(args.batch_size, 3 * args.frame_len, 256, 256)
 
     if args.continuous:
         data_dict['action'] = init_variable(args.num_steps, args.batch_size, args.action_dim)
@@ -252,13 +252,12 @@ def sample_dqn_action(args, obs, dqn):
         action = int(action.numpy())
     return action
 
-def sample_continuous_action(args, true_obs, model):
+def sample_continuous_action(args, obs, model):
     if np.random.random() < args.exploration_decay ** args.epoch:
         action = np.random.rand(2) * 2 - 1
     else:
         action = sample_cont_action(args, obs, model)
         action = np.clip(action, -1.0, 1.0)
-    dqn_action = sample_dqn_action(args, obs, model.module.dqn.dqn)
 
     return action
 

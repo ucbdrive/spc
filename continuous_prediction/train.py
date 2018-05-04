@@ -5,7 +5,7 @@ from torch.autograd import Variable
 import torch.nn.functional as F
 import os
 from replay_buffer import replay_buffer
-from utils import clear_visualization_dir, reset_env, naive_driver, init_criteria, draw_from_pred, from_variable_to_numpy, sample_action, sample_continuous_action, convert_state_dict
+from utils import clear_visualization_dir, reset_env, naive_driver, init_criteria, draw_from_pred, from_variable_to_numpy, sample_action, sample_continuous_action, sample_dqn_action, convert_state_dict
 
 from scipy.misc import imsave
 from scipy.misc.pilutil import imshow
@@ -16,8 +16,12 @@ def sample_one_step(args, true_obs, env, model, posxyz):
     data = {'obs': true_obs}
 
     if args.continuous:
-        action, dqn_action = sample_continuous_action(args, true_obs, model)
-        data['dqn_action'] = dqn_action
+        action = sample_continuous_action(args, true_obs, model)
+        if args.use_dqn:
+            dqn_action = sample_dqn_action(args, true_obs, model.module.dqn.dqn)
+            data['dqn_action'] = dqn_action
+            if action[1] > dqn_action * 0.1:
+                action[1] = 0
     else:
         action = sample_action(args, true_obs, model)
     data['action'] = action
@@ -56,7 +60,7 @@ def sample_one_step(args, true_obs, env, model, posxyz):
     return data, true_obs, posxyz
 
 def train_model(args, train_data, model, optimizer): # need updating
-    output = model(obs, actions)
+    output = model(train_data['obs'], train_data['action'])
     weight = Variable(args.loss_decay ** torch.arange(args.num_steps), requires_grad = False).view(args.num_steps, 1)
 
     criterion = init_criteria()

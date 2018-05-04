@@ -49,7 +49,10 @@ class replay_buffer(object):
         train_data = init_training_variables(self.args)
         indices = [self.sample_one_index() for i in range(self.args.batch_size)]
         for key in self.data_dict.keys():
-            if key != 'done':
+            if key == 'obs':
+                for i in range(self.args.batch_size):
+                    train_data[key][i] = torch.from_numpy(self.data_dict[key][indices[i]])
+            elif key != 'done':
                 for i in range(self.args.batch_size):
                     train_data[key][:, i] = torch.from_numpy(self.data_dict[key][indices[i]: indices[i] + self.args.num_steps])
         return train_data

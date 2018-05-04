@@ -41,7 +41,7 @@ class hybrid_net(nn.Module):
         else:
             action = torch.stack([one_hot(self.args, action[i]) for i in range(self.args.num_steps)], dim = 0)
 
-        coll_list, off_list, dist_list = []
+        coll_list, off_list, dist_list = [], [], []
         if self.args.use_xyz:
             xyz_list = []
 
@@ -62,8 +62,9 @@ class hybrid_net(nn.Module):
         else:
             hx, cx = Variable(torch.zeros(self.args.batch_size, self.args.hidden_dim)), Variable(torch.zeros(self.args.batch_size, self.args.hidden_dim))
 
+            obs_feature = torch.stack([self.dla(obs[i*3:i*3+3]) for i in range(self.args.frame_len)], dim = 1)
             for i in range(self.args.num_steps):
-                feature = self.feature_encoder(self.dla(obs)) if i == 0 else hx
+                feature = self.feature_encoder(obs_feature) if i == 0 else hx
                 hx, cx = self.predictor(feature, action, hx, cx)
                 output_dict = self.further(hx, action)
                 coll_list.append(output_dict['collison'])
