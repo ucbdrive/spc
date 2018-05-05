@@ -180,6 +180,7 @@ def train_policy(args,
         obs_var = Variable(torch.from_numpy(this_obs_np).unsqueeze(0)).float().cuda()
         rand_num = random.random()
         if rand_num <= 1-exploration.value(tt):
+            ## todo: finish sample continuous action function
             action = sample_cont_action(net, obs_var, prev_action=prev_act, num_time=pred_step)
         else:
             action = np.random.rand(2)*2-1
@@ -221,6 +222,8 @@ def train_policy(args,
         if tt % args.learning_freq == 0 and tt > args.learning_starts and mpc_buffer.can_sample(batch_size):
             for ep in range(10):
                 optimizer.zero_grad()
+                
+                # TODO : FINISH TRAIN MPC MODEL FUNCTION
                 loss = train_model(train_net, mpc_buffer, batch_size, epoch, avg_img_t, std_img_t, pred_step)
                 loss.backward()
                 optimizer.step()
