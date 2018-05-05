@@ -14,11 +14,6 @@ from model import *
 def sample_action(net, img):
     return action
 
-def train_model(net, replay_buffer, batch_size):
-
-    loss = None
-    return loss
-
 def train_dqn(dqn_net, replay_buffer, batch_size):
 
     loss = None
@@ -79,7 +74,7 @@ def train_model_imitation(train_net, mpc_buffer, batch_size, epoch, avg_img_t, s
     action_loss = torch.sqrt(nn.MSELoss()(actions, act_batch))
     return action_loss 
     
-def train_model(train_net, mpc_buffer, batch_size, epoch, avg_img_t, std_img_t, pred_step=15):
+def train_model(train_net, mpc_buffer, batch_size, epoch, avg_img_t, std_img_t, pred_step=15, use_xyz = False, use_seg = True):
     if epoch % 20 == 0:
         x, idxes = mpc_buffer.sample(batch_size, sample_early = True)
     else:
@@ -93,21 +88,34 @@ def train_model(train_net, mpc_buffer, batch_size, epoch, avg_img_t, std_img_t, 
     dist_batch = Variable(x[4])
     img_batch = Variable(((x[5].float()-avg_img_t)/(std_img_t+0.0001)), requires_grad=False)
     nximg_batch = Variable(((x[6].float()-avg_img_t)/(std_img_t+0.0001)), requires_grad=False)
+    if use_xyz:
+        xyz_batch = Variable(x[8], requires_grad=False)
+    if use_seg:
+        seg_batch = Variable(x[9], requires_grad=False).long()
+
     with torch.no_grad():
         nximg_enc = train_net(nximg_batch, get_feature=True)
         nximg_enc = nximg_enc.detach()
-    pred_coll, pred_enc, pred_off, pred_dist,_,_ = train_net(img_batch, act_batch, int(act_batch.size()[1]))
+
+    pred_coll, pred_enc, pred_off, pred_dist, xyz_out, seg_out, _, _ = train_net(img_batch, act_batch, int(act_batch.size()[1]))
     coll_ls = Focal_Loss(pred_coll.view(-1,2), (torch.max(coll_batch.view(-1,2),-1)[1]).view(-1), reduce=True)
     offroad_ls = Focal_Loss(pred_off.view(-1,2), (torch.max(offroad_batch.view(-1,2),-1)[1]).view(-1), reduce=True)
     dist_ls = torch.sqrt(nn.MSELoss()(pred_dist.view(-1,pred_step), dist_batch[:,1:].view(-1,pred_step)))
     #print('prediction', pred_dist[0,:].data.cpu().numpy(), 'gr', dist_batch[0,:].data.cpu().numpy())
     pred_ls = nn.L1Loss()(pred_enc, nximg_enc).sum()
     loss = pred_ls + coll_ls + offroad_ls + 10*dist_ls
+    if use_xyz:
+        xyz_loss = nn.MSELoss()(xyz_out, xyz_batch)
+        loss += xyz_loss
+    if use_seg:
+        seg_loss = sum([nn.CrossEntropyLoss()(seg_out[:, i], seg_batch[:, i]) for i in range(pred_step)])
+        loss += seg_loss
+
     coll_acc, off_acc, total_dist_ls = log_info(pred_coll, coll_batch, pred_off, offroad_batch, \
         float(coll_ls.data.cpu().numpy()), float(offroad_ls.data.cpu().numpy()),\
         float(pred_ls.data.cpu().numpy()), float(dist_ls.data.cpu().numpy()), \
         float(loss.data.cpu().numpy()), epoch, 1)
-    return loss, coll_acc, off_acc, total_dist_ls
+    return loss
  
 class DoneCondition:
     def __init__(self, size):
@@ -472,3 +480,49 @@ class PredData(Dataset):
             return np.stack(act_list), np.stack(coll_list), np.stack(speed_list),np.stack(offroad_list), np.stack(dist_list), img_final, nximg_final, np.stack(pos_list).reshape((-1,19)), np.stack(posxyz_list)
         else:
             return np.stack(act_list),np.stack(coll_list),np.stack(speed_list),np.stack(offroad_list),np.stack(dist_list),img_final,nximg_final,np.stack(pos_list).reshape((-1,1)), np.stack(posxyz_list)
+
+def sample_cont_action(net, imgs, prev_action=None, num_time=15):
+    imgs = imgs.contiguous()
+    batch_size, c, w, h = int(imgs.size()[0]), int(imgs.size()[-3]), int(imgs.size()[-2]), int(imgs.size()[-1])
+    imgs = imgs.view(1, 1, c, w, h)
+    prev_action = prev_action.reshape((1, 1, 2))
+    prev_action = np.repeat(prev_action, num_time, axis=1) 
+    this_action = torch.from_numpy(prev_action).float()
+    this_action = Variable(this_action.cuda(), requires_grad=True)
+    this_action.data.clamp(-1,1)
+    prev_loss = 1000
+    sign = True
+    cnt = 0
+    while sign:
+        net.zero_grad()
+        _, _, _, _, _, _, loss = get_action_loss(net, imgs, this_action, num_time, None, None)
+        loss.backward()
+        this_loss = float(loss.data.cpu().numpy())
+        if cnt >= 10 and (np.abs(prev_loss-this_loss)/prev_loss <= 0.0005 or this_loss > prev_loss):
+            sign = False
+            return this_action.data.cpu().numpy()[0,0,:].reshape(-1)
+        cnt += 1 
+        this_action.data -= 0.01 * this_action.grad.data
+        this_action.data.clamp(-1,1)# = torch.clamp(this_action, -1, 1)
+        prev_loss = this_loss
+    return this_action.data.cpu().numpy()[0,0,:].reshape(-1) 
+
+def get_action_loss(net, imgs, actions, num_time = 3, hidden = None, cell = None, gpu=0):
+    batch_size = int(imgs.size()[0])
+    target_coll_np = np.zeros((num_time, 2))
+    target_coll_np[:, 0] = 1.0
+    target_coll = Variable(torch.from_numpy(target_coll_np).float()).cuda()
+    target_off = Variable(torch.from_numpy(target_coll_np).float()).cuda()
+    weight = []
+    for i in range(num_time):
+        weight.append(0.97**i)
+    weight = Variable(torch.from_numpy(np.array(weight).reshape((1, num_time, 1))).float().cuda()).repeat(batch_size, 1, 1)
+    outs = net(imgs, actions, num_time=num_time, hidden=hidden, cell=cell)
+    coll_ls = nn.CrossEntropyLoss(reduce=False)(outs[0].view(-1,2), torch.max(target_coll.view(-1,2),-1)[1])
+    off_ls = nn.CrossEntropyLoss(reduce=False)(outs[2].view(-1,2), torch.max(target_off.view(-1,2),-1)[1])
+    coll_ls = (coll_ls.view(-1,num_time,1)*weight).view(-1,num_time).sum(-1)
+    off_ls = (off_ls.view(-1,num_time,1)*weight).view(-1,num_time).sum(-1)
+    dist_ls = (outs[3].view(-1,num_time,1)*weight).view(-1,num_time).sum(-1)
+    #loss = off_ls + coll_ls - 0.1 * dist_ls
+    loss = -1*dist_ls
+    return coll_ls.data.cpu().numpy().reshape((-1)), off_ls.data.cpu().numpy().reshape((-1)), dist_ls.data.cpu().numpy().reshape((-1)), outs[0][:,:,0].data.cpu().numpy(), outs[2][:,:,0].data.cpu().numpy(), outs[3][:,:,0].data.cpu().numpy(), loss        

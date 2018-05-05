@@ -30,7 +30,7 @@ class IMGBuffer(object):
         return avg, std, avg_t, std_t
     
 class MPCBuffer(object):
-    def __init__(self, size, frame_history_len, pred_step, num_actions, continuous=False, use_seg = True):
+    def __init__(self, size, frame_history_len, pred_step, num_actions, continuous=False, use_xyz = False, use_seg = True):
         self.size = size
         self.frame_history_len = frame_history_len
         self.next_idx      = 0
@@ -38,6 +38,7 @@ class MPCBuffer(object):
         self.pred_step = pred_step # number of prediction steps
         self.num_actions = num_actions
         self.use_seg = use_seg
+        self.use_xyz = use_xyz
 
         self.obs      = None
         self.action   = None
@@ -47,6 +48,7 @@ class MPCBuffer(object):
         self.speed    = None
         self.angle    = None
         self.pos      = None
+        self.xyz      = None
         self.seg      = None
         self.ret      = 0
         self.loss     = np.ones(size)*1000
@@ -86,11 +88,16 @@ class MPCBuffer(object):
         angle_batch = np.concatenate([np.concatenate([self.angle[idx+ii,:][np.newaxis,:] for ii in range(self.pred_step+1)],0)[np.newaxis,:] for idx in idxes], 0)
         dist_batch = sp_batch*(np.cos(angle_batch)-np.abs(np.sin(angle_batch))-((np.abs(pos_batch))/7.0)**1.0)-10*np.exp(np.abs(angle_batch)) 
         # dist_batch = sp_batch*(-np.exp(np.abs(angle_batch))-np.abs(pos_batch-3)/9.0)
+        if self.use_xyz:
+            xyz_batch = np.concatenate([np.concatenate([self.xyz[idx+ii,:][np.newaxis,:] for ii in range(self.pred_step)],0)[np.newaxis,:] for idx in idxes], 0)
+        else:
+            xyz_batch = None
+
         if self.use_seg:
-            seg_batch = np.concatenate([np.concatenate([self.seg[idx+ii,:][np.newaxis,:] for ii in range(self.pred_step+1)],0)[np.newaxis,:] for idx in idxes], 0)
+            seg_batch = np.concatenate([np.concatenate([self.seg[idx+ii,:][np.newaxis,:] for ii in range(self.pred_step)],0)[np.newaxis,:] for idx in idxes], 0)
         else:
             seg_batch = None
-        return act_batch, coll_batch,sp_batch,off_batch,dist_batch,obs_batch, nx_obs_batch, pos_batch, seg_batch
+        return act_batch, coll_batch, sp_batch, off_batch, dist_batch, obs_batch, nx_obs_batch, pos_batch, xyz_batch, seg_batch
 
     def sample(self, batch_size, sample_early=False):
         assert self.can_sample(batch_size)
@@ -141,6 +148,8 @@ class MPCBuffer(object):
 
         if self.obs is None:
             self.obs      = np.empty([self.size] + list(frame.shape), dtype=np.uint8)
+            if self.use_xyz:
+                self.xyz  = np.empty([self.size, 3], dtype=np.uint8)
             if self.use_seg:
                 self.seg  = np.empty([self.size] + list(frame.shape[1:]), dtype=np.uint8)
             self.action   = np.zeros([self.size] + [self.num_actions],dtype=np.int32)
@@ -150,6 +159,8 @@ class MPCBuffer(object):
             self.speed    = np.empty([self.size, 1],    dtype=np.float32)
             self.angle    = np.empty([self.size, 1],    dtype=np.float32)
             self.pos      = np.empty([self.size, 1],    dtype=np.float32)
+
+            self.pos      = np.empty([self.size, 1],    dtype=np.float32)
         self.obs[self.next_idx] = frame
 
         ret = self.next_idx
@@ -158,11 +169,13 @@ class MPCBuffer(object):
         self.ret = ret
         return ret
 
-    def store_effect(self, idx, action, done, coll, off, speed, angle, pos, seg):
+    def store_effect(self, idx, action, done, coll, off, speed, angle, pos, xyz, seg):
         if self.continuous:
             self.action[idx, :] = action
         else:
             self.action[idx, int(action)] = 1
+        if self.use_xyz:
+            self.xyz[idx] = xyz
         if self.use_seg:
             self.seg[idx] = seg
         self.done[idx]   = int(done)

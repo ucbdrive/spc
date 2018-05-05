@@ -33,7 +33,7 @@ def train_policy(args,
  
     ''' load old model '''
     optimizer = optim.Adam(train_net.parameters(), lr = args.lr, amsgrad = True)
-    mpc_buffer = MPCBuffer(buffer_size, frame_history_len, pred_step, num_total_act, continuous=True)
+    mpc_buffer = MPCBuffer(buffer_size, frame_history_len, pred_step, num_total_act, continuous=True, use_xyz = use_xyz, use_seg = use_seg)
     img_buffer = IMGBuffer(1000)
     obs_buffer = ObsBuffer(frame_history_len)
     train_net, epoch, optimizer = load_model(args.save_path, train_net, data_parallel=True, optimizer=optimizer, resume=args.resume)
@@ -75,13 +75,14 @@ def train_policy(args,
         ret = mpc_buffer.store_frame(obs)
         this_obs_np = obs_buffer.store_frame(obs, avg_img, std_img)
         obs_var = Variable(torch.from_numpy(this_obs_np).unsqueeze(0)).float().cuda()
-        rand_num = random.random()
-        if rand_num <= 1-exploration.value(tt):
+
+        if random.random() <= 1 - exploration.value(tt):
             ## todo: finish sample continuous action function
             action = sample_cont_action(net, obs_var, prev_action=prev_act, num_time=pred_step)
+            action = np.clip(action, -1, 1)
         else:
-            action = np.random.rand(2)*2-1
-        action = np.clip(action, -1, 1)
+            action = np.random.rand(num_total_act) * 2 - 1
+
         if use_dqn:
             if abs(action[1]) <= dqn_action * 0.1:
                 action[1] = 0
@@ -90,9 +91,12 @@ def train_policy(args,
         speed_np, pos_np, posxyz_np = get_info_np(info, use_pos_class = False)
         offroad_flag, coll_flag = info['off_flag'], info['coll_flag']
         speed_list, pos_list = get_info_ls(prev_info)
-        mpc_buffer.store_effect(ret, action, done, coll_flag, offroad_flag, speed_list[0], speed_list[1], pos_list[0])
+        xyz = np.array(info['pos']) if use_xyz else None
+        seg = env.env.get_segmentation() if use_seg else None
+        mpc_buffer.store_effect(ret, action, done, coll_flag, offroad_flag, speed_list[0], speed_list[1], pos_list[0], xyz, seg)
         rewards_with += reward['with_pos']
         rewards_without += reward['without_pos']
+
         if tt % 100 == 0:
             avg_img, std_img, avg_img_t, std_img_t = img_buffer.get_avg_std()
 
@@ -109,8 +113,11 @@ def train_policy(args,
                 "{0:.3f}".format(np.mean(epi_rewards_with[-100:])), \
                 ' std is ', "{0:.15f}".format(np.std(epi_rewards_with[-100:])))
             with open(args.save_path+'/log_train_torcs.txt', 'a') as fi:
-                fi.write('step '+str(tt)+' reward_with '+str(np.mean(epi_rewards_with[-10:]))+' std '+str(np.std(epi_rewards_with[-10:]))+\
-                        ' reward_without '+str(np.mean(epi_rewards_without[-10:]))+' std '+str(np.std(epi_rewards_without)[-10:]))+'\n')
+                fi.write('step ' + str(tt))
+                fi.write(' reward_with ' + str(np.mean(epi_rewards_with[-10:])))
+                fi.write(' std ' + str(np.std(epi_rewards_with[-10:])))
+                fi.write(' reward_without ' + str(np.mean(epi_rewards_without[-10:])))
+                fi.write(' std ' + str(np.std(epi_rewards_without[-10:])) + '\n')
         
         prev_info = copy.deepcopy(info) 
         if use_dqn:
@@ -121,7 +128,8 @@ def train_policy(args,
                 optimizer.zero_grad()
                 
                 # TODO : FINISH TRAIN MPC MODEL FUNCTION
-                loss = train_model(train_net, mpc_buffer, batch_size, epoch, avg_img_t, std_img_t, pred_step)
+                loss = train_model(train_net, mpc_buffer, batch_size, epoch, avg_img_t, std_img_t, pred_step, use_xyz, use_seg)
+                print('loss = %0.4f' % loss.data.cpu().numpy())
                 loss.backward()
                 optimizer.step()
                 net.load_state_dict(train_net.module.state_dict())

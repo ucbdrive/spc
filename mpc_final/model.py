@@ -253,7 +253,7 @@ class ConvLSTMMulti(nn.Module):
         dist_list = [dist]
         xyz_list = [xyz]
         seg_list = [seg_pred]
-        for i in range(1, num_step):
+        for i in range(1, num_time):
             coll, pred, offroad, dist, xyz, seg_pred, hidden, cell = self.conv_lstm(pred, actions[:,i,:].squeeze(1), with_encode=True, hidden=hidden, cell=cell)
             coll_list.append(coll)
             pred_list.append(pred)
