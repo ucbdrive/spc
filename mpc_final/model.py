@@ -158,13 +158,13 @@ class ConvLSTMNet(nn.Module):
     def forward(self, x, action, with_encode=False, hidden=None, cell=None):
         if with_encode == False:
             x = self.get_feature(x)
-        if self.use_seg:
-            x = F.tanh(F.max_pool2d(self.feature_map_conv1(x), kernel_size = 2, stride = 2))
-            x = F.tanh(F.max_pool2d(self.feature_map_conv2(x), kernel_size = 2, stride = 2))
-            x = F.tanh(F.max_pool2d(self.feature_map_conv3(x), kernel_size = 2, stride = 2)) # 1x64x4x4
-            x = x.view(x.size(0), -1) # 1024
-            x = F.relu(self.feature_map_fc1(x))
-            x = F.relu(self.feature_map_fc2(x))
+            if self.use_seg:
+                x = F.tanh(F.max_pool2d(self.feature_map_conv1(x), kernel_size = 2, stride = 2))
+                x = F.tanh(F.max_pool2d(self.feature_map_conv2(x), kernel_size = 2, stride = 2))
+                x = F.tanh(F.max_pool2d(self.feature_map_conv3(x), kernel_size = 2, stride = 2)) # 1x64x4x4
+                x = x.view(x.size(0), -1) # 1024
+                x = F.relu(self.feature_map_fc1(x))
+                x = F.relu(self.feature_map_fc2(x))
         if hidden is None or cell is None:
             hidden, cell = x, x
         action_enc = F.relu(self.action_encode(action))
