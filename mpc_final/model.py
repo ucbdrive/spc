@@ -6,6 +6,7 @@ import torch.nn.functional as F
 import drn
 import dla
 import math
+import pdb
 
 class ConvLSTMCell(nn.Module):
     def __init__(self, input_dim, hidden_dim, bias):
@@ -47,7 +48,7 @@ class ConvLSTMCell(nn.Module):
 
 class DRNSeg(nn.Module):
     ''' Network For Feature Extraction for Segmentation Prediction '''
-    def __init__(self, model_name, num_classes, pretrained=False):
+    def __init__(self, model_name, num_classes=4, pretrained=False):
         super(DRNSeg, self).__init__()
         model = drn.__dict__.get(model_name)(
             pretrained=pretrained, num_classes=1000)
@@ -91,6 +92,7 @@ class ConvLSTMNet(nn.Module):
         self.use_xyz = use_xyz
         self.hidden_dim = hidden_dim
         self.info_dim = info_dim
+        self.num_classes = num_classes
 
         # feature extraction part
         if use_seg:
@@ -141,9 +143,9 @@ class ConvLSTMNet(nn.Module):
     def pred_seg(self, x):
         res = []
         batch_size = x.size(0)
-        x = x.view(batch_size, self.frame_history_len*4, 32, 32)
+        x = x.view(batch_size, self.frame_history_len * self.num_classes, 32, 32)
         for i in range(self.frame_history_len):
-            out = self.up_sampler(x[:, i*3:(i+1)*3, :, :])
+            out = self.up_sampler(x[:, i*self.num_classes:(i+1)*self.num_classes, :, :])
             res.append(out)
         res = torch.cat(res, dim=1)
         return res
@@ -235,7 +237,7 @@ class ConvLSTMMulti(nn.Module):
         dist_list = [dist]
         xyz_list = [xyz]
         seg_list = [seg_pred]
-        for i in range(1, num_time):
+        for i in range(1, num_step):
             coll, pred, offroad, dist, xyz, seg_pred, hidden, cell = self.conv_lstm(pred, actions[:,i,:].squeeze(1), with_encode=True, hidden=hidden, cell=cell)
             coll_list.append(coll)
             pred_list.append(pred)
@@ -253,4 +255,3 @@ class ConvLSTMMulti(nn.Module):
             xyz_out = None
         return torch.stack(coll_list, dim=1), torch.stack(pred_list, dim=1), torch.stack(offroad_list,dim=1), torch.stack(dist_list, dim=1), xyz_out, seg_out, hidden, cell
 
- 
