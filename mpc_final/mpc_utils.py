@@ -151,15 +151,13 @@ class MPCBuffer(object):
             if self.use_xyz:
                 self.xyz  = np.empty([self.size, 3], dtype=np.uint8)
             if self.use_seg:
-                self.seg  = np.empty([self.size] + list(frame.shape[1:]), dtype=np.uint8)
+                self.seg  = np.empty([self.size] + [1, 256, 256], dtype=np.uint8)
             self.action   = np.zeros([self.size] + [self.num_actions],dtype=np.int32)
             self.done     = np.empty([self.size],                     dtype=np.int32)
             self.coll     = np.empty([self.size] + [2], dtype=np.int32)
             self.offroad  = np.empty([self.size] + [2], dtype=np.int32)
             self.speed    = np.empty([self.size, 1],    dtype=np.float32)
             self.angle    = np.empty([self.size, 1],    dtype=np.float32)
-            self.pos      = np.empty([self.size, 1],    dtype=np.float32)
-
             self.pos      = np.empty([self.size, 1],    dtype=np.float32)
         self.obs[self.next_idx] = frame
 
@@ -175,9 +173,9 @@ class MPCBuffer(object):
         else:
             self.action[idx, int(action)] = 1
         if self.use_xyz:
-            self.xyz[idx] = xyz
+            self.xyz[idx, :] = xyz
         if self.use_seg:
-            self.seg[idx] = seg
+            self.seg[idx, :] = seg
         self.done[idx]   = int(done)
         self.coll[idx,int(coll)] = 1
         self.offroad[idx, int(off)] = 1
