@@ -6,8 +6,8 @@ import numpy as np
 from train_cont_policy import train_policy
 from utils import init_dirs
 import sys
-sys.path.append('/home/xinleipan/pyTORCS/py_TORCS')
-sys.path.append('/home/xinleipan/pyTORCS/')
+sys.path.append('/media/xinleipan/data/git/pyTORCS/py_TORCS')
+sys.path.append('/media/xinleipan/data/git/pyTORCS/')
 from py_TORCS import torcs_envs
 import multiprocessing as mp
 # from mpc_agent import *
@@ -38,7 +38,7 @@ if __name__ == '__main__':
                args.save_path+'/optimizer', \
                args.save_path+'/cnfmat'])
     
-    envs = torcs_envs(num = 1, game_config = '/home/cxy/semantic-predictive-learning/mpc_final/game_config/michigan.xml', isServer = 0, continuous = True, resize = True)
+    envs = torcs_envs(num = 1, game_config = '/media/xinleipan/data/git/pyTORCS/game_config/michigan.xml', isServer = 0, continuous = True, resize = True)
     env = envs.get_envs()[0]
     obs1 = env.reset()
     print(obs1.shape)
