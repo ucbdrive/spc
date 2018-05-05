@@ -89,7 +89,7 @@ class DQNAgent:
     def store_effect(self, action, reward, done):
         self.replay_buffer.store_effect(self.ret, action, reward, done)
 
-    def train_model(self, batchsize, save_model=False, save_num=None):
+    def train_model(self, batchsize, save_num=None):
         dtype = torch.cuda.FloatTensor
         obs_t_batch, act_batch, rew_batch, obs_tp1_batch, done_mask = self.replay_buffer.sample(batch_size)
         obs_t_batch     = Variable(torch.from_numpy(obs_t_batch).type(dtype) / 255.0)
@@ -107,10 +107,10 @@ class DQNAgent:
         self.optimizer.step()
         self.num_param_updates += 1
         
-        if save_model:
+        if self.num_param_updates % 100 == 0:
             self.target_q_net.load_state_dict(self.dqn_net.state_dict())
-            torch.save(self.target_q_net.state_dict(), self.model_path+'/model_'+str(save_num)+'.pt')
-            torch.save(self.optimizer.state_dict(), self.optim_path+'/optim_'+str(save_num)+'.pt')
+        torch.save(self.target_q_net.state_dict(), self.model_path+'/model_'+str(save_num)+'.pt')
+        torch.save(self.optimizer.state_dict(), self.optim_path+'/optim_'+str(save_num)+'.pt')
  
 def train_policy(args, 
                  env,
@@ -159,7 +159,6 @@ def train_policy(args,
     epi_rewards, rewards = [], 0.0
     _ = env.reset()
     obs, reward, done, info = env.step(np.array([1.0, 0.0]))
-    dqn_obs = copy.deepcopy(obs)
     img_buffer.store_frame(obs)
     prev_info = copy.deepcopy(info)
     avg_img, std_img, avg_img_t, std_img_t = img_buffer.get_avg_std(gpu=0)
@@ -171,9 +170,64 @@ def train_policy(args,
     else:
         num_imgs_start = 0
 
+    epi_rewards_with, epi_rewards_without = [], []
+    rewards_with, rewards_without = 0, 0
     for tt in range(num_imgs_start, num_steps):
-        dqn_ret = replay_buffer.store_frame(cv2.resize(dqn_obs, (84, 84)))
-        dqn_net_obs = replay_buffer.encode_recent_observation()
+        if use_dqn:
+            dqn_action = dqn_agent.sample_action(obs, tt)
+        ret = mpc_buffer.store_frame(obs)
+        this_obs_np = obs_buffer.store_frame(obs, avg_img, std_img)
+        obs_var = Variable(torch.from_numpy(this_obs_np).unsqueeze(0)).float().cuda()
+        rand_num = random.random()
+        if rand_num <= 1-exploration.value(tt):
+            action = sample_cont_action(net, obs_var, prev_action=prev_act, num_time=pred_step)
+        else:
+            action = np.random.rand(2)*2-1
+        action = np.clip(action, -1, 1)
+        if use_dqn:
+            if abs(action[1]) <= dqn_action * 0.1:
+                action[1] = 0
+        obs, reward, done, info = env.step(action)
+        prev_act = action
+        speed_np, pos_np, posxyz_np = get_info_np(info, use_pos_class = False)
+        offroad_flag, coll_flag = info['off_flag'], info['coll_flag']
+        speed_list, pos_list = get_info_ls(prev_info)
+        mpc_buffer.store_effect(ret, action, done, coll_flag, offroad_flag, speed_list[0], speed_list[1], pos_list[0])
+        rewards_with += reward['with_pos']
+        rewards_without += reward['without_pos']
+        if tt % 100 == 0:
+            avg_img, std_img, avg_img_t, std_img_t = img_buffer.get_avg_std()
+
+        if done:
+            obs_buffer.clear()
+            epi_rewards_with.append(rewards_with)
+            epi_rewards_without.append(rewards_without)
+            obs = env.reset()
+            rewards_with, rewards_without = 0, 0
+            obs, reward, done, info = env.step(np.array([1.0, 0.0]))
+            prev_act = np.array([1.0, 0.0])
+            speed_np, pos_np, posxyz_np = get_info_np(info, use_pos_class=False)
+            print('past 100 episode rewards is ', \
+                "{0:.3f}".format(np.mean(epi_rewards_with[-100:])), \
+                ' std is ', "{0:.15f}".format(np.std(epi_rewards_with[-100:])))
+            with open(args.save_path+'/log_train_torcs.txt', 'a') as fi:
+                fi.write('step '+str(tt)+' reward_with '+str(np.mean(epi_rewards_with[-10:]))+' std '+str(np.std(epi_rewards_with[-10:]))+\
+                        ' reward_without '+str(np.mean(epi_rewards_without[-10:]))+' std '+str(np.std(epi_rewards_without)[-10:]))+'\n')
         
+        prev_info = copy.deepcopy(info) 
+        if use_dqn:
+            dqn_agent.store_effect(dqn_action, reward['with_pos'], done)
         
-                
+        if tt % args.learning_freq == 0 and tt > args.learning_starts and mpc_buffer.can_sample(batch_size):
+            for ep in range(10):
+                optimizer.zero_grad()
+                loss = train_model(train_net, mpc_buffer, batch_size, epoch, avg_img_t, std_img_t, pred_step)
+                loss.backward()
+                optimizer.step()
+                net.load_state_dict(train_net.module.state_dict())
+                epoch += 1
+                if epoch % save_freq == 0:
+                    torch.save(train_net.module.state_dict(), args.save_path+'/model/pred_model_'+str(tt).zfill(9)+'.pt')
+                    torch.save(optimizer.state_dict(), args.save_path+'/optimizer/optim_'+str(tt).zfill(9)+'.pt')
+                    pkl.dump(epoch, open(args.save_path+'/epoch.pkl', 'wb'))
+                    dqn_agent.train_model(batch_size, tt) 
