@@ -125,7 +125,7 @@ class ConvLSTMNet(nn.Module):
         else:
             self.dla = dla.dla46x_c(pretrained=pretrained)
             self.feature_encode = nn.Linear(256 * frame_history_len, self.hidden_dim)
-        self.outfeature_encode = nn.Linear(self.hidden_dim+self.info_dim, self.hidden_dim)
+            self.outfeature_encode = nn.Linear(self.hidden_dim+self.info_dim, self.hidden_dim)
         self.lstm = ConvLSTMCell(self.hidden_dim, self.hidden_dim, True)
         self.action_encode = nn.Linear(num_actions, info_dim)
         self.info_encode = nn.Linear(self.info_dim + self.hidden_dim, self.hidden_dim)
@@ -165,22 +165,23 @@ class ConvLSTMNet(nn.Module):
             x = x.view(x.size(0), -1) # 1024
             x = F.relu(self.feature_map_fc1(x))
             x = F.relu(self.feature_map_fc2(x))
-        pdb.set_trace()
         if hidden is None or cell is None:
             hidden, cell = x, x
         action_enc = F.relu(self.action_encode(action))
         encode = torch.cat([x, action_enc], dim = 1)
         encode = F.relu(self.info_encode(encode))
         hidden, cell = self.lstm(encode, [hidden, cell])
-        pred_encode_nx = hidden.view(-1, self.hidden_dim)
-        hidden_enc = torch.cat([pred_encode_nx, action_enc], dim = 1)
-        nx_feature_enc = self.outfeature_encode(F.relu(pred_encode_nx))
-
+    
+        # this is to be output as feature representation for next step no matter with seg or not
+        nx_feature_enc = hidden.view(-1, self.hidden_dim)
+        hidden_enc = torch.cat([nx_feature_enc, action_enc], dim = 1)
+       
+        ''' next feature encoding: seg_pred ''' 
         if self.use_seg:
             seg_feat = self.up_scale(F.relu(hidden_enc))
             seg_pred = self.pred_seg(seg_feat)
         else:
-            seg_pred = None   
+            seg_pred = self.outfeature_encode(F.relu(hidden_enc))
 
         coll_prob = F.relu(self.fc_coll_1(hidden_enc))
         coll_prob = torch.cat([coll_prob, action_enc], dim = 1)
@@ -270,10 +271,7 @@ class ConvLSTMMulti(nn.Module):
             dist_list.append(dist)
             xyz_list.append(xyz)
             seg_list.append(seg_pred)
-        if self.conv_lstm.use_seg:
-            seg_out = torch.stack(seg_list, dim=1)
-        else:
-            seg_out = None
+        seg_out = torch.stack(seg_list, dim=1)
         if self.conv_lstm.use_xyz:
             xyz_out = torch.stack(xyz_list, dim=1)
         else:
