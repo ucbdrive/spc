@@ -120,7 +120,7 @@ class ConvLSTMNet(nn.Module):
             self.feature_map_conv3 = nn.Conv2d(32, 64, 3, stride = 1, padding = 1)
             self.feature_map_fc1 = nn.Linear(1024, 1024)
             self.feature_map_fc2 = nn.Linear(1024, self.hidden_dim)
-            self.up_scale = nn.Linear(self.hidden_dim+self.info_dim, 32*32*num_classes*frame_history_len)
+            self.up_scale = nn.Linear(self.hidden_dim+self.info_dim, 32*32*num_classes)
         else:
             self.dla = dla.dla46x_c(pretrained=pretrained)
             self.feature_encode = nn.Linear(256 * frame_history_len, self.hidden_dim)
@@ -147,12 +147,9 @@ class ConvLSTMNet(nn.Module):
     def pred_seg(self, x):
         res = []
         batch_size = x.size(0)
-        x = x.view(batch_size, self.frame_history_len * self.num_classes, 32, 32)
-        for i in range(self.frame_history_len):
-            out = self.up_sampler(x[:, i*self.num_classes : (i+1)*self.num_classes, :, :])
-            res.append(out)
-        res = torch.cat(res, dim=1)
-        return res
+        x = x.view(batch_size, self.num_classes, 32, 32)
+        out = self.up_sampler(x)
+        return out
 
     def forward(self, x, action, with_encode=False, hidden=None, cell=None):
         if with_encode == False:
