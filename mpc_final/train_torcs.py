@@ -13,7 +13,7 @@ import multiprocessing as mp
 # from mpc_agent import *
 
 parser = argparse.ArgumentParser(description = 'Train-torcs')
-parser.add_argument('--lr', type = float, default = 0.001, metavar = 'LR', help = 'learning rate')
+parser.add_argument('--lr', type = float, default = 0.01, metavar = 'LR', help = 'learning rate')
 parser.add_argument('--env', type = str, default = 'torcs-v0', metavar = 'ENV', help = 'environment')
 parser.add_argument('--save-path', type=str, default = 'mpc_12_step')
 parser.add_argument('--batch-size', type=int, default=32)

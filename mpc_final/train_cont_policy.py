@@ -98,7 +98,7 @@ def train_policy(args,
         speed_np, pos_np, posxyz_np = get_info_np(info, use_pos_class = False)
         offroad_flag, coll_flag = info['off_flag'], info['coll_flag']
         speed_list, pos_list = get_info_ls(prev_info)
-        xyz = np.array(info['pos']) if use_xyz else None
+        xyz = np.array(info['pos']) / 1000.0 if use_xyz else None
         seg = env.env.get_segmentation() if use_seg else None
         mpc_buffer.store_effect(ret, action, done, coll_flag, offroad_flag, speed_list[0], speed_list[1], pos_list[0], xyz, seg)
         rewards_with += reward['with_pos']
