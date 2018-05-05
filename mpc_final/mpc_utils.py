@@ -30,13 +30,14 @@ class IMGBuffer(object):
         return avg, std, avg_t, std_t
     
 class MPCBuffer(object):
-    def __init__(self, size, frame_history_len, pred_step, num_actions, continuous=False):
+    def __init__(self, size, frame_history_len, pred_step, num_actions, continuous=False, use_seg = True):
         self.size = size
         self.frame_history_len = frame_history_len
         self.next_idx      = 0
         self.num_in_buffer = 0
         self.pred_step = pred_step # number of prediction steps
         self.num_actions = num_actions
+        self.use_seg = use_seg
 
         self.obs      = None
         self.action   = None
@@ -46,6 +47,7 @@ class MPCBuffer(object):
         self.speed    = None
         self.angle    = None
         self.pos      = None
+        self.seg      = None
         self.ret      = 0
         self.loss     = np.ones(size)*1000
         self.rewards  = np.ones((size,1))
@@ -84,7 +86,11 @@ class MPCBuffer(object):
         angle_batch = np.concatenate([np.concatenate([self.angle[idx+ii,:][np.newaxis,:] for ii in range(self.pred_step+1)],0)[np.newaxis,:] for idx in idxes], 0)
         dist_batch = sp_batch*(np.cos(angle_batch)-np.abs(np.sin(angle_batch))-((np.abs(pos_batch))/7.0)**1.0)-10*np.exp(np.abs(angle_batch)) 
         # dist_batch = sp_batch*(-np.exp(np.abs(angle_batch))-np.abs(pos_batch-3)/9.0)
-        return act_batch, coll_batch,sp_batch,off_batch,dist_batch,obs_batch, nx_obs_batch, pos_batch 
+        if self.use_seg:
+            seg_batch = np.concatenate([np.concatenate([self.seg[idx+ii,:][np.newaxis,:] for ii in range(self.pred_step+1)],0)[np.newaxis,:] for idx in idxes], 0)
+        else:
+            seg_batch = None
+        return act_batch, coll_batch,sp_batch,off_batch,dist_batch,obs_batch, nx_obs_batch, pos_batch, seg_batch
 
     def sample(self, batch_size, sample_early=False):
         assert self.can_sample(batch_size)
@@ -135,6 +141,8 @@ class MPCBuffer(object):
 
         if self.obs is None:
             self.obs      = np.empty([self.size] + list(frame.shape), dtype=np.uint8)
+            if self.use_seg:
+                self.seg  = np.empty([self.size] + list(frame.shape[1:]), dtype=np.uint8)
             self.action   = np.zeros([self.size] + [self.num_actions],dtype=np.int32)
             self.done     = np.empty([self.size],                     dtype=np.int32)
             self.coll     = np.empty([self.size] + [2], dtype=np.int32)
@@ -150,11 +158,13 @@ class MPCBuffer(object):
         self.ret = ret
         return ret
 
-    def store_effect(self, idx, action, done, coll, off, speed, angle, pos):
+    def store_effect(self, idx, action, done, coll, off, speed, angle, pos, seg):
         if self.continuous:
             self.action[idx, :] = action
         else:
             self.action[idx, int(action)] = 1
+        if self.use_seg:
+            self.seg[idx] = seg
         self.done[idx]   = int(done)
         self.coll[idx,int(coll)] = 1
         self.offroad[idx, int(off)] = 1
