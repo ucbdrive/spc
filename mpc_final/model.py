@@ -116,12 +116,12 @@ class ConvLSTMNet(nn.Module):
         if use_seg:
             self.drnseg = DRNSeg(model_name, num_classes, pretrained)
             self.up_sampler = UP_Sampler(num_classes)
-            self.pred = PRED(num_classes * frame_history_len, num_actions)
             self.feature_map_conv1 = nn.Conv2d(num_classes * frame_history_len, 16, 5, stride = 1, padding = 2)
             self.feature_map_conv2 = nn.Conv2d(16, 32, 3, stride = 1, padding = 1)
             self.feature_map_conv3 = nn.Conv2d(32, 64, 3, stride = 1, padding = 1)
             self.feature_map_fc1 = nn.Linear(1024, 1024)
             self.feature_map_fc2 = nn.Linear(1024, self.hidden_dim)
+            self.up_scale = nn.Linear(self.hidden_dim+self.info_dim, 32*32*num_classes*frame_history_len)
         else:
             self.dla = dla.dla46x_c(pretrained=pretrained)
             self.feature_encode = nn.Linear(256 * frame_history_len, self.hidden_dim)
@@ -145,6 +145,16 @@ class ConvLSTMNet(nn.Module):
             self.fc_xyz_2 = nn.Linear(128 + info_dim, 32)
             self.fc_xyz_3 = nn.Linear(32 + info_dim, 3)
      
+    def pred_seg(self, x):
+        res = []
+        batch_size = x.size(0)
+        x = x.view(batch_size, self.frame_history_len * self.num_classes, 32, 32)
+        for i in range(self.frame_history_len):
+            out = self.up_sampler(x[:, i*self.num_classes : (i+1)*self.num_classes, :, :])
+            res.append(out)
+        res = torch.cat(res, dim=1)
+        return res
+
     def forward(self, x, action, with_encode=False, hidden=None, cell=None):
         if with_encode == False:
             x = self.get_feature(x)
@@ -164,14 +174,13 @@ class ConvLSTMNet(nn.Module):
         hidden, cell = self.lstm(encode, [hidden, cell])
         pred_encode_nx = hidden.view(-1, self.hidden_dim)
         hidden_enc = torch.cat([pred_encode_nx, action_enc], dim = 1)
+        nx_feature_enc = self.outfeature_encode(F.relu(pred_encode_nx))
 
-        
         if self.use_seg:
-            seg_pred = self.up_sampler(feature_map[:, -self.num_classes:, :, :])
-            nx_feature_enc = self.pred(feature_map, action)
+            seg_feat = self.up_scale(F.relu(hidden_enc))
+            seg_pred = self.pred_seg(seg_feat)
         else:
             seg_pred = None   
-            nx_feature_enc = self.outfeature_encode(F.relu(pred_encode_nx))     
 
         coll_prob = F.relu(self.fc_coll_1(hidden_enc))
         coll_prob = torch.cat([coll_prob, action_enc], dim = 1)
