@@ -12,15 +12,6 @@ from sklearn.metrics import confusion_matrix
 import pdb
 from model import *
 
-def sample_action(net, img):
-    return action
-
-def train_dqn(dqn_net, replay_buffer, batch_size):
-
-    loss = None
-    return loss
-
-
 class MPCData(Dataset):
     def __init__(self, mpc_buffer, batch_size=1):
         self.mpc_buffer = mpc_buffer
@@ -95,32 +86,37 @@ def train_model(train_net, mpc_buffer, batch_size, epoch, avg_img_t, std_img_t, 
     if use_seg:
         seg_batch = Variable(x[9], requires_grad=False).long()
 
-    with torch.no_grad():
-        nximg_enc = train_net(nximg_batch, get_feature=True)
-        nximg_enc = nximg_enc.detach()
+    if use_seg == False:
+        with torch.no_grad():
+            nximg_enc = train_net(nximg_batch, get_feature=True)
+            nximg_enc = nximg_enc.detach()
 
     pred_coll, pred_enc, pred_off, pred_dist, xyz_out, seg_out, _, _ = train_net(img_batch, act_batch, int(act_batch.size()[1]))
     coll_ls = Focal_Loss(pred_coll.view(-1,2), (torch.max(coll_batch.view(-1,2),-1)[1]).view(-1), reduce=True)
     offroad_ls = Focal_Loss(pred_off.view(-1,2), (torch.max(offroad_batch.view(-1,2),-1)[1]).view(-1), reduce=True)
     dist_ls = torch.sqrt(nn.MSELoss()(pred_dist.view(-1,pred_step), dist_batch[:,1:].view(-1,pred_step)))
-    #print('prediction', pred_dist[0,:].data.cpu().numpy(), 'gr', dist_batch[0,:].data.cpu().numpy())
-    pred_ls = nn.L1Loss()(pred_enc, nximg_enc).sum()
+    if use_seg == False:
+        pred_ls = nn.L1Loss()(seg_out, nximg_enc).sum()
+    else:
+        seg_out = seg_out.permute(0,1,3,4,2).view(-1, 4)
+        seg_batch = seg_batch.permute(0, 1, 3, 4, 2).view(-1, 1)
+        pred_ls = nn.CrossEntropyLoss()(seg_out, seg_batch)
     loss = pred_ls + coll_ls + offroad_ls + 10*dist_ls
     if use_xyz:
         xyz_loss = nn.MSELoss()(xyz_out, xyz_batch)
         loss += xyz_loss
     else:
         xyz_loss = Variable(torch.zeros(1))
-    if use_seg:
-        seg_loss = sum([nn.CrossEntropyLoss()(seg_out[:, i], seg_batch[:, i]) for i in range(pred_step)])
-        loss += seg_loss
-    else:
-        seg_loss = Variable(torch.zeros(1))
+    #if use_seg:
+    #    seg_loss = sum([nn.CrossEntropyLoss()(seg_out[:, i], seg_batch[:, i]) for i in range(pred_step)])
+    #    loss += seg_loss
+    #else:
+    #    seg_loss = Variable(torch.zeros(1))
 
-    coll_acc, off_acc, total_dist_ls = log_info(pred_coll, coll_batch, pred_off, offroad_batch, \
-        float(coll_ls.data.cpu().numpy()), float(offroad_ls.data.cpu().numpy()),\
-        float(pred_ls.data.cpu().numpy()), float(dist_ls.data.cpu().numpy()), \
-        float(xyz_loss.data.cpu().numpy()), float(seg_loss.data.cpu().numpy()), float(loss.data.cpu().numpy()), epoch, 1)
+    #coll_acc, off_acc, total_dist_ls = log_info(pred_coll, coll_batch, pred_off, offroad_batch, \
+    #    float(coll_ls.data.cpu().numpy()), float(offroad_ls.data.cpu().numpy()),\
+    #    float(pred_ls.data.cpu().numpy()), float(dist_ls.data.cpu().numpy()), \
+    #    float(xyz_loss.data.cpu().numpy()), float(seg_loss.data.cpu().numpy()), float(loss.data.cpu().numpy()), epoch, 1)
     return loss
  
 class DoneCondition:
@@ -505,7 +501,7 @@ def sample_cont_action(net, imgs, prev_action=None, num_time=15):
     cnt = 0
     while sign:
         net.zero_grad()
-        _, _, _, _, _, _, loss = get_action_loss(net, imgs, this_action, num_time, None, None)
+        loss = get_action_loss(net, imgs, this_action, num_time, None, None)
         loss.backward()
         this_loss = float(loss.data.cpu().numpy())
         if cnt >= 10 and (np.abs(prev_loss-this_loss)/prev_loss <= 0.0005 or this_loss > prev_loss):
@@ -535,4 +531,4 @@ def get_action_loss(net, imgs, actions, num_time = 3, hidden = None, cell = None
     dist_ls = (outs[3].view(-1,num_time,1)*weight).view(-1,num_time).sum(-1)
     #loss = off_ls + coll_ls - 0.1 * dist_ls
     loss = -1*dist_ls
-    return coll_ls.data.cpu().numpy().reshape((-1)), off_ls.data.cpu().numpy().reshape((-1)), dist_ls.data.cpu().numpy().reshape((-1)), outs[0][:,:,0].data.cpu().numpy(), outs[2][:,:,0].data.cpu().numpy(), outs[3][:,:,0].data.cpu().numpy(), loss        
+    return loss
