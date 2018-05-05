@@ -125,7 +125,7 @@ class ConvLSTMNet(nn.Module):
         else:
             self.dla = dla.dla46x_c(pretrained=pretrained)
             self.feature_encode = nn.Linear(256 * frame_history_len, self.hidden_dim)
-        self.outfeature_encode = nn.Linear(self.hidden_dim, self.hidden_dim)
+        self.outfeature_encode = nn.Linear(self.hidden_dim+self.info_dim, self.hidden_dim)
         self.lstm = ConvLSTMCell(self.hidden_dim, self.hidden_dim, True)
         self.action_encode = nn.Linear(num_actions, info_dim)
         self.info_encode = nn.Linear(self.info_dim + self.hidden_dim, self.hidden_dim)
@@ -159,13 +159,13 @@ class ConvLSTMNet(nn.Module):
         if with_encode == False:
             x = self.get_feature(x)
         if self.use_seg:
-            feature_map = x
             x = F.tanh(F.max_pool2d(self.feature_map_conv1(x), kernel_size = 2, stride = 2))
             x = F.tanh(F.max_pool2d(self.feature_map_conv2(x), kernel_size = 2, stride = 2))
             x = F.tanh(F.max_pool2d(self.feature_map_conv3(x), kernel_size = 2, stride = 2)) # 1x64x4x4
             x = x.view(x.size(0), -1) # 1024
             x = F.relu(self.feature_map_fc1(x))
             x = F.relu(self.feature_map_fc2(x))
+        pdb.set_trace()
         if hidden is None or cell is None:
             hidden, cell = x, x
         action_enc = F.relu(self.action_encode(action))
