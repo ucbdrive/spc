@@ -167,7 +167,7 @@ class ConvLSTMNet(nn.Module):
             seg_feat = self.up_scale(F.relu(nx_feature_enc))
             seg_pred = self.pred_seg(seg_feat)
         else:
-            seg_pred = nx_feature_enc
+            seg_pred = None
 
         coll_prob = F.relu(self.fc_coll_1(hidden_enc))
         coll_prob = torch.cat([coll_prob, action_enc], dim = 1)
@@ -196,4 +196,61 @@ class ConvLSTMNet(nn.Module):
         else:
             xyz = None
         
-        return coll_prob, seg_pred, offroad_prob, dist, xyz, hidden, cell 
+        return coll_prob, nx_feature_enc, offroad_prob, dist, xyz, seg_pred, hidden, cell
+
+class ConvLSTMMulti(nn.Module):
+    def __init__(self, num_actions = 3,
+                pretrained = True,
+                frame_history_len = 4,
+                use_seg = True,
+                use_xyz = True,
+                model_name = None,
+                num_classes = 4,
+                hidden_dim = 512, 
+                info_dim = 16):
+        super(ConvLSTMMulti, self).__init__()
+        self.conv_lstm = ConvLSTMNet(num_actions, pretrained, frame_history_len, \
+                                    use_seg, use_xyz, model_name, num_classes, hidden_dim, info_dim)
+        self.frame_history_len = frame_history_len
+        self.num_actions = num_actions
+
+    def get_feature(self, x):
+        feat = []
+        x = x.contiguous()
+        num_time = int(x.size()[1])
+        for i in range(num_time):
+            feat.append(self.conv_lstm.get_feature(x[:, i, :, :, :].squeeze(1)))
+        return torch.stack(feat, dim = 1)
+
+    def forward(self, imgs, actions=None, num_time=None, hidden=None, cell=None, get_feature=False):
+        if get_feature:
+            res = self.get_feature(imgs)
+            return res
+        batch_size, num_step, c, w, h = int(imgs.size()[0]), int(imgs.size()[1]), int(imgs.size()[-3]), int(imgs.size()[-2]), int(imgs.size()[-1])
+        coll, pred, offroad, dist, xyz, seg_pred, hidden, cell = self.conv_lstm(imgs[:,0,:,:,:].squeeze(1), actions[:,0,:].squeeze(1), hidden=hidden, cell=cell)
+        num_act = self.num_actions
+        coll_list = [coll]
+        pred_list = [pred]
+        offroad_list = [offroad]
+        dist_list = [dist]
+        xyz_list = [xyz]
+        seg_list = [seg_pred]
+        for i in range(1, num_time):
+            coll, pred, offroad, dist, xyz, seg_pred, hidden, cell = self.conv_lstm(pred, actions[:,i,:].squeeze(1), with_encode=True, hidden=hidden, cell=cell)
+            coll_list.append(coll)
+            pred_list.append(pred)
+            offroad_list.append(offroad)
+            dist_list.append(dist)
+            xyz_list.append(xyz)
+            seg_list.append(seg_pred)
+        if self.conv_lstm.use_seg:
+            seg_out = torch.stack(seg_list, dim=1)
+        else:
+            seg_out = None
+        if self.conv_lstm.use_xyz:
+            xyz_out = torch.stack(xyz_list, dim=1)
+        else:
+            xyz_out = None
+        return torch.stack(coll_list, dim=1), torch.stack(pred_list, dim=1), torch.stack(offroad_list,dim=1), torch.stack(dist_list, dim=1), xyz_out, seg_out, hidden, cell
+
+ 
