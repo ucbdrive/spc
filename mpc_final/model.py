@@ -8,6 +8,24 @@ import dla
 import math
 import pdb
 
+class atari_model(nn.Module):
+    def __init__(self, inc=12, num_actions=9, frame_history_len=4)
+        super(atari_model, self).__init__()
+        self.conv1 = nn.Conv2d(inc, 32, kernel_size=8, stride=4)
+        self.conv2 = nn.Conv2d(32, 64, kernel_size=4, stride=2)
+        self.conv3 = nn.Conv2d(64, 64, kernel_size=3, stride=1)
+        self.fc4 = nn.Linear(7 * 7 * 64, 512)
+        self.fc5 = nn.Linear(512, num_actions)
+        self.frame_history_len = frame_history_len
+        
+    def forward(self, x):
+        x = F.relu(self.conv1(x))
+        x = F.relu(self.conv2(x))
+        x = F.relu(self.conv3(x))
+        x = F.relu(self.fc4(x.view(x.size(0), -1)))
+        res = self.fc5(x)
+        return res
+
 class ConvLSTMCell(nn.Module):
     def __init__(self, input_dim, hidden_dim, bias):
         super(ConvLSTMCell, self).__init__()
