@@ -7,7 +7,7 @@ import models.drn as drn
 class DRNSeg(nn.Module):
     def __init__(self, model_name, 
                 classes=4,
-                pretrained=False, num_actions = 6):
+                pretrained=False):
         super(DRNSeg, self).__init__()
         model = drn.__dict__.get(model_name)(
             pretrained=pretrained, num_classes=1000)
