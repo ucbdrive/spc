@@ -38,8 +38,15 @@ def train_policy(args,
     obs_buffer = ObsBuffer(frame_history_len)
     train_net, epoch, optimizer = load_model(args.save_path, train_net, data_parallel=True, optimizer=optimizer, resume=args.resume)
     net.load_state_dict(train_net.module.state_dict())
-    train_net.cuda().float().train()
-    net.float().cuda().eval()
+
+    train_net = train_net.cuda()
+    net = net.cuda()
+
+    # train_net = nn.DataParallel(train_net)
+    # net = nn.DataParallel(net)
+
+    train_net.train()
+    net.eval()
     
     ''' environment basics '''
     exploration = PiecewiseSchedule([

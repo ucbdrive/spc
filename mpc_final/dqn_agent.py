@@ -56,7 +56,7 @@ class DQNAgent:
     def store_effect(self, action, reward, done):
         self.replay_buffer.store_effect(self.ret, action, reward, done)
 
-    def train_model(self, batchsize, save_num=None):
+    def train_model(self, batch_size, save_num=None):
         dtype = torch.cuda.FloatTensor
         obs_t_batch, act_batch, rew_batch, obs_tp1_batch, done_mask = self.replay_buffer.sample(batch_size)
         obs_t_batch     = Variable(torch.from_numpy(obs_t_batch).type(dtype) / 255.0)

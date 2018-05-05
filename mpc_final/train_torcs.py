@@ -16,7 +16,7 @@ parser = argparse.ArgumentParser(description = 'Train-torcs')
 parser.add_argument('--lr', type = float, default = 0.001, metavar = 'LR', help = 'learning rate')
 parser.add_argument('--env', type = str, default = 'torcs-v0', metavar = 'ENV', help = 'environment')
 parser.add_argument('--save-path', type=str, default = 'mpc_12_step')
-parser.add_argument('--batch-size', type=int, default=10)
+parser.add_argument('--batch-size', type=int, default=32)
 parser.add_argument('--pred-step', type=int, default=15)
 parser.add_argument('--normalize', action='store_true')
 parser.add_argument('--buffer-size', type=int, default=50000)
@@ -46,7 +46,7 @@ if __name__ == '__main__':
     print(obs.shape, reward, done, info)
     train_policy(args, env, 
                  num_steps=40000000,
-                 batch_size=32,
+                 batch_size=args.batch_size,
                  pred_step=15,
                  normalize=True,
                  buffer_size=50000,

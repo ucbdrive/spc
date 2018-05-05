@@ -1,3 +1,4 @@
+from __future__ import division, print_function
 import torch
 import torch.nn as nn
 from torch.autograd import Variable
@@ -75,6 +76,7 @@ def train_model_imitation(train_net, mpc_buffer, batch_size, epoch, avg_img_t, s
     return action_loss 
     
 def train_model(train_net, mpc_buffer, batch_size, epoch, avg_img_t, std_img_t, pred_step=15, use_xyz = False, use_seg = True):
+    # print(batch_size)
     if epoch % 20 == 0:
         x, idxes = mpc_buffer.sample(batch_size, sample_early = True)
     else:
@@ -107,14 +109,18 @@ def train_model(train_net, mpc_buffer, batch_size, epoch, avg_img_t, std_img_t, 
     if use_xyz:
         xyz_loss = nn.MSELoss()(xyz_out, xyz_batch)
         loss += xyz_loss
+    else:
+        xyz_loss = Variable(torch.zeros(1))
     if use_seg:
         seg_loss = sum([nn.CrossEntropyLoss()(seg_out[:, i], seg_batch[:, i]) for i in range(pred_step)])
         loss += seg_loss
+    else:
+        seg_loss = Variable(torch.zeros(1))
 
     coll_acc, off_acc, total_dist_ls = log_info(pred_coll, coll_batch, pred_off, offroad_batch, \
         float(coll_ls.data.cpu().numpy()), float(offroad_ls.data.cpu().numpy()),\
         float(pred_ls.data.cpu().numpy()), float(dist_ls.data.cpu().numpy()), \
-        float(loss.data.cpu().numpy()), epoch, 1)
+        float(xyz_loss.data.cpu().numpy()), float(seg_loss.data.cpu().numpy()), float(loss.data.cpu().numpy()), epoch, 1)
     return loss
  
 class DoneCondition:
@@ -162,7 +168,7 @@ class ObsBuffer:
         return
 
 def log_info(pred_coll, coll_batch, pred_off, offroad_batch, \
-            total_coll_ls, total_off_ls, total_pred_ls, total_dist_ls, total_loss, \
+            total_coll_ls, total_off_ls, total_pred_ls, total_dist_ls, xyz_loss, seg_loss, total_loss, \
             epoch, num_batch):
     coll_label, coll_pred, off_label, off_pred = [], [], [], []
     pred_coll_np = pred_coll.view(-1,2).data.cpu().numpy()
@@ -187,27 +193,31 @@ def log_info(pred_coll, coll_batch, pred_off, offroad_batch, \
     cnf_matrix_off = confusion_matrix(off_label, off_pred)
     coll_acc, off_accuracy = 0, 0
     try:
-        coll_acc = (cnf_matrix[0,0]+cnf_matrix[1,1])/(cnf_matrix.sum()*1.0)
-        off_accuracy = (cnf_matrix_off[0,0]+cnf_matrix_off[1,1])/(cnf_matrix_off.sum()*1.0)
+        coll_acc = (cnf_matrix[0,0] + cnf_matrix[1,1]) / (cnf_matrix.sum() * 1.0)
+        off_accuracy = (cnf_matrix_off[0,0] + cnf_matrix_off[1,1]) / (cnf_matrix_off.sum() * 1.0)
         if epoch % 20 == 0:
             print('sample early collacc', "{0:.3f}".format(coll_acc), \
-                "{0:.3f}".format(total_coll_ls/num_batch), \
+                "{0:.3f}".format(total_coll_ls / num_batch), \
                 'offacc', "{0:.3f}".format(off_accuracy), \
-                "{0:.3f}".format(total_off_ls/num_batch), \
-                'ttls', "{0:.3f}".format(total_loss/num_batch), \
-                 'predls', "{0:.3f}".format(total_pred_ls/num_batch), \
-                'distls', "{0:.3f}".format(total_dist_ls/num_batch))
+                "{0:.3f}".format(total_off_ls / num_batch), \
+                'xyzls', "{0:.3f}".format(xyz_loss / num_batch), \
+                'segls', "{0:.3f}".format(seg_loss / num_batch), \
+                'ttls', "{0:.3f}".format(total_loss / num_batch), \
+                'predls', "{0:.3f}".format(total_pred_ls / num_batch), \
+                'distls', "{0:.3f}".format(total_dist_ls / num_batch))
         else:
             print('collacc', "{0:.3f}".format(coll_acc), \
-                "{0:.3f}".format(total_coll_ls/num_batch), \
+                "{0:.3f}".format(total_coll_ls / num_batch), \
                 'offacc', "{0:.3f}".format(off_accuracy), \
-                "{0:.3f}".format(total_off_ls/num_batch), \
-                'ttls', "{0:.3f}".format(total_loss/num_batch), \
-                'predls', "{0:.3f}".format(total_pred_ls/num_batch), \
-                'distls', "{0:.3f}".format(total_dist_ls/num_batch))
+                "{0:.3f}".format(total_off_ls / num_batch), \
+                'xyzls', "{0:.3f}".format(xyz_loss / num_batch), \
+                'segls', "{0:.3f}".format(seg_loss / num_batch), \
+                'ttls', "{0:.3f}".format(total_loss / num_batch), \
+                'predls', "{0:.3f}".format(total_pred_ls / num_batch), \
+                'distls', "{0:.3f}".format(total_dist_ls / num_batch))
     except:
-        print('dist ls', total_dist_ls/num_batch)
-    return coll_acc, off_accuracy, total_dist_ls/num_batch
+        print('dist ls', total_dist_ls / num_batch)
+    return coll_acc, off_accuracy, total_dist_ls / num_batch
 
 def init_dirs(dir_list):
     for path in dir_list:
@@ -484,7 +494,7 @@ class PredData(Dataset):
 def sample_cont_action(net, imgs, prev_action=None, num_time=15):
     imgs = imgs.contiguous()
     batch_size, c, w, h = int(imgs.size()[0]), int(imgs.size()[-3]), int(imgs.size()[-2]), int(imgs.size()[-1])
-    imgs = imgs.view(1, 1, c, w, h)
+    imgs = imgs.view(batch_size, 1, c, w, h)
     prev_action = prev_action.reshape((1, 1, 2))
     prev_action = np.repeat(prev_action, num_time, axis=1) 
     this_action = torch.from_numpy(prev_action).float()
