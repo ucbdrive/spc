@@ -42,9 +42,6 @@ def train_policy(args,
     train_net = train_net.cuda()
     net = net.cuda()
 
-    # train_net = nn.DataParallel(train_net)
-    # net = nn.DataParallel(net)
-
     train_net.train()
     net.eval()
     
@@ -68,6 +65,7 @@ def train_policy(args,
     avg_img, std_img, avg_img_t, std_img_t = img_buffer.get_avg_std(gpu=0)
     speed_np, pos_np, posxyz_np = get_info_np(info, use_pos_class=False)
     prev_act = np.array([1.0, 0.0])
+    prev_xyz = np.array(info['pos'])
 
     if args.resume:
         num_imgs_start = max(int(open(args.save_path+'/log_train_torcs.txt').readlines()[-1].split(' ')[1])-1000,0)
@@ -86,9 +84,9 @@ def train_policy(args,
         if random.random() <= 1 - exploration.value(tt):
             ## todo: finish sample continuous action function
             action = sample_cont_action(net, obs_var, prev_action=prev_act, num_time=pred_step)
-            action = np.clip(action, -1, 1)
         else:
             action = np.random.rand(num_total_act) * 2 - 1
+        action = np.clip(action, -1, 1)
 
         if use_dqn:
             if abs(action[1]) <= dqn_action * 0.1:
@@ -98,9 +96,10 @@ def train_policy(args,
         speed_np, pos_np, posxyz_np = get_info_np(info, use_pos_class = False)
         offroad_flag, coll_flag = info['off_flag'], info['coll_flag']
         speed_list, pos_list = get_info_ls(prev_info)
-        xyz = np.array(info['pos']) / 1000.0 if use_xyz else None
-        seg = env.env.get_segmentation() if use_seg else None
-        mpc_buffer.store_effect(ret, action, done, coll_flag, offroad_flag, speed_list[0], speed_list[1], pos_list[0], xyz, seg)
+        xyz = np.array(info['pos']) if use_xyz else None
+        rela_xyz = xyz-prev_xyz
+        seg = env.env.get_segmentation().reshape((1,256,256)) if use_seg else None
+        mpc_buffer.store_effect(ret, action, done, coll_flag, offroad_flag, speed_list[0], speed_list[1], pos_list[0], rela_xyz, seg)
         rewards_with += reward['with_pos']
         rewards_without += reward['without_pos']
 
@@ -141,8 +140,8 @@ def train_policy(args,
                 optimizer.step()
                 net.load_state_dict(train_net.module.state_dict())
                 epoch += 1
+                dqn_agent.train_model(batch_size, tt)
                 if epoch % save_freq == 0:
                     torch.save(train_net.module.state_dict(), args.save_path+'/model/pred_model_'+str(tt).zfill(9)+'.pt')
                     torch.save(optimizer.state_dict(), args.save_path+'/optimizer/optim_'+str(tt).zfill(9)+'.pt')
                     pkl.dump(epoch, open(args.save_path+'/epoch.pkl', 'wb'))
-                    dqn_agent.train_model(batch_size, tt) 
