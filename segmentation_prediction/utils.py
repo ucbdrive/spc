@@ -6,6 +6,7 @@ from torch.autograd import Variable
 import os
 import math
 import time
+from collections import OrderedDict
 
 def fill_up_weights(up):
     w = up.weight.data
@@ -41,13 +42,14 @@ def draw_from_pred(pred):
 
 def reset_env(args, env):
     obs = env.reset()
-    for i in range(np.random.randint(150) + 1):
-        obs, reward, done, info = env.step(np.random.randint(args.num_actions))
+    for i in range(np.random.randint(300)):
+        obs, reward, done, info = env.step(naive_driver(args, env.get_info()))
+    true_obs = (obs.transpose(2, 0, 1) - args.obs_avg) / args.obs_std
 
-    true_obs = np.zeros((3 * args.frame_len, 256, 256))
-    for i in range(args.frame_len):
-        obs, reward, done, info = env.step(np.random.randint(args.num_actions))
-        true_obs[i * 3: (i + 1) * 3] = (obs.transpose(2, 0, 1) - args.obs_avg) / args.obs_std
+    # true_obs = np.zeros((3 * args.frame_len, 256, 256))
+    # for i in range(args.frame_len):
+    #     obs, reward, done, info = env.step(np.random.randint(args.num_actions))
+    #     true_obs[i * 3: (i + 1) * 3] = (obs.transpose(2, 0, 1) - args.obs_avg) / args.obs_std
 
     return true_obs
 
@@ -56,7 +58,7 @@ def naive_driver(args, info):
         return 0
     elif info['angle'] < -args.safe_angle or (info['trackPos'] > args.safe_pos and info['angle'] < 0):
         return 2
-    return 1
+    return 1 # np.random.randint(args.num_actions)
 
 def init_dirs(args):
     if os.path.exists(args.log):
@@ -73,7 +75,7 @@ def clear_visualization_dir(args):
         os.system('rm %s/*' % args.visualize_dir)
 
 def init_variables(args):
-    inputs = Variable(torch.ones(args.num_steps + 1, args.batch_size, 9, 256, 256), requires_grad = False)
+    inputs = Variable(torch.ones(args.num_steps + 1, args.batch_size, 3, 256, 256), requires_grad = False)
     outputs = Variable(torch.ones(args.num_steps + 1, args.batch_size, 4, 256, 256), requires_grad = False)
     prediction = Variable(torch.ones(args.num_steps + 1, args.batch_size, 4, 256, 256), requires_grad = False)
     feature_map = Variable(torch.ones(args.num_steps + 1, args.batch_size, 4, 32, 32), requires_grad = False)
@@ -120,6 +122,7 @@ def from_variable_to_numpy(x):
     return x
 
 def generate_action_sample(args, prob, batch_size, length, LAST_ACTION = 1):
+    # start_time = time.time()
     all_actions = torch.zeros(length, batch_size).type(torch.LongTensor)
     all_actions[0] = prob[LAST_ACTION].multinomial(num_samples = batch_size, replacement=True).data
     # if torch.cuda.is_available():
@@ -131,9 +134,11 @@ def generate_action_sample(args, prob, batch_size, length, LAST_ACTION = 1):
             if indices[action].numel() > 0:
                 all_actions[step, indices[action]] = prob[action].multinomial(num_samples = indices[action].numel(), replacement=True).data
 
+    # print('Gerenating action samples takes %0.2f seconds.' % (time.time() - start_time))
     return all_actions
 
 def generate_probs(args, all_actions, last_action = 1):
+    # start_time = time.time()
     all_actions = from_variable_to_numpy(all_actions)
     prob_map = np.concatenate((np.expand_dims(last_action * args.num_actions + all_actions[:, 0], axis = 1), all_actions[:, :-1] * args.num_actions + all_actions[:, 1:]), axis = 1)
     prob = torch.histc(torch.from_numpy(prob_map).type(torch.Tensor), bins = args.num_actions * args.num_actions).view(args.num_actions, args.num_actions)
@@ -144,11 +149,13 @@ def generate_probs(args, all_actions, last_action = 1):
     prob[prob.sum(dim = 1) == 0, :] = 1
     prob /= prob.sum(dim = 1).unsqueeze(1)
 
+    # print('Gerenating probability distribution takes %0.2f seconds.' % (time.time() - start_time))
+
     return prob
 
 def sample_action(args, true_obs, model, predictor, further, prev_action = 1):
-    # start_time = time.time()
-    obs = np.repeat(np.expand_dims(true_obs, axis = 0), args.batch_size, axis = 0)
+    start_time = time.time()
+    obs = np.repeat(np.expand_dims(true_obs, axis = 0), args.action_batch_size, axis = 0)
     obs = Variable(torch.from_numpy(obs), requires_grad = False).type(torch.Tensor)
     prob = torch.ones(args.num_actions, args.num_actions) / float(args.num_actions)
     # if torch.cuda.is_available():
@@ -157,29 +164,29 @@ def sample_action(args, true_obs, model, predictor, further, prev_action = 1):
 
     with torch.no_grad():
         for i in range(6):
-            all_actions = generate_action_sample(args, prob, 6 * args.batch_size, args.num_steps, prev_action)
-            all_losses = np.zeros(6 * args.batch_size)
+            all_actions = generate_action_sample(args, prob, 6 * args.action_batch_size, args.num_steps, prev_action)
+            all_losses = np.zeros(6 * args.action_batch_size)
 
             for ii in range(6):
-                actions = Variable(all_actions[:, ii * args.batch_size: (ii + 1) * args.batch_size], requires_grad = False)
+                actions = Variable(all_actions[:, ii * args.action_batch_size: (ii + 1) * args.action_batch_size], requires_grad = False)
                 pos_loss, angle_loss = get_action_loss(args, model, predictor, further, obs, actions)
-                all_losses[ii * args.batch_size: (ii + 1) * args.batch_size] = pos_loss + angle_loss
+                all_losses[ii * args.action_batch_size: (ii + 1) * args.action_batch_size] = pos_loss + angle_loss
 
             if i < 5:
-                indices = np.argsort(all_losses)[:args.batch_size]
+                indices = np.argsort(all_losses)[:args.action_batch_size]
                 prob = generate_probs(args, all_actions[:, indices], prev_action)
             else:
                 idx = np.argmin(all_losses)
                 which_action = int(from_variable_to_numpy(all_actions)[0, idx])
 
-    # print(time.time() - start_time, which_action)
+    print('Sampling takes %0.2f seconds, selected action: %d.' % (time.time() - start_time, which_action))
     return which_action
 
 def get_action_loss(args, model, predictor, further, obs, actions):
-    output_pos = Variable(torch.zeros(args.num_steps + 1, args.batch_size), requires_grad = False)
-    output_angle = Variable(torch.zeros(args.num_steps + 1, args.batch_size), requires_grad = False)
-    target_pos = Variable(torch.zeros(args.batch_size), requires_grad = False)
-    target_angle = Variable(torch.zeros(args.batch_size), requires_grad = False)
+    output_pos = Variable(torch.zeros(args.num_steps + 1, args.action_batch_size), requires_grad = False)
+    output_angle = Variable(torch.zeros(args.num_steps + 1, args.action_batch_size), requires_grad = False)
+    target_pos = Variable(torch.zeros(args.action_batch_size), requires_grad = False)
+    target_angle = Variable(torch.zeros(args.action_batch_size), requires_grad = False)
     if torch.cuda.is_available():
         output_pos = output_pos.cuda()
         output_angle = output_angle.cuda()
@@ -198,7 +205,17 @@ def get_action_loss(args, model, predictor, further, obs, actions):
         weight *= args.loss_decay
         feature_map = predictor(feature_map, actions[i - 1])
         output_pos, output_angle = further(feature_map)
-        pos_loss = L2(output_pos, target_pos)
-        angle_loss = L2(output_angle, target_angle)
+        pos_loss += L2(output_pos, target_pos)
+        angle_loss += L2(output_angle, target_angle)
 
     return from_variable_to_numpy(pos_loss), from_variable_to_numpy(angle_loss)
+
+def load(path):
+    state_dict = torch.load(path)
+    target_state_dict = OrderedDict()
+    for k, v in state_dict.items():
+        if k[0:7] == 'module.':
+            target_state_dict[k[7:]] = v
+        else:
+            target_state_dict[k] = v
+    return target_state_dict

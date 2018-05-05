@@ -1,5 +1,6 @@
 from __future__ import division, print_function
 import numpy as np
+np.set_printoptions(formatter = {'float_kind': lambda x: "%.6f" % x})
 import torch
 import torch.nn as nn
 from py_TORCS import torcs_envs
@@ -7,7 +8,7 @@ from py_TORCS import torcs_envs
 from model import DRNSeg, UP_Samper, PRED, FURTHER
 from train import train
 from test import test
-from utils import init_dirs
+from utils import init_dirs, load
 
 import os
 import argparse
@@ -27,19 +28,25 @@ if __name__ == '__main__':
     np.random.seed(args.seed)
     torch.manual_seed(args.seed)
     init_dirs(args)
-    np.set_printoptions(formatter = {'float_kind': lambda x: "%.6f" % x})
-
+    if args.use_seg:
+        args.semantic_classes = 16
+    
     model = DRNSeg('drn_d_22', args.semantic_classes)
     up = UP_Samper()
-    predictor = PRED(args.num_actions)
+    predictor = PRED(args.semantic_classes, args.num_actions)
     further = FURTHER()
     env = torcs_envs(num = 1, isServer = 0, mkey_start = 800, resize = True).get_envs()[0]
 
-    if not args.train or args.load:
-        model.load_state_dict(torch.load(os.path.join(args.model_dir, 'model_epoch%d.dat' % latest_epoch)))
-        up.load_state_dict(torch.load(os.path.join(args.model_dir, 'up_epoch%d.dat' % latest_epoch)))
-        predictor.load_state_dict(torch.load(os.path.join(args.model_dir, 'predictor_epoch%d.dat' % latest_epoch)))
-        further.load_state_dict(torch.load(os.path.join(args.model_dir, 'further_epoch%d.dat' % latest_epoch)))
+    # model.load_state_dict(load(os.path.join('pretrained_models', '006', 'model.dat')))
+    # up.load_state_dict(load(os.path.join('pretrained_models', '006', 'up.dat')))
+    # predictor.load_state_dict(load(os.path.join('pretrained_models', '006', 'predictor.dat')))
+    # further.load_state_dict(load(os.path.join('pretrained_models', '006', 'further.dat')))
+
+    # if not args.train or args.load:
+    #     model.load_state_dict(torch.load(os.path.join(args.model_dir, 'model_epoch%d.dat' % latest_epoch)))
+    #     up.load_state_dict(torch.load(os.path.join(args.model_dir, 'up_epoch%d.dat' % latest_epoch)))
+    #     predictor.load_state_dict(torch.load(os.path.join(args.model_dir, 'predictor_epoch%d.dat' % latest_epoch)))
+    #     further.load_state_dict(torch.load(os.path.join(args.model_dir, 'further_epoch%d.dat' % latest_epoch)))
 
     if torch.cuda.is_available():
         model = nn.DataParallel(model.cuda())

@@ -1,0 +1,3 @@
+[submodule "pyTORCS"]
+	path = pyTORCS
+	url = https://github.com/cxy1997/pyTORCS
