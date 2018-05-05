@@ -29,7 +29,7 @@ class DQN(nn.Module):
     def __init__(self, args, num_actions=11):
         super(DQN, self).__init__()
         self.args = args
-        self.dqn = _DQN(args, num_actions=11)
+        self.dqn = _DQN(args, num_actions)
 
     def forward(self, x):
         return self.dqn(x)
