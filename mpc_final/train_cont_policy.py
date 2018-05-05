@@ -5,6 +5,7 @@ from dqn_utils import *
 from mpc_utils import *
 import copy
 import cv2
+from utils import *
 
 class TorcsWrapper:
     def __init__(self, env, imsize=(256, 256)):
