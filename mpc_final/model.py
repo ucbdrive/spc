@@ -7,7 +7,6 @@ import drn
 import dla
 import math
 import pdb
-from PRED import PRED
 
 class atari_model(nn.Module):
     def __init__(self, inc=12, num_actions=9, frame_history_len=4):
