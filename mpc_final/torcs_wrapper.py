@@ -1,6 +1,7 @@
 from utils import *
 import cv2
 import numpy as np
+import pdb
 
 class TorcsWrapper:
     def __init__(self, env, imsize=(256, 256)):
@@ -31,7 +32,6 @@ class TorcsWrapper:
         reward['without_pos'] = reward_without_pos
         info['off_flag'] = off_flag
         info['coll_flag'] = coll_flag
-
         return obs, reward, done, info
 
     def close(self):

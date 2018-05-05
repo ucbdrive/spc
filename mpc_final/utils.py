@@ -98,9 +98,10 @@ def train_model(train_net, mpc_buffer, batch_size, epoch, avg_img_t, std_img_t, 
     if use_seg == False:
         pred_ls = nn.L1Loss()(seg_out, nximg_enc).sum()
     else:
-        seg_out = seg_out.permute(0,1,3,4,2).view(-1, 4)
-        seg_batch = seg_batch.permute(0, 1, 3, 4, 2).view(-1, 1)
-        pred_ls = nn.CrossEntropyLoss()(seg_out, seg_batch)
+        seg_out = seg_out.permute(0,1,3,4,2).contiguous()#.view(-1, 4)
+        seg_out = nn.Softmax(dim=-1)(seg_out)
+        seg_batch = seg_batch.permute(0, 1, 3, 4, 2)#.view(-1, 1)
+        pred_ls = nn.CrossEntropyLoss()(seg_out.view(-1,4), seg_batch.view(-1))
     loss = pred_ls + coll_ls + offroad_ls + 10*dist_ls
     if use_xyz:
         xyz_loss = nn.MSELoss()(xyz_out, xyz_batch)
@@ -135,10 +136,10 @@ class DoneCondition:
         if abs(pos) >= 30.0:
             return True
         self.pos.append(list(posxyz))
-        real_pos = np.concatenate(self.pos[-50:])
+        real_pos = np.concatenate(self.pos[-200:])
         real_pos = real_pos.reshape(-1,3)
         std = np.sum(np.std(real_pos, 0))
-        if std < 3.0 and len(self.pos) > 50:
+        if std < 2.0 and len(self.pos) > 200:
             self.pos = []
             return True
         return False 
