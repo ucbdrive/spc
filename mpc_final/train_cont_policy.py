@@ -100,6 +100,7 @@ def train_policy(args,
         speed_list, pos_list = get_info_ls(prev_info)
         xyz = np.array(info['pos']) if use_xyz else None
         rela_xyz = xyz-prev_xyz
+        prev_xyz = xyz
         seg = env.env.get_segmentation().reshape((1,256,256)) if use_seg else None
         mpc_buffer.store_effect(ret, action, done, coll_flag, offroad_flag, speed_list[0], speed_list[1], pos_list[0], rela_xyz, seg)
         rewards_with += reward['with_pos']
