@@ -86,8 +86,7 @@ class MPCBuffer(object):
         coll_batch = np.concatenate([np.concatenate([self.coll[idx+ii,:][np.newaxis,:] for ii in range(self.pred_step)], 0)[np.newaxis,:] for idx in idxes], 0)
         pos_batch = np.concatenate([np.concatenate([self.pos[idx+ii,:][np.newaxis,:] for ii in range(self.pred_step+1)],0)[np.newaxis,:] for idx in idxes], 0)
         angle_batch = np.concatenate([np.concatenate([self.angle[idx+ii,:][np.newaxis,:] for ii in range(self.pred_step+1)],0)[np.newaxis,:] for idx in idxes], 0)
-        dist_batch = sp_batch*(np.cos(angle_batch)-np.abs(np.sin(angle_batch))-((np.abs(pos_batch))/7.0)**1.0)-10*np.exp(np.abs(angle_batch)) 
-        # dist_batch = sp_batch*(-np.exp(np.abs(angle_batch))-np.abs(pos_batch-3)/9.0)
+        dist_batch = sp_batch*(np.cos(angle_batch)-np.abs(np.sin(angle_batch))) 
         if self.use_xyz:
             xyz_batch = np.concatenate([np.concatenate([self.xyz[idx+ii,:][np.newaxis,:] for ii in range(self.pred_step)],0)[np.newaxis,:] for idx in idxes], 0)
         else:
