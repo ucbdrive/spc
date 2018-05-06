@@ -39,7 +39,10 @@ def train_model_imitation(train_net, mpc_buffer, batch_size, epoch, avg_img_t, s
         x, idxes = mpc_buffer.sample(batch_size, sample_early = False)
     x = list(x)
     for ii in range(len(x)):
-        x[ii] = torch.from_numpy(x[ii]).float().cuda()
+        try:
+            x[ii] = torch.from_numpy(x[ii]).float().cuda()
+        except:
+            pass
     act_batch = Variable(x[0], requires_grad = False)
     coll_batch = Variable(x[1], requires_grad=False)
     offroad_batch = Variable(x[3], requires_grad=False)
@@ -99,7 +102,7 @@ def train_model(train_net, mpc_buffer, batch_size, epoch, avg_img_t, std_img_t, 
         pred_ls = nn.L1Loss()(seg_out, nximg_enc).sum()
     else:
         seg_out = seg_out.permute(0,1,3,4,2).contiguous()#.view(-1, 4)
-        seg_out = nn.Softmax(dim=-1)(seg_out)
+        #seg_out = nn.Softmax(dim=-1)(seg_out)
         seg_batch = seg_batch.permute(0, 1, 3, 4, 2)#.view(-1, 1)
         pred_ls = nn.CrossEntropyLoss()(seg_out.view(-1,4), seg_batch.view(-1))
     loss = pred_ls + coll_ls + offroad_ls + 10*dist_ls
@@ -133,13 +136,13 @@ class DoneCondition:
             self.off_cnt = 0
         if self.off_cnt > self.size:
             return True
-        if abs(pos) >= 30.0:
+        if abs(pos) >= 15.0:
             return True
         self.pos.append(list(posxyz))
-        real_pos = np.concatenate(self.pos[-200:])
+        real_pos = np.concatenate(self.pos[-50:])
         real_pos = real_pos.reshape(-1,3)
         std = np.sum(np.std(real_pos, 0))
-        if std < 2.0 and len(self.pos) > 200:
+        if std < 2.0 and len(self.pos) > 50:
             self.pos = []
             return True
         return False 
