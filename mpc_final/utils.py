@@ -75,7 +75,8 @@ def train_model(train_net, mpc_buffer, batch_size, epoch, avg_img_t, std_img_t, 
         x, idxes = mpc_buffer.sample(batch_size, sample_early = False)
     x = list(x)
     for iii in range(len(x)):
-        x[iii] = torch.from_numpy(x[iii]).float().cuda()
+        if x[iii] is not None:
+            x[iii] = torch.from_numpy(x[iii]).float().cuda()
     act_batch = Variable(x[0], requires_grad=False)
     coll_batch = Variable(x[1], requires_grad=False)
     offroad_batch = Variable(x[3], requires_grad=False)
