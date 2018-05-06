@@ -7,6 +7,7 @@ import drn
 import dla
 import math
 import pdb
+from PRED import PRED
 
 class atari_model(nn.Module):
     def __init__(self, inc=12, num_actions=9, frame_history_len=4):
@@ -121,6 +122,7 @@ class ConvLSTMNet(nn.Module):
             self.feature_map_fc1 = nn.Linear(1024, 1024)
             self.feature_map_fc2 = nn.Linear(1024, self.hidden_dim)
             self.up_scale = nn.Linear(self.hidden_dim+self.info_dim, 32*32*num_classes)
+            self.pred = PRED(num_classes, num_actions)
         else:
             self.dla = dla.dla46x_c(pretrained=pretrained)
             self.feature_encode = nn.Linear(256 * frame_history_len, self.hidden_dim)
@@ -144,10 +146,11 @@ class ConvLSTMNet(nn.Module):
             self.fc_xyz_2 = nn.Linear(128 + info_dim, 32)
             self.fc_xyz_3 = nn.Linear(32 + info_dim, 3)
      
-    def pred_seg(self, x):
+    def pred_seg(self, x, action):
         res = []
         batch_size = x.size(0)
         x = x.view(batch_size, self.num_classes, 32, 32)
+        x = self.pred(x, action)
         out = self.up_sampler(x)
         return out
 
@@ -175,7 +178,7 @@ class ConvLSTMNet(nn.Module):
         ''' next feature encoding: seg_pred ''' 
         if self.use_seg:
             seg_feat = self.up_scale(F.relu(hidden_enc))
-            seg_pred = self.pred_seg(seg_feat)
+            seg_pred = self.pred_seg(seg_feat, action)
         else:
             seg_pred = self.outfeature_encode(F.relu(hidden_enc))
 
