@@ -39,10 +39,8 @@ def train_model_imitation(train_net, mpc_buffer, batch_size, epoch, avg_img_t, s
         x, idxes = mpc_buffer.sample(batch_size, sample_early = False)
     x = list(x)
     for ii in range(len(x)):
-        try:
+        if x[ii] is not None:
             x[ii] = torch.from_numpy(x[ii]).float().cuda()
-        except:
-            pass
     act_batch = Variable(x[0], requires_grad = False)
     coll_batch = Variable(x[1], requires_grad=False)
     offroad_batch = Variable(x[3], requires_grad=False)
