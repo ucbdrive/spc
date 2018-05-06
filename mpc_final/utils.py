@@ -84,7 +84,7 @@ def train_model(train_net, mpc_buffer, batch_size, epoch, avg_img_t, std_img_t, 
         pred_ls = nn.CrossEntropyLoss()(seg_out.view(-1,4), seg_batch.view(-1))
     loss = pred_ls + coll_ls + offroad_ls + 10*dist_ls
     if use_xyz:
-        xyz_loss = nn.MSELoss()(xyz_out, xyz_batch)
+        xyz_loss = torch.sqrt(nn.MSELoss()(xyz_out, xyz_batch))
         loss += xyz_loss
     else:
         xyz_loss = Variable(torch.zeros(1))
