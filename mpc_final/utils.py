@@ -323,8 +323,8 @@ def get_action_loss(args, net, imgs, actions, target = None, hidden = None, cell
         target = dict()
         target_coll_np = np.zeros((args.pred_step, 2))
         target_coll_np[:, 0] = 1.0
-        target['coll_prob'] = Variable(torch.from_numpy(target_coll_np).float(), requires_grad = False).cuda()
-        target['offroad_prob'] = Variable(torch.from_numpy(target_coll_np).float(), requires_grad = False).cuda()
+        target['coll_batch'] = Variable(torch.from_numpy(target_coll_np).float(), requires_grad = False).cuda()
+        target['off_batch'] = Variable(torch.from_numpy(target_coll_np).float(), requires_grad = False).cuda()
 
     weight = (0.97 ** np.arange(args.pred_step)).reshape((1, args.pred_step, 1))
     weight = Variable(torch.from_numpy(weight).float().cuda()).repeat(batch_size, 1, 1)
