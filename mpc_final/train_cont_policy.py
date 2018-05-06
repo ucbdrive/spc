@@ -87,11 +87,11 @@ def train_policy(args,
         else:
             action = np.random.rand(num_total_act) * 2 - 1
         action = np.clip(action, -1, 1)
-        action[0] = np.abs(action[0])
         if use_dqn:
             if abs(action[1]) <= dqn_action * 0.1:
                 action[1] = 0
         obs, reward, done, info = env.step(action)
+        img_buffer.store_frame(obs)
         print('action', "{0:.2f}".format(action[0]), "{0:.2f}".format(action[1]), ' pos ', "{0:.2f}".format(info['trackPos']), "{0:.2f}".format(info['pos'][0]), "{0:.2f}".format(info['pos'][1]),\
             ' reward ', "{0:.2f}".format(reward['with_pos']))
         prev_act = action
