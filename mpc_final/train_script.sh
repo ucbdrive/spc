@@ -2,4 +2,6 @@
 python train_torcs.py \
     --normalize \
     --num-total-act 2 \
-    --with-dla 
+    --with-dla \
+    --use-xyz \
+    --use-dqn  
