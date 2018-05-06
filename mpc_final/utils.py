@@ -60,10 +60,10 @@ def train_model(train_net, mpc_buffer, batch_size, epoch, avg_img_t, std_img_t, 
     coll_batch = Variable(x[1], requires_grad=False)
     offroad_batch = Variable(x[3], requires_grad=False)
     dist_batch = Variable(x[4])
-    img_batch = Variable(((x[5].float()-avg_img_t)/(std_img_t+0.0001)), requires_grad=False)
-    nximg_batch = Variable(((x[6].float()-avg_img_t)/(std_img_t+0.0001)), requires_grad=False)
-    #img_batch = Variable(x[5].float(), requires_grad=False)/255.0
-    #nximg_batch = Variable(x[6].float(), requires_grad=False)/255.0
+    #img_batch = Variable(((x[5].float()-avg_img_t)/(std_img_t+0.0001)), requires_grad=False)
+    #nximg_batch = Variable(((x[6].float()-avg_img_t)/(std_img_t+0.0001)), requires_grad=False)
+    img_batch = Variable(x[5].float(), requires_grad=False)/255.0
+    nximg_batch = Variable(x[6].float(), requires_grad=False)/255.0
     if use_xyz:
         xyz_batch = Variable(x[8], requires_grad=False)
     if use_seg:
@@ -133,7 +133,8 @@ class ObsBuffer:
         self.last_obs_all = []
 
     def store_frame(self, frame, avg_img, std_img):
-        obs_np = (frame-avg_img)/(std_img+0.0001)
+        #obs_np = (frame-avg_img)/(std_img+0.0001)
+        obs_np = frame/255.0
         obs_np = obs_np.transpose(2,0,1)
         if len(self.last_obs_all) < self.frame_history_len:
             self.last_obs_all = []
