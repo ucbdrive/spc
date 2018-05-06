@@ -189,10 +189,10 @@ class ConvLSTMNet(nn.Module):
                 out = out.squeeze().view(batch_size, -1)
                 res.append(out)
             res = torch.cat(res, dim = 1)
-            print('before encode')
-            print(res)
-            print('after encode')
-            print(res)
+            # print('before encode')
+            # print(res)
+            # print('after encode')
+            # print(res)
             res = self.feature_encode(res)
         return res 
 

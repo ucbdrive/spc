@@ -101,15 +101,19 @@ def train_model(args, train_net, mpc_buffer, epoch, avg_img_t, std_img_t):
     if args.use_pos:
         pos_loss = torch.sqrt(nn.MSELoss()(output['pos'], target['pos_batch']))
         loss += pos_loss
+        print('pos ls', pos_loss.data.cpu().numpy())
     if args.use_angle:
         angle_loss = torch.sqrt(nn.MSELoss()(output['angle'], target['angle_batch']))
         loss += angle_loss
+        print('angle ls', angle_loss.data.cpu().numpy())
     if args.use_speed:
         speed_loss = torch.sqrt(nn.MSELoss()(output['speed'], target['speed_batch']))
         loss += speed_loss
+        print('speed ls', speed_loss.data.cpu().numpy())
     if args.use_xyz:
         xyz_loss = torch.sqrt(nn.MSELoss()(output['xyz'], target['xyz_batch']))
         loss += xyz_loss
+        print('xyz ls', xyz_loss.data.cpu().numpy())
     loss_value = float(loss.data.cpu().numpy())
     if np.isnan(loss_value):
         pdb.set_trace()
@@ -118,7 +122,6 @@ def train_model(args, train_net, mpc_buffer, epoch, avg_img_t, std_img_t):
     print('coll ls', coll_ls.data.cpu().numpy())
     print('offroad ls', offroad_ls.data.cpu().numpy())
     print('dist ls', dist_ls.data.cpu().numpy())
-    print('xyz ls', xyz_loss.data.cpu().numpy())
     #if use_seg:
     #    seg_loss = sum([nn.CrossEntropyLoss()(seg_out[:, i], seg_batch[:, i]) for i in range(pred_step)])
     #    loss += seg_loss
