@@ -303,7 +303,7 @@ def sample_cont_action(args, net, imgs, prev_action = None):
     cnt = 0
     optimizer = optim.Adam([this_action], lr = 0.06)
     while sign:
-        loss = get_action_loss(args, net, imgs, this_action, None, None)
+        loss = get_action_loss(args, net, imgs, this_action, None, None, None)
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
@@ -320,17 +320,18 @@ def sample_cont_action(args, net, imgs, prev_action = None):
 def get_action_loss(args, net, imgs, actions, target = None, hidden = None, cell = None, gpu = 0):
     batch_size = int(imgs.size()[0])
     if target is None:
+        target = dict()
         target_coll_np = np.zeros((args.pred_step, 2))
         target_coll_np[:, 0] = 1.0
-        target['coll'] = Variable(torch.from_numpy(target_coll_np).float(), requires_grad = False).cuda()
-        target['off'] = Variable(torch.from_numpy(target_coll_np).float(), requires_grad = False).cuda()
+        target['coll_prob'] = Variable(torch.from_numpy(target_coll_np).float(), requires_grad = False).cuda()
+        target['offroad_prob'] = Variable(torch.from_numpy(target_coll_np).float(), requires_grad = False).cuda()
 
     weight = (0.97 ** np.arange(args.pred_step)).reshape((1, args.pred_step, 1))
     weight = Variable(torch.from_numpy(weight).float().cuda()).repeat(batch_size, 1, 1)
     output = net(imgs, actions, hidden = hidden, cell = cell)
 
     coll_ls = nn.CrossEntropyLoss(reduce = False)(output['coll_prob'].view(-1, 2), torch.max(target['coll_batch'].view(-1, 2), -1)[1])
-    off_ls = nn.CrossEntropyLoss(reduce = False)(output['coll_prob'].view(-1, 2), torch.max(target['off_batch'].view(-1, 2), -1)[1])
+    off_ls = nn.CrossEntropyLoss(reduce = False)(output['offroad_prob'].view(-1, 2), torch.max(target['off_batch'].view(-1, 2), -1)[1])
     coll_ls = (coll_ls.view(-1, args.pred_step, 1) * weight).view(-1, args.pred_step).sum(-1)
     off_ls = (off_ls.view(-1, args.pred_step, 1) * weight).view(-1, args.pred_step).sum(-1)
     dist_ls = (output['dist'].view(-1, args.pred_step, 1) * weight).view(-1, args.pred_step).sum(-1)
