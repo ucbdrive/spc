@@ -53,7 +53,7 @@ def train_policy(args,
     )
 
     if use_dqn:
-        dqn_agent = DQNAgent(frame_history_len, 11, args.lr, exploration, args.save_path)
+        dqn_agent = DQNAgent(frame_history_len, 10, args.lr, exploration, args.save_path)
         if args.resume:
             dqn_agent.load_model()
         
