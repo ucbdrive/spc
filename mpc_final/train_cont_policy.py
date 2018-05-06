@@ -1,6 +1,7 @@
 from model import *
 import torch
 import gym
+import math
 from dqn_utils import *
 from mpc_utils import *
 import copy
@@ -93,7 +94,7 @@ def train_policy(args, env, num_steps=40000000, save_path='model'):
             rela_xyz = None
 
         seg = env.env.get_segmentation().reshape((1,256,256)) if args.use_seg else None
-        mpc_buffer.store_effect(ret, action, done, coll_flag, offroad_flag, info['speed'] / 20.0, info['angle'] / 0.5, pos_list[0] / 7.0, rela_xyz, seg)
+        mpc_buffer.store_effect(ret, action, done, coll_flag, offroad_flag, info['speed'] / 20.0, info['angle'] / math.pi, pos_list[0] / 7.0, rela_xyz, seg)
         rewards_with += reward['with_pos']
         rewards_without += reward['without_pos']
 
