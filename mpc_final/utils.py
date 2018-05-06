@@ -297,17 +297,19 @@ def sample_cont_action(args, net, imgs, prev_action = None):
     prev_loss = 1000
     sign = True
     cnt = 0
+    optimizer = optim.Adam([this_action], lr = 0.06)
     while sign:
-        net.zero_grad()
         loss = get_action_loss(args, net, imgs, this_action, None, None)
+        optimizer.zero_grad()
         loss.backward()
+        optimizer.step()
+
         this_loss = float(loss.data.cpu().numpy())
         if cnt >= 10 and (np.abs(prev_loss-this_loss)/prev_loss <= 0.0005 or this_loss > prev_loss):
             sign = False
             return this_action.data.cpu().numpy()[0,0,:].reshape(-1)
         cnt += 1 
-        this_action.data -= 0.01 * torch.sign(this_action.grad.data)
-        this_action.data.clamp(-1,1)# = torch.clamp(this_action, -1, 1)
+        this_action.data.clamp(-1, 1)# = torch.clamp(this_action, -1, 1)
         prev_loss = this_loss
     return this_action.data.cpu().numpy()[0,0,:].reshape(-1) 
 

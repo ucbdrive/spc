@@ -61,7 +61,7 @@ class MPCBuffer(object):
         return res
 
     def sample_done(self, idx):
-        if idx < 10 or idx >= self.num_in_buffer - self.args.pred_step-10:
+        if idx < 10 or idx >= self.num_in_buffer - self.args.pred_step - 10:
             return False
         else:
             done_list = self.done[idx - self.args.frame_history_len + 1: idx - self.args.frame_history_len + 1 + self.args.pred_step]
@@ -100,7 +100,7 @@ class MPCBuffer(object):
         if sample_early == False:
             idxes = self.sample_n_unique(lambda: random.randint(0, self.num_in_buffer - 2), batch_size)
         else:
-            idxes = self.sample_n_unique(lambda: random.randint(0, int(self.num_in_buffer/3)-2), batch_size)
+            idxes = self.sample_n_unique(lambda: random.randint(0, int(self.num_in_buffer / 3) - 2), batch_size)
         return self._encode_sample(idxes), idxes
 
     def store_loss(self, losses, idxes):
