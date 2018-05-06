@@ -30,6 +30,9 @@ parser.add_argument('--target-update-freq', type=int, default=100)
 parser.add_argument('--batch-step', type=int, default=400)
 parser.add_argument('--with-dla', action='store_true')
 parser.add_argument('--resume', type = bool, default = False)
+parser.add_argument('--use-seg', action='store_true')
+parser.add_argument('--use-xyz', action='store_true')
+parser.add_argument('--use-dqn', action='store_true')
 
 if __name__ == '__main__':
     args = parser.parse_args()
@@ -54,7 +57,7 @@ if __name__ == '__main__':
                  save_freq=10,
                  frame_history_len=3,
                  num_total_act=2,
-                 use_seg=True,
-                 use_xyz=True,
-                 use_dqn=True)
+                 use_seg=args.use_seg,
+                 use_xyz=args.use_xyz,
+                 use_dqn=args.use_dqn)
     env.close()
