@@ -62,6 +62,8 @@ def train_model(train_net, mpc_buffer, batch_size, epoch, avg_img_t, std_img_t, 
     dist_batch = Variable(x[4])
     img_batch = Variable(((x[5].float()-avg_img_t)/(std_img_t+0.0001)), requires_grad=False)
     nximg_batch = Variable(((x[6].float()-avg_img_t)/(std_img_t+0.0001)), requires_grad=False)
+    #img_batch = Variable(x[5].float(), requires_grad=False)/255.0
+    #nximg_batch = Variable(x[6].float(), requires_grad=False)/255.0
     if use_xyz:
         xyz_batch = Variable(x[8], requires_grad=False)
     if use_seg:
@@ -86,8 +88,9 @@ def train_model(train_net, mpc_buffer, batch_size, epoch, avg_img_t, std_img_t, 
     if use_xyz:
         xyz_loss = torch.sqrt(nn.MSELoss()(xyz_out, xyz_batch))
         loss += xyz_loss
-    else:
-        xyz_loss = Variable(torch.zeros(1))
+    loss_value = float(loss.data.cpu().numpy())
+    if np.isnan(loss_value):
+        pdb.set_trace()
     #if use_seg:
     #    seg_loss = sum([nn.CrossEntropyLoss()(seg_out[:, i], seg_batch[:, i]) for i in range(pred_step)])
     #    loss += seg_loss
@@ -116,10 +119,10 @@ class DoneCondition:
         if abs(pos) >= 15.0:
             return True
         self.pos.append(list(posxyz))
-        real_pos = np.concatenate(self.pos[-50:])
+        real_pos = np.concatenate(self.pos[-100:])
         real_pos = real_pos.reshape(-1,3)
         std = np.sum(np.std(real_pos, 0))
-        if std < 2.0 and len(self.pos) > 50:
+        if std < 2.0 and len(self.pos) > 100:
             self.pos = []
             return True
         return False 
@@ -273,7 +276,7 @@ def sample_cont_action(net, imgs, prev_action=None, num_time=15):
             sign = False
             return this_action.data.cpu().numpy()[0,0,:].reshape(-1)
         cnt += 1 
-        this_action.data -= 0.01 * this_action.grad.data
+        this_action.data -= 0.01 * torch.sign(this_action.grad.data)
         this_action.data.clamp(-1,1)# = torch.clamp(this_action, -1, 1)
         prev_loss = this_loss
     return this_action.data.cpu().numpy()[0,0,:].reshape(-1) 
