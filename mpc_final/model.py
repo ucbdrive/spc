@@ -8,6 +8,8 @@ import dla
 import math
 import pdb
 from PRED import PRED
+from end_layer import end_layer
+from utils import weights_init
 
 class atari_model(nn.Module):
     def __init__(self, inc=12, num_actions=9, frame_history_len=4):
@@ -67,84 +69,58 @@ class ConvLSTMCell(nn.Module):
 
 class DRNSeg(nn.Module):
     ''' Network For Feature Extraction for Segmentation Prediction '''
-    def __init__(self, model_name, num_classes=4, pretrained=False):
+    def __init__(self, args):
         super(DRNSeg, self).__init__()
-        model = drn.__dict__.get(model_name)(pretrained=pretrained, num_classes=1000)
+        model = drn.__dict__.get(args.drn_model)(pretrained = args.pretrained, num_classes = 1000)
         self.model = nn.Sequential(*list(model.children())[:-2])
-        self.seg = nn.Conv2d(model.out_dim, num_classes, kernel_size=1, bias=True)
+        self.seg = nn.Conv2d(model.out_dim, args.classes, kernel_size=1, bias=True)
         
-        # initialization
-        m = self.seg
-        n = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
-        self.seg.weight.data.normal_(0, math.sqrt(2. / n))
-        self.seg.bias.data.zero_()
+        # Initialization
+        self.apply(weights_init)
 
     def forward(self, x):
         x = self.model(x)
         feature_map = self.seg(x)
-        return feature_map # size: None * 4 * 32 * 32
-
-class UP_Sampler(nn.Module):
-    def __init__(self, num_classes):
-        super(UP_Sampler, self).__init__()
-        self.up = nn.ConvTranspose2d(num_classes, num_classes, 16, stride=8, padding=4,
-                                output_padding=0, groups=4, bias=False)
-        
-    def forward(self, feature_map):
-        out = self.up(feature_map)
-        return out # segmentation
+        return feature_map # size: batch_size x classes x 32 x 32
 
 class ConvLSTMNet(nn.Module):
-    def __init__(self, num_actions=2,
-                pretrained=True,
-                frame_history_len=4,
-                use_seg=True,
-                use_xyz=True,
-                model_name='drn_d_22',
-                num_classes=4,
-                hidden_dim=512,
-                info_dim=16):
+    def __init__(self, args):
         super(ConvLSTMNet, self).__init__()
-        self.frame_history_len = frame_history_len
-        self.use_seg = use_seg
-        self.use_xyz = use_xyz
-        self.hidden_dim = hidden_dim
-        self.info_dim = info_dim
-        self.num_classes = num_classes
+        self.args = args
 
         # feature extraction part
-        if use_seg:
-            self.drnseg = DRNSeg(model_name, num_classes, pretrained)
-            self.up_sampler = UP_Sampler(num_classes)
-            self.feature_map_conv1 = nn.Conv2d(num_classes * frame_history_len, 16, 5, stride = 1, padding = 2)
+        if args.use_seg:
+            self.drnseg = DRNSeg(args)
+            self.up_sampler = lambda x: F.upsample(x, scale_factor = 8, mode = 'bilinear')
+            self.feature_map_conv1 = nn.Conv2d(args.classes * args.frame_history_len, 16, 5, stride = 1, padding = 2)
             self.feature_map_conv2 = nn.Conv2d(16, 32, 3, stride = 1, padding = 1)
             self.feature_map_conv3 = nn.Conv2d(32, 64, 3, stride = 1, padding = 1)
             self.feature_map_fc1 = nn.Linear(1024, 1024)
-            self.feature_map_fc2 = nn.Linear(1024, self.hidden_dim)
-            self.up_scale = nn.Linear(self.hidden_dim+self.info_dim, 32*32*num_classes)
-            self.pred = PRED(num_classes, num_actions)
+            self.feature_map_fc2 = nn.Linear(1024, args.hidden_dim)
+            self.up_scale = nn.Linear(args.hidden_dim + args.info_dim, 32 * 32 * args.classes)
+            self.pred = PRED(num_classes, args.num_total_act)
         else:
-            self.dla = dla.dla46x_c(pretrained=pretrained)
-            self.feature_encode = nn.Linear(256 * frame_history_len, self.hidden_dim)
-            self.outfeature_encode = nn.Linear(self.hidden_dim+self.info_dim, self.hidden_dim)
-        self.lstm = ConvLSTMCell(self.hidden_dim, self.hidden_dim, True)
-        self.action_encode = nn.Linear(num_actions, info_dim)
-        self.info_encode = nn.Linear(self.info_dim + self.hidden_dim, self.hidden_dim)
+            self.dla = dla.dla46x_c(pretrained = args.pretrained)
+            self.feature_encode = nn.Linear(256 * args.frame_history_len, args.hidden_dim)
+            self.outfeature_encode = nn.Linear(args.hidden_dim + args.info_dim, args.hidden_dim)
+        self.lstm = ConvLSTMCell(args.hidden_dim, args.hidden_dim, True)
+        self.action_encode = nn.Linear(args.num_total_act, args.info_dim)
+        self.info_encode = nn.Linear(args.info_dim + args.hidden_dim, args.hidden_dim)
         
-        # output layer
-        self.fc_coll_1 = nn.Linear(self.hidden_dim + self.info_dim, 128)
-        self.fc_coll_2 = nn.Linear(128 + info_dim, 32)
-        self.fc_coll_3 = nn.Linear(32 + info_dim, 2)
-        self.fc_off_1 = nn.Linear(self.hidden_dim + self.info_dim, 128)
-        self.fc_off_2 = nn.Linear(128 + info_dim, 32)
-        self.fc_off_3 = nn.Linear(32 + info_dim, 2)
-        self.fc_dist_1 = nn.Linear(self.hidden_dim + self.info_dim, 128)
-        self.fc_dist_2 = nn.Linear(128 + info_dim, 32)
-        self.fc_dist_3 = nn.Linear(32 + info_dim, 1)
-        if self.use_xyz:
-            self.fc_xyz_1 = nn.Linear(self.hidden_dim + self.info_dim, 128)
-            self.fc_xyz_2 = nn.Linear(128 + info_dim, 32)
-            self.fc_xyz_3 = nn.Linear(32 + info_dim, 3)
+        # output layers
+        self.coll_layer = end_layer(args.hidden_dim, args.info_dim, 2, nn.Softmax(dim = -1))
+        self.off_layer = end_layer(args.hidden_dim, args.info_dim, 2, nn.Softmax(dim = -1))
+        self.dist_layer = end_layer(args.hidden_dim, args.info_dim, 1)
+
+        # optional layers
+        if args.use_pos:
+            self.pos_layer = end_layer(args.hidden_dim, args.info_dim, 1)
+        if args.use_angle:
+            self.angle_layer = end_layer(args.hidden_dim, args.info_dim, 1)
+        if args.use_speed:
+            self.speed_layer = end_layer(args.hidden_dim, args.info_dim, 1)
+        if args.use_xyz:
+            self.xyz_layer = end_layer(args.hidden_dim, args.info_dim, 3)
      
     def pred_seg(self, x, action):
         res = []
@@ -157,7 +133,7 @@ class ConvLSTMNet(nn.Module):
     def forward(self, x, action, with_encode=False, hidden=None, cell=None):
         if with_encode == False:
             x = self.get_feature(x)
-            if self.use_seg:
+            if self.args.use_seg:
                 x = F.tanh(F.max_pool2d(self.feature_map_conv1(x), kernel_size = 2, stride = 2))
                 x = F.tanh(F.max_pool2d(self.feature_map_conv2(x), kernel_size = 2, stride = 2))
                 x = F.tanh(F.max_pool2d(self.feature_map_conv3(x), kernel_size = 2, stride = 2)) # 1x64x4x4
@@ -172,52 +148,43 @@ class ConvLSTMNet(nn.Module):
         hidden, cell = self.lstm(encode, [hidden, cell])
     
         # this is to be output as feature representation for next step no matter with seg or not
-        nx_feature_enc = hidden.view(-1, self.hidden_dim)
+        nx_feature_enc = hidden.view(-1, self.args.hidden_dim)
         hidden_enc = torch.cat([nx_feature_enc, action_enc], dim = 1)
        
         ''' next feature encoding: seg_pred ''' 
-        if self.use_seg:
+
+        # major outputs
+        output_dict = dict()
+        output_dict['coll_prob'] = self.coll_layer(hidden_enc, action_enc)
+        output_dict['offroad_prob'] = self.off_layer(hidden_enc, action_enc)
+        output_dict['dist'] = self.dist_layer(hidden_enc, action_enc)
+
+        # optional outputs
+        if self.args.use_seg:
             seg_feat = self.up_scale(F.relu(hidden_enc))
             seg_pred = self.pred_seg(seg_feat, action)
         else:
             seg_pred = self.outfeature_encode(F.relu(hidden_enc))
+        output_dict['seg_pred'] = seg_pred
 
-        coll_prob = F.relu(self.fc_coll_1(hidden_enc))
-        coll_prob = torch.cat([coll_prob, action_enc], dim = 1)
-        coll_prob = F.relu(self.fc_coll_2(coll_prob))
-        coll_prob = torch.cat([coll_prob, action_enc], dim = 1)
-        coll_prob = nn.Softmax(dim=-1)(F.relu(self.fc_coll_3(coll_prob)))
-
-        offroad_prob = F.relu(self.fc_off_1(hidden_enc))
-        offroad_prob = torch.cat([offroad_prob, action_enc], dim=1)
-        offroad_prob = F.relu(self.fc_off_2(offroad_prob))
-        offroad_prob = torch.cat([offroad_prob, action_enc], dim=1)
-        offroad_prob = nn.Softmax(dim=-1)(F.relu(self.fc_off_3(offroad_prob)))
-
-        dist = F.relu(self.fc_dist_1(hidden_enc))
-        dist = torch.cat([dist, action_enc], dim=1)
-        dist = F.relu(self.fc_dist_2(dist))
-        dist = torch.cat([dist, action_enc], dim=1)
-        dist = self.fc_dist_3(dist)
-
-        if self.use_xyz:
-            xyz = F.relu(self.fc_xyz_1(hidden_enc))
-            xyz = torch.cat([xyz, action_enc], dim=1)
-            xyz = F.relu(self.fc_xyz_2(xyz))
-            xyz = torch.cat([xyz, action_enc], dim=1)
-            xyz = self.fc_xyz_3(xyz)
-        else:
-            xyz = None
+        if self.args.use_pos:
+            output_dict['pos'] = self.pos_layer(hidden_enc, action_enc)
+        if self.args.use_angle:
+            output_dict['angle'] = self.angle_layer(hidden_enc, action_enc)
+        if self.args.use_speed:
+            output_dict['speed'] = self.speed_layer(hidden_enc, action_enc)
+        if self.args.use_xyz:
+            output_dict['xyz'] = self.xyz_layer(hidden_enc, action_enc)
         
-        return coll_prob, nx_feature_enc, offroad_prob, dist, xyz, seg_pred, hidden, cell
+        return output_dict, nx_feature_enc, hidden, cell
      
     def get_feature(self, x):
         res = []
         batch_size = x.size(0)
-        if self.use_seg:
-            res = torch.cat([self.drnseg(x[:, i*3 : (i+1)*3, :, :]) for i in range(self.frame_history_len)], dim = 1)
+        if self.args.use_seg:
+            res = torch.cat([self.drnseg(x[:, i*3 : (i+1)*3, :, :]) for i in range(self.args.frame_history_len)], dim = 1)
         else:
-            for i in range(self.frame_history_len):
+            for i in range(self.args.frame_history_len):
                 out = self.dla(x[:, i*3 : (i+1)*3, :, :])
                 out = out.squeeze().view(batch_size, -1)
                 res.append(out)
@@ -226,56 +193,42 @@ class ConvLSTMNet(nn.Module):
         return res 
 
 class ConvLSTMMulti(nn.Module):
-    def __init__(self, num_actions = 2,
-                pretrained = True,
-                frame_history_len = 4,
-                use_seg = True,
-                use_xyz = True,
-                model_name = 'drn_d_22',
-                num_classes = 4,
-                hidden_dim = 512, 
-                info_dim = 16):
+    def __init__(self, args):
         super(ConvLSTMMulti, self).__init__()
-        self.conv_lstm = ConvLSTMNet(num_actions, pretrained, frame_history_len,
-                                    use_seg, use_xyz, model_name, num_classes, hidden_dim, info_dim)
-        self.frame_history_len = frame_history_len
-        self.num_actions = num_actions
+        self.args = args
+        self.conv_lstm = ConvLSTMNet(self.args)
 
     def get_feature(self, x):
-        feat = []
         x = x.contiguous()
         num_time = int(x.size()[1])
-        for i in range(num_time):
-            feat.append(self.conv_lstm.get_feature(x[:, i, :, :, :].squeeze(1)))
+
+        feat = [self.conv_lstm.get_feature(x[:, i, :, :, :].squeeze(1)) for i in range(num_time)]
+
         return torch.stack(feat, dim = 1)
 
-    def forward(self, imgs, actions=None, num_time=None, hidden=None, cell=None, get_feature=False):
+    def forward(self, imgs, actions=None, hidden=None, cell=None, get_feature=False):
         if get_feature:
-            res = self.get_feature(imgs)
-            return res
+            return self.get_feature(imgs)
+
         batch_size, num_step, c, w, h = int(imgs.size()[0]), int(imgs.size()[1]), int(imgs.size()[-3]), int(imgs.size()[-2]), int(imgs.size()[-1])
-        coll, pred, offroad, dist, xyz, seg_pred, hidden, cell = self.conv_lstm(imgs[:,0,:,:,:].squeeze(1), actions[:,0,:].squeeze(1), hidden=hidden, cell=cell)
-        num_act = self.num_actions
-        coll_list = [coll]
-        pred_list = [pred]
-        offroad_list = [offroad]
-        dist_list = [dist]
-        xyz_list = [xyz]
-        seg_list = [seg_pred]
-        for i in range(1, num_time):
-            coll, pred, offroad, dist, xyz, seg_pred, hidden, cell = self.conv_lstm(pred, actions[:,i,:].squeeze(1), with_encode=True, hidden=hidden, cell=cell)
-            coll_list.append(coll)
-            pred_list.append(pred)
-            offroad_list.append(offroad)
-            dist_list.append(dist)
-            xyz_list.append(xyz)
-            seg_list.append(seg_pred)
-        seg_out = torch.stack(seg_list, dim=1)
-        if self.conv_lstm.use_xyz:
-            xyz_out = torch.stack(xyz_list, dim=1)
-        else:
-            xyz_out = None
-        return torch.stack(coll_list, dim=1), torch.stack(pred_list, dim=1), torch.stack(offroad_list,dim=1), torch.stack(dist_list, dim=1), xyz_out, seg_out, hidden, cell
+        output_dict, pred, hidden, cell = self.conv_lstm(imgs[:,0,:,:,:].squeeze(1), actions[:,0,:].squeeze(1), hidden=hidden, cell=cell)
+        
+        # create dictionary to store outputs
+        final_dict = dict()
+        for key in output_dict.keys():
+            final_dict[key] = [output_dict[key]]
+        final_dict['pred_list'] = [pred]
+
+        for i in range(1, self.args.pred_step):
+            output_dict, pred, hidden, cell = self.conv_lstm(pred, actions[:,i,:].squeeze(1), with_encode=True, hidden=hidden, cell=cell)
+            for key in output_dict.keys():
+                final_dict[key].append(output_dict[key])
+            final_dict['pred_list'].append(pred)
+
+        for key in final_dict.keys():
+            final_dict[key] = torch.stack(final_dict[key], dim = 1)
+
+        return final_dict
 
 if __name__ == '__main__':
     net = ConvLSTMMulti(num_actions=2, pretrained=True, frame_history_len=4, use_seg=True,
