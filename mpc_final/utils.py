@@ -317,21 +317,36 @@ def sample_cont_action(args, net, imgs, prev_action = None):
         prev_loss = this_loss
     return this_action.data.cpu().numpy()[0,0,:].reshape(-1) 
 
-def get_action_loss(args, net, imgs, actions, hidden = None, cell = None, gpu = 0):
+def get_action_loss(args, net, imgs, actions, target = None, hidden = None, cell = None, gpu = 0):
     batch_size = int(imgs.size()[0])
-    target_coll_np = np.zeros((args.pred_step, 2))
-    target_coll_np[:, 0] = 1.0
-    target_coll = Variable(torch.from_numpy(target_coll_np).float()).cuda()
-    target_off = Variable(torch.from_numpy(target_coll_np).float()).cuda()
+    if target is None:
+        target_coll_np = np.zeros((args.pred_step, 2))
+        target_coll_np[:, 0] = 1.0
+        target['coll'] = Variable(torch.from_numpy(target_coll_np).float(), requires_grad = False).cuda()
+        target['off'] = Variable(torch.from_numpy(target_coll_np).float(), requires_grad = False).cuda()
 
     weight = (0.97 ** np.arange(args.pred_step)).reshape((1, args.pred_step, 1))
     weight = Variable(torch.from_numpy(weight).float().cuda()).repeat(batch_size, 1, 1)
     output = net(imgs, actions, hidden = hidden, cell = cell)
 
-    coll_ls = nn.CrossEntropyLoss(reduce = False)(output['coll_prob'].view(-1, 2), torch.max(target_coll.view(-1, 2), -1)[1])
-    off_ls = nn.CrossEntropyLoss(reduce = False)(output['coll_prob'].view(-1, 2), torch.max(target_off.view(-1, 2), -1)[1])
+    coll_ls = nn.CrossEntropyLoss(reduce = False)(output['coll_prob'].view(-1, 2), torch.max(target['coll_batch'].view(-1, 2), -1)[1])
+    off_ls = nn.CrossEntropyLoss(reduce = False)(output['coll_prob'].view(-1, 2), torch.max(target['off_batch'].view(-1, 2), -1)[1])
     coll_ls = (coll_ls.view(-1, args.pred_step, 1) * weight).view(-1, args.pred_step).sum(-1)
     off_ls = (off_ls.view(-1, args.pred_step, 1) * weight).view(-1, args.pred_step).sum(-1)
     dist_ls = (output['dist'].view(-1, args.pred_step, 1) * weight).view(-1, args.pred_step).sum(-1)
     loss = off_ls + coll_ls - 0.1 * dist_ls
+
+    if args.use_pos:
+        pos_loss = torch.sqrt(nn.MSELoss()(output['pos'], target['pos_batch']))
+        loss += pos_loss
+    if args.use_angle:
+        angle_loss = torch.sqrt(nn.MSELoss()(output['angle'], target['angle_batch']))
+        loss += angle_loss
+    if args.use_speed:
+        speed_loss = torch.sqrt(nn.MSELoss()(output['speed'], target['sp_batch']))
+        loss += speed_loss
+    if args.use_xyz:
+        xyz_loss = torch.sqrt(nn.MSELoss()(output['xyz'], target['xyz_batch'])) / 100.0
+        loss += xyz_loss
+
     return loss
