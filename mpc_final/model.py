@@ -74,9 +74,6 @@ class DRNSeg(nn.Module):
         model = drn.__dict__.get(args.drn_model)(pretrained = args.pretrained, num_classes = 1000)
         self.model = nn.Sequential(*list(model.children())[:-2])
         self.seg = nn.Conv2d(model.out_dim, args.classes, kernel_size=1, bias=True)
-        
-        # Initialization
-        self.apply(weights_init)
 
     def forward(self, x):
         x = self.model(x)
@@ -98,7 +95,7 @@ class ConvLSTMNet(nn.Module):
             self.feature_map_fc1 = nn.Linear(1024, 1024)
             self.feature_map_fc2 = nn.Linear(1024, args.hidden_dim)
             self.up_scale = nn.Linear(args.hidden_dim + args.info_dim, 32 * 32 * args.classes)
-            self.pred = PRED(num_classes, args.num_total_act)
+            self.pred = PRED(args.classes, args.num_total_act)
         else:
             self.dla = dla.dla46x_c(pretrained = args.pretrained)
             self.feature_encode = nn.Linear(256 * args.frame_history_len, args.hidden_dim)
@@ -125,7 +122,7 @@ class ConvLSTMNet(nn.Module):
     def pred_seg(self, x, action):
         res = []
         batch_size = x.size(0)
-        x = x.view(batch_size, self.num_classes, 32, 32)
+        x = x.view(batch_size, self.args.classes, 32, 32)
         x = self.pred(x, action)
         out = self.up_sampler(x)
         return out

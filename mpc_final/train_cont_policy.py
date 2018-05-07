@@ -78,7 +78,9 @@ def train_policy(args, env, num_steps=40000000, save_path='model'):
         if args.use_dqn:
             if abs(action[1]) <= dqn_action * 0.1:
                 action[1] = 0
-        obs, reward, done, info = env.step(action)
+        real_action = action
+        real_action[0] = real_action[0] * 0.5 + 0.5
+        obs, reward, done, info = env.step(real_action)
         img_buffer.store_frame(obs)
         print('action', "{0:.2f}".format(action[0]), "{0:.2f}".format(action[1]), ' pos ', "{0:.2f}".format(info['trackPos']), "{0:.2f}".format(info['pos'][0]), "{0:.2f}".format(info['pos'][1]),\
             ' reward ', "{0:.2f}".format(reward['with_pos']))
