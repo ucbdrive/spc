@@ -47,7 +47,7 @@ def train_policy(args, env, num_steps=40000000, save_path='model'):
         
     epi_rewards, rewards = [], 0.0
     _ = env.reset()
-    prev_act = np.array([1.0, 0.0])
+    prev_act = np.array([1.0, 0.0]) if args.continuous else 1
     obs, reward, done, info = env.step(prev_act)
     img_buffer.store_frame(obs)
     prev_info = copy.deepcopy(info)
@@ -69,22 +69,35 @@ def train_policy(args, env, num_steps=40000000, save_path='model'):
         this_obs_np = obs_buffer.store_frame(obs, avg_img, std_img)
         obs_var = Variable(torch.from_numpy(this_obs_np).unsqueeze(0)).float().cuda()
 
-        if random.random() <= 1 - exploration.value(tt):
-            ## todo: finish sample continuous action function
-            action = sample_cont_action(args, net, obs_var, prev_action = prev_act)
+        if args.continuous:
+            if random.random() <= 1 - exploration.value(tt):
+                ## todo: finish sample continuous action function
+                action = sample_cont_action(args, net, obs_var, prev_action = prev_act)
+            else:
+                action = np.random.rand(args.num_total_act) * 2 - 1
+            action = np.clip(action, -1, 1)
+
+            if args.use_dqn:
+                if abs(action[1]) <= dqn_action * 0.1:
+                    action[1] = 0
+            real_action = action
+            real_action[0] = real_action[0] * 0.5 + 0.5
         else:
-            action = np.random.rand(args.num_total_act) * 2 - 1
-        action = np.clip(action, -1, 1)
-        if args.use_dqn:
-            if abs(action[1]) <= dqn_action * 0.1:
-                action[1] = 0
-        real_action = action
-        real_action[0] = real_action[0] * 0.5 + 0.5
+            if random.random() <= 1 - exploration.value(tt):
+                real_action = sample_discrete_action(args, net, obs_var, prev_action = prev_act)
+            else:
+                real_action = np.random.randint(args.num_total_act)
+            action = real_action
+
         obs, reward, done, info = env.step(real_action)
         img_buffer.store_frame(obs)
-        print('action', "{0:.2f}".format(action[0]), "{0:.2f}".format(action[1]), ' pos ', "{0:.2f}".format(info['trackPos']), "{0:.2f}".format(info['pos'][0]), "{0:.2f}".format(info['pos'][1]),\
-            ' reward ', "{0:.2f}".format(reward['with_pos']))
-        prev_act = action
+        if args.continuous:
+            print('action', "{0:.2f}".format(action[0]), "{0:.2f}".format(action[1]), ' pos ', "{0:.2f}".format(info['trackPos']), "{0:.2f}".format(info['pos'][0]), "{0:.2f}".format(info['pos'][1]),\
+                ' reward ', "{0:.2f}".format(reward['with_pos']))
+        else:
+            print('action', '%d' % real_action, ' pos ', "{0:.2f}".format(info['trackPos']), "{0:.2f}".format(info['pos'][0]), "{0:.2f}".format(info['pos'][1]),\
+                ' reward ', "{0:.2f}".format(reward['with_pos']))
+        prev_act = real_action
         speed_np, pos_np, posxyz_np = get_info_np(info, use_pos_class = False)
         offroad_flag, coll_flag = info['off_flag'], info['coll_flag']
         speed_list, pos_list = get_info_ls(prev_info)
@@ -95,8 +108,8 @@ def train_policy(args, env, num_steps=40000000, save_path='model'):
         else:
             rela_xyz = None
 
-        seg = env.env.get_segmentation().reshape((1,256,256)) if args.use_seg else None
-        mpc_buffer.store_effect(ret, action, done, coll_flag, offroad_flag, info['speed'] / 20.0, info['angle'] / math.pi, pos_list[0] / 7.0, rela_xyz, seg)
+        seg = env.env.get_segmentation().reshape((1, 256, 256)) if args.use_seg else None
+        mpc_buffer.store_effect(ret, action, done, coll_flag, offroad_flag, info['speed'] / 20.0, info['angle'], pos_list[0], rela_xyz, seg)
         rewards_with += reward['with_pos']
         rewards_without += reward['without_pos']
 
@@ -109,8 +122,8 @@ def train_policy(args, env, num_steps=40000000, save_path='model'):
             epi_rewards_without.append(rewards_without)
             obs = env.reset()
             rewards_with, rewards_without = 0, 0
-            obs, reward, done, info = env.step(np.array([1.0, 0.0]))
-            prev_act = np.array([1.0, 0.0])
+            prev_act = np.array([1.0, 0.0]) if args.continuous else 1
+            obs, reward, done, info = env.step(prev_act)
             speed_np, pos_np, posxyz_np = get_info_np(info, use_pos_class=False)
             print('past 100 episode rewards is ', \
                 "{0:.3f}".format(np.mean(epi_rewards_with[-100:])), \
@@ -137,7 +150,8 @@ def train_policy(args, env, num_steps=40000000, save_path='model'):
                 optimizer.step()
                 net.load_state_dict(train_net.module.state_dict())
                 epoch += 1
-                dqn_agent.train_model(args.batch_size, tt)
+                if args.use_dqn:
+                    dqn_agent.train_model(args.batch_size, tt)
                 if epoch % args.save_freq == 0:
                     torch.save(train_net.module.state_dict(), args.save_path+'/model/pred_model_'+str(tt).zfill(9)+'.pt')
                     torch.save(optimizer.state_dict(), args.save_path+'/optimizer/optim_'+str(tt).zfill(9)+'.pt')

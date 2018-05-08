@@ -2,6 +2,7 @@ import gym
 import numpy as np
 import random
 import torch
+import math
 import pdb
 
 class IMGBuffer(object):
@@ -14,7 +15,7 @@ class IMGBuffer(object):
 
     def store_frame(self, frame):
         if self.num_in_buffer == 0:
-            self.imgs = np.empty([self.size] + list(frame.shape), dtype=np.uint8)
+            self.imgs = np.empty([self.size] + list(frame.shape), dtype = np.uint8)
         self.imgs[self.next_idx] = frame
         self.num_in_buffer += 1
         if self.num_in_buffer > self.size:
@@ -48,7 +49,7 @@ class MPCBuffer(object):
         self.seg      = None
         self.xyz      = None
 
-        self.loss     = np.ones(args.buffer_size)*1000
+        self.loss     = np.ones(args.buffer_size) * 1000
         self.rewards  = np.ones((args.buffer_size, 1))
 
     def sample_n_unique(self, sampling_f, n):
@@ -86,12 +87,13 @@ class MPCBuffer(object):
         data_dict['angle_batch'] = np.concatenate([np.concatenate([self.angle[idx+ii,:][np.newaxis,:] for ii in range(self.args.pred_step+1)],0)[np.newaxis,:] for idx in idxes], 0)
         data_dict['dist_batch'] = data_dict['sp_batch'] * (np.cos(data_dict['angle_batch']) - np.abs(np.sin(data_dict['angle_batch']))) 
         
-
+        data_dict['angle_batch'] /= (math.pi / 2)
+        data_dict['pos_batch'] /= 7.0
         if self.args.use_seg:
-            data_dict['seg_batch'] = np.concatenate([np.concatenate([self.seg[idx+ii,:][np.newaxis,:] for ii in range(self.args.pred_step)],0)[np.newaxis,:] for idx in idxes], 0)
+            data_dict['seg_batch'] = np.concatenate([np.concatenate([self.seg[idx + ii, :][np.newaxis, :] for ii in range(self.args.pred_step)],0)[np.newaxis,:] for idx in idxes], 0)
         
         if self.args.use_xyz:
-            data_dict['xyz_batch'] = np.concatenate([np.concatenate([self.xyz[idx+ii,:][np.newaxis,:] for ii in range(self.args.pred_step)],0)[np.newaxis,:] for idx in idxes], 0)
+            data_dict['xyz_batch'] = np.concatenate([np.concatenate([self.xyz[idx + ii, :][np.newaxis, :] for ii in range(self.args.pred_step)],0)[np.newaxis,:] for idx in idxes], 0)
 
         return data_dict
 

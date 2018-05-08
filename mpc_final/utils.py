@@ -7,6 +7,8 @@ import numpy as np
 import pickle as pkl
 from torch.utils.data import Dataset, DataLoader
 import os
+import time
+import math
 import PIL.Image as Image
 import random
 from sklearn.metrics import confusion_matrix
@@ -141,14 +143,16 @@ class DoneCondition:
         self.off_cnt = 0
         self.pos = []
 
-    def isdone(self, pos, dist, posxyz):
+    def isdone(self, pos, dist, posxyz, angle):
         if pos <=-6.2 and dist < 0:
             self.off_cnt += 1
         elif pos > -6.2 or dist > 0:
             self.off_cnt = 0
         if self.off_cnt > self.size:
             return True
-        if abs(pos) >= 15.0:
+        if abs(pos) >= 7.0:
+            return True
+        if abs(angle) >= (math.pi / 2):
             return True
         self.pos.append(list(posxyz))
         real_pos = np.concatenate(self.pos[-100:])
@@ -317,21 +321,94 @@ def sample_cont_action(args, net, imgs, prev_action = None):
         prev_loss = this_loss
     return this_action.data.cpu().numpy()[0,0,:].reshape(-1) 
 
+def from_variable_to_numpy(x):
+    x = x.data
+    if torch.cuda.is_available():
+        x = x.cpu()
+    x = x.numpy()
+    return x
+
+def generate_action_sample(args, prob, batch_size, length, LAST_ACTION = 1):
+    all_actions = torch.zeros(batch_size, length).type(torch.LongTensor)
+    all_actions[: ,0] = prob[LAST_ACTION].multinomial(num_samples = batch_size, replacement = True).data
+
+    for step in range(1, length):
+        indices = [torch.nonzero(all_actions[: ,step - 1] == x).squeeze() for x in range(args.num_total_act)]
+        for action in range(args.num_total_act):
+            if indices[action].numel() > 0:
+                all_actions[indices[action], step] = prob[action].multinomial(num_samples = indices[action].numel(), replacement=True).data
+
+    return all_actions
+
+def generate_one_hot_actions(actions, num_actions):
+    batch_size, length = actions.size()
+    result = torch.zeros(batch_size * length, num_actions)
+    actions = actions.view(batch_size * length)
+    result[torch.arange(batch_size * length).type(torch.LongTensor), actions] = 1
+    result = result.view(batch_size, length, num_actions)
+    return result
+
+def generate_probs(args, all_actions, last_action = 1):
+    all_actions = from_variable_to_numpy(all_actions)
+    prob_map = np.concatenate((np.expand_dims(last_action * args.num_total_act + all_actions[:, 0], axis = 1), all_actions[:, :-1] * args.num_total_act + all_actions[:, 1:]), axis = 1)
+    prob = torch.histc(torch.from_numpy(prob_map).type(torch.Tensor), bins = args.num_total_act * args.num_total_act).view(args.num_total_act, args.num_total_act)
+
+
+    prob[prob.sum(dim = 1) == 0, :] = 1
+    prob /= prob.sum(dim = 1).unsqueeze(1)
+
+    return prob
+
+def sample_discrete_action(args, net, obs_var, prev_action = None):
+    start_time = time.time()
+    obs = np.repeat(np.expand_dims(obs_var, axis = 0), args.batch_size, axis = 0)
+    obs = Variable(torch.from_numpy(obs), requires_grad = False).type(torch.Tensor)
+    if torch.cuda.is_available():
+        obs = obs.cuda()
+    prob = torch.ones(args.num_total_act, args.num_total_act) / float(args.num_total_act)
+    with torch.no_grad():
+        for i in range(6):
+            all_actions = generate_action_sample(args, prob, 6 * args.batch_size, args.pred_step, prev_action)
+            one_hot_actions = generate_one_hot_actions(all_actions, args.num_total_act)
+            if torch.cuda.is_available():
+                one_hot_actions = one_hot_actions.cuda()
+            all_losses = np.zeros(6 * args.batch_size)
+
+            for ii in range(6):
+                actions = Variable(one_hot_actions[ii * args.batch_size: (ii + 1) * args.batch_size], requires_grad = False)
+                loss = get_action_loss(args, net, obs, actions) # needs updating
+                all_losses[ii * args.batch_size: (ii + 1) * args.batch_size] = from_variable_to_numpy(loss)
+
+            if i < 5:
+                indices = np.argsort(all_losses)[:args.batch_size]
+                prob = generate_probs(args, all_actions[indices], prev_action)
+            else:
+                idx = np.argmin(all_losses)
+                which_action = int(from_variable_to_numpy(all_actions)[idx, 0])
+
+    print('Sampling takes %0.2f seconds, selected action: %d.' % (time.time() - start_time, which_action))
+    return which_action
+
 def get_action_loss(args, net, imgs, actions, target = None, hidden = None, cell = None, gpu = 0):
     batch_size = int(imgs.size()[0])
     if target is None:
         target = dict()
-        target_coll_np = np.zeros((args.pred_step, 2))
-        target_coll_np[:, 0] = 1.0
-        target['coll_batch'] = Variable(torch.from_numpy(target_coll_np).float(), requires_grad = False).cuda()
-        target['off_batch'] = Variable(torch.from_numpy(target_coll_np).float(), requires_grad = False).cuda()
+        if args.continuous:
+            target_coll_np = np.zeros(args.pred_step)
+        else:
+            target_coll_np = np.zeros((batch_size, args.pred_step))
+        target['coll_batch'] = Variable(torch.from_numpy(target_coll_np), requires_grad = False).type(torch.LongTensor)
+        target['off_batch'] = Variable(torch.from_numpy(target_coll_np), requires_grad = False).type(torch.LongTensor)
+        if torch.cuda.is_available():
+            target['coll_batch'] = target['coll_batch'].cuda()
+            target['off_batch'] = target['off_batch'].cuda()
 
     weight = (0.97 ** np.arange(args.pred_step)).reshape((1, args.pred_step, 1))
     weight = Variable(torch.from_numpy(weight).float().cuda()).repeat(batch_size, 1, 1)
     output = net(imgs, actions, hidden = hidden, cell = cell)
 
-    coll_ls = nn.CrossEntropyLoss(reduce = False)(output['coll_prob'].view(-1, 2), torch.max(target['coll_batch'].view(-1, 2), -1)[1])
-    off_ls = nn.CrossEntropyLoss(reduce = False)(output['offroad_prob'].view(-1, 2), torch.max(target['off_batch'].view(-1, 2), -1)[1])
+    coll_ls = nn.CrossEntropyLoss(reduce = False)(output['coll_prob'].permute(0, 2, 1), target['coll_batch'])
+    off_ls = nn.CrossEntropyLoss(reduce = False)(output['offroad_prob'].permute(0, 2, 1), target['off_batch'])
     coll_ls = (coll_ls.view(-1, args.pred_step, 1) * weight).view(-1, args.pred_step).sum(-1)
     off_ls = (off_ls.view(-1, args.pred_step, 1) * weight).view(-1, args.pred_step).sum(-1)
     dist_ls = (output['dist'].view(-1, args.pred_step, 1) * weight).view(-1, args.pred_step).sum(-1)
@@ -351,3 +428,17 @@ def get_action_loss(args, net, imgs, actions, target = None, hidden = None, cell
         loss += xyz_loss
 
     return loss
+
+
+
+if __name__ == '__main__':
+    class dummy(object):
+        def __init__(self):
+            self.num_total_act = 3
+    prob = torch.ones(3, 3) / 3
+    all_actions = generate_action_sample(dummy(), prob, 6, 15, 1)
+    one_hot_actions = generate_one_hot_actions(all_actions, 3)
+    print(all_actions)
+    print(all_actions.size())
+    print(one_hot_actions)
+    print(one_hot_actions.size())

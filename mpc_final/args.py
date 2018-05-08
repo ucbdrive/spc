@@ -17,8 +17,9 @@ def init_parser(parser):
 
 	# enviroument configurations
 	parser.add_argument('--env', type = str, default = 'torcs-v0', metavar = 'ENV', help = 'environment')
+	parser.add_argument('--xvfb', type = bool, default = True)
 	parser.add_argument('--game-config', type = str, default = '/media/xinleipan/data/git/pyTORCS/game_config/michigan.xml')
-	parser.add_argument('--continuous', type = bool, default = True)
+	parser.add_argument('--continuous', action = 'store_true')
 
 	# model configurations
 	parser.add_argument('--pretrained', type = bool, default = True)
