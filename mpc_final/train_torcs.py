@@ -22,6 +22,11 @@ if __name__ == '__main__':
                os.path.join(args.save_path, 'model'),
                os.path.join(args.save_path,'optimizer'),
                os.path.join(args.save_path, 'cnfmat')])
+    # For tarasque
+    if os.path.exists('/home/qizhicai/multitask/spn_new2/semantic-predictive-learning/game_config/michigan.xml'):
+        args.game_config = '/home/qizhicai/multitask/spn_new2/semantic-predictive-learning/game_config/michigan.xml'
+
+    # for 20500
     if os.path.exists('/home/cxy/pyTORCS/game_config/michigan.xml'):
         args.game_config = '/home/cxy/pyTORCS/game_config/michigan.xml'
         args.xvfb = False
