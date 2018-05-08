@@ -9,7 +9,7 @@ from utils import *
 from torcs_wrapper import *
 from dqn_agent import *
 
-def train_policy(args, env, num_steps = 40000000, save_path = 'model'):
+def train_policy(args, env, num_steps=40000000, save_path='model'):
     ''' basics '''
     env = TorcsWrapper(env)
 
@@ -144,7 +144,7 @@ def train_policy(args, env, num_steps = 40000000, save_path = 'model'):
                 
                 # TODO : FINISH TRAIN MPC MODEL FUNCTION
                 loss = train_model(args, train_net, mpc_buffer, epoch, avg_img_t, std_img_t)
-                print('loss = %0.4f' % loss.data.cpu().numpy())
+                print('loss = %0.4f\n' % loss.data.cpu().numpy())
                 loss.backward()
                 optimizer.step()
                 net.load_state_dict(train_net.module.state_dict())
