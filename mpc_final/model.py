@@ -9,6 +9,7 @@ import math
 import pdb
 from PRED import PRED
 from end_layer import end_layer
+from conv_lstm import convLSTM
 from utils import weights_init
 
 class atari_model(nn.Module):
@@ -87,91 +88,79 @@ class ConvLSTMNet(nn.Module):
 
         # feature extraction part
         if args.use_seg:
+            self.action_encode = nn.Linear(args.num_total_act, 1*32*32)
             self.drnseg = DRNSeg(args)
-            self.up_sampler = lambda x: F.upsample(x, scale_factor = 8, mode = 'bilinear')
-            self.feature_map_conv1 = nn.Conv2d(args.classes * args.frame_history_len, 16, 5, stride = 1, padding = 2)
-            self.feature_map_conv2 = nn.Conv2d(16, 32, 3, stride = 1, padding = 1)
-            self.feature_map_conv3 = nn.Conv2d(32, 64, 3, stride = 1, padding = 1)
-            self.feature_map_fc1 = nn.Linear(1024, 1024)
-            self.feature_map_fc2 = nn.Linear(1024, args.hidden_dim)
-            self.up_scale = nn.Linear(args.hidden_dim + args.info_dim, 32 * 32 * args.classes)
-            self.pred = PRED(args.classes, args.num_total_act)
+            self.feature_map_predictor = convLSTM(args.classes * args.frame_history_len + 1, args.classes)
+            self.up_sampler = lambda x: F.upsample(x, scale_factor = 8, mode = 'bilinear', align_corners = True)
         else:
+            self.action_encode = nn.Linear(args.num_total_act, args.info_dim)
+            self.info_encode = nn.Linear(args.info_dim + args.hidden_dim, args.hidden_dim)
             self.dla = dla.dla46x_c(pretrained = args.pretrained)
             self.feature_encode = nn.Linear(256 * args.frame_history_len, args.hidden_dim)
+            self.lstm = ConvLSTMCell(args.hidden_dim, args.hidden_dim, True)
             self.outfeature_encode = nn.Linear(args.hidden_dim + args.info_dim, args.hidden_dim)
-        self.lstm = ConvLSTMCell(args.hidden_dim, args.hidden_dim, True)
-        self.action_encode = nn.Linear(args.num_total_act, args.info_dim)
-        self.info_encode = nn.Linear(args.info_dim + args.hidden_dim, args.hidden_dim)
         
         # output layers
-        self.coll_layer = end_layer(args.hidden_dim, args.info_dim, 2, nn.Softmax(dim = -1))
-        self.off_layer = end_layer(args.hidden_dim, args.info_dim, 2, nn.Softmax(dim = -1))
-        self.dist_layer = end_layer(args.hidden_dim, args.info_dim, 1)
+        self.coll_layer = end_layer(args, 2, nn.Softmax(dim = -1))
+        self.off_layer = end_layer(args, 2, nn.Softmax(dim = -1))
+        self.dist_layer = end_layer(args, 1)
 
         # optional layers
         if args.use_pos:
-            self.pos_layer = end_layer(args.hidden_dim, args.info_dim, 1)
+            self.pos_layer = end_layer(args, 1)
         if args.use_angle:
-            self.angle_layer = end_layer(args.hidden_dim, args.info_dim, 1)
+            self.angle_layer = end_layer(args, 1)
         if args.use_speed:
-            self.speed_layer = end_layer(args.hidden_dim, args.info_dim, 1)
+            self.speed_layer = end_layer(args, 1)
         if args.use_xyz:
-            self.xyz_layer = end_layer(args.hidden_dim, args.info_dim, 3)
-     
-    def pred_seg(self, x, action):
-        res = []
-        batch_size = x.size(0)
-        x = x.view(batch_size, self.args.classes, 32, 32)
-        x = self.pred(x, action)
-        out = self.up_sampler(x)
-        return out
+            self.xyz_layer = end_layer(args, 3)
 
     def forward(self, x, action, with_encode=False, hidden=None, cell=None):
         if with_encode == False:
             x = self.get_feature(x)
-            if self.args.use_seg:
-                x = F.tanh(F.max_pool2d(self.feature_map_conv1(x), kernel_size = 2, stride = 2))
-                x = F.tanh(F.max_pool2d(self.feature_map_conv2(x), kernel_size = 2, stride = 2))
-                x = F.tanh(F.max_pool2d(self.feature_map_conv3(x), kernel_size = 2, stride = 2)) # 1x64x4x4
-                x = x.view(x.size(0), -1) # 1024
-                x = F.relu(self.feature_map_fc1(x))
-                x = F.relu(self.feature_map_fc2(x))
         if hidden is None or cell is None:
-            hidden, cell = x, x
-        action_enc = F.relu(self.action_encode(action))
-        encode = torch.cat([x, action_enc], dim = 1)
-        encode = F.relu(self.info_encode(encode))
-        hidden, cell = self.lstm(encode, [hidden, cell])
-    
-        # this is to be output as feature representation for next step no matter with seg or not
-        nx_feature_enc = hidden.view(-1, self.args.hidden_dim)
-        hidden_enc = torch.cat([nx_feature_enc, action_enc], dim = 1)
+            if self.args.use_seg:
+                shape = [x.size(0), self.args.classes, 32, 32]
+                hidden = x[:, -self.args.classes:, :, :] # Variable(torch.zeros(shape))
+                cell = x[:, -self.args.classes:, :, :] # Variable(torch.zeros(shape))
+            else:
+                hidden = x # Variable(torch.zeros(x.size()))
+                cell = x # Variable(torch.zeros(x.size()))
+
+        if self.args.use_seg:
+            action_enc = self.action_encode(action).view(-1, 1, 32, 32)
+            combined = torch.cat([action_enc, x], dim = 1)
+            hidden, cell = self.feature_map_predictor(combined, (hidden, cell))
+            nx_feature_enc = torch.cat([x[:, self.args.classes:, :, :], hidden], dim = 1)
+        else:
+            action_enc = F.relu(self.action_encode(action))
+            encode = torch.cat([x, action_enc], dim = 1)
+            encode = F.relu(self.info_encode(encode))
+            hidden, cell = self.lstm(encode, [hidden, cell])
+            nx_feature_enc = hidden#.view(-1, self.args.hidden_dim)
        
         ''' next feature encoding: seg_pred ''' 
 
         # major outputs
         output_dict = dict()
-        output_dict['coll_prob'] = self.coll_layer(hidden_enc, action_enc)
-        output_dict['offroad_prob'] = self.off_layer(hidden_enc, action_enc)
-        output_dict['dist'] = self.dist_layer(hidden_enc, action_enc)
+        output_dict['coll_prob'] = self.coll_layer(nx_feature_enc, action_enc)
+        output_dict['offroad_prob'] = self.off_layer(nx_feature_enc, action_enc)
+        output_dict['dist'] = self.dist_layer(nx_feature_enc, action_enc)
 
         # optional outputs
         if self.args.use_seg:
-            seg_feat = self.up_scale(F.relu(hidden_enc))
-            seg_pred = self.pred_seg(seg_feat, action)
+            output_dict['seg_pred'] = self.up_sampler(nx_feature_enc[:, -self.args.classes:, :, :])
         else:
-            seg_pred = self.outfeature_encode(F.relu(hidden_enc))
-        output_dict['seg_pred'] = seg_pred
+            output_dict['seg_pred'] = self.outfeature_encode(F.relu(nx_feature_enc))
 
         if self.args.use_pos:
-            output_dict['pos'] = self.pos_layer(hidden_enc, action_enc)
+            output_dict['pos'] = self.pos_layer(nx_feature_enc, action_enc)
         if self.args.use_angle:
-            output_dict['angle'] = self.angle_layer(hidden_enc, action_enc)
+            output_dict['angle'] = self.angle_layer(nx_feature_enc, action_enc)
         if self.args.use_speed:
-            output_dict['speed'] = self.speed_layer(hidden_enc, action_enc)
+            output_dict['speed'] = self.speed_layer(nx_feature_enc, action_enc)
         if self.args.use_xyz:
-            output_dict['xyz'] = self.xyz_layer(hidden_enc, action_enc)
+            output_dict['xyz'] = self.xyz_layer(nx_feature_enc, action_enc)
         
         return output_dict, nx_feature_enc, hidden, cell
      
@@ -186,10 +175,6 @@ class ConvLSTMNet(nn.Module):
                 out = out.squeeze().view(batch_size, -1)
                 res.append(out)
             res = torch.cat(res, dim = 1)
-            # print('before encode')
-            # print(res)
-            # print('after encode')
-            # print(res)
             res = self.feature_encode(res)
         return res 
 
@@ -218,13 +203,13 @@ class ConvLSTMMulti(nn.Module):
         final_dict = dict()
         for key in output_dict.keys():
             final_dict[key] = [output_dict[key]]
-        final_dict['pred_list'] = [pred]
+        # final_dict['pred_list'] = [pred]
 
         for i in range(1, self.args.pred_step):
-            output_dict, pred, hidden, cell = self.conv_lstm(pred, actions[:,i,:].squeeze(1), with_encode=True, hidden=hidden, cell=cell)
+            output_dict, pred, hidden, cell = self.conv_lstm(pred, actions[:, i, :], with_encode=True, hidden=hidden, cell=cell)
             for key in output_dict.keys():
                 final_dict[key].append(output_dict[key])
-            final_dict['pred_list'].append(pred)
+            # final_dict['pred_list'].append(pred)
 
         for key in final_dict.keys():
             final_dict[key] = torch.stack(final_dict[key], dim = 1)

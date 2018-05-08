@@ -1,6 +1,5 @@
 from model import *
 import torch
-import gym
 import math
 from dqn_utils import *
 from mpc_utils import *
@@ -10,7 +9,7 @@ from utils import *
 from torcs_wrapper import *
 from dqn_agent import *
 
-def train_policy(args, env, num_steps=40000000, save_path='model'):
+def train_policy(args, env, num_steps = 40000000, save_path = 'model'):
     ''' basics '''
     env = TorcsWrapper(env)
 

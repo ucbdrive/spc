@@ -13,7 +13,6 @@ import PIL.Image as Image
 import random
 from sklearn.metrics import confusion_matrix
 import pdb
-from model import *
 
 def weights_init(m):
     classname = m.__class__.__name__
@@ -32,7 +31,7 @@ def weights_init(m):
         m.weight.data.uniform_(-w_bound, w_bound)
         m.bias.data.fill_(0)
 
-def train_model_imitation(train_net, mpc_buffer, batch_size, epoch, avg_img_t, std_img_t, pred_step=15):
+def train_model_imitation(train_net, mpc_buffer, batch_size, epoch, avg_img_t, std_img_t, pred_step = 15):
     if epoch % 20 == 0:
         x, idxes = mpc_buffer.sample(batch_size, sample_early = True)
     else:
@@ -45,8 +44,8 @@ def train_model_imitation(train_net, mpc_buffer, batch_size, epoch, avg_img_t, s
     coll_batch = Variable(x[1], requires_grad=False)
     offroad_batch = Variable(x[3], requires_grad=False)
     dist_batch = Variable(x[4])
-    img_batch = Variable(((x[5].float()-avg_img_t)/(std_img_t+0.0001)), requires_grad=False)
-    nximg_batch = Variable(((x[6].float()-avg_img_t)/(std_img_t+0.0001)), requires_grad=False)
+    img_batch = Variable(((x[5].float() - avg_img_t) / (std_img_t + 0.0001)), requires_grad = False)
+    nximg_batch = Variable(((x[6].float() - avg_img_t) / (std_img_t + 0.0001)), requires_grad = False)
     with torch.no_grad():
         nximg_enc = train_net(nximg_batch, get_feature=True)
         nximg_enc = nximg_enc.detach()
