@@ -1,5 +1,6 @@
 from model import *
 import torch
+import os
 import math
 from dqn_utils import *
 from mpc_utils import *
@@ -8,6 +9,7 @@ import cv2
 from utils import *
 from torcs_wrapper import *
 from dqn_agent import *
+from test import test
 
 def train_policy(args, env, num_steps=40000000, save_path='model'):
     ''' basics '''
@@ -96,7 +98,7 @@ def train_policy(args, env, num_steps=40000000, save_path='model'):
         else:
             print('action', '%d' % real_action, ' pos ', "{0:.2f}".format(info['trackPos']), "{0:.2f}".format(info['pos'][0]), "{0:.2f}".format(info['pos'][1]),\
                 ' reward ', "{0:.2f}".format(reward['with_pos']))
-        prev_act = real_action
+        prev_act = action
         speed_np, pos_np, posxyz_np = get_info_np(info, use_pos_class = False)
         offroad_flag, coll_flag = info['off_flag'], info['coll_flag']
         print('collision: %d' % int(coll_flag))
@@ -109,7 +111,7 @@ def train_policy(args, env, num_steps=40000000, save_path='model'):
             rela_xyz = None
 
         seg = env.env.get_segmentation().reshape((1, 256, 256)) if args.use_seg else None
-        mpc_buffer.store_effect(ret, action, done, coll_flag, offroad_flag, info['speed'] / 20.0, info['angle'], pos_list[0], rela_xyz, seg)
+        mpc_buffer.store_effect(ret, action, done, coll_flag, offroad_flag, info['speed'], info['angle'], pos_list[0], rela_xyz, seg)
         rewards_with += reward['with_pos']
         rewards_without += reward['without_pos']
 
@@ -150,6 +152,12 @@ def train_policy(args, env, num_steps=40000000, save_path='model'):
                 optimizer.step()
                 net.load_state_dict(train_net.module.state_dict())
                 epoch += 1
+
+                if epoch % 10 == 0:
+                    test_reward = test(args, env, net, dqn_agent, mpc_buffer)
+                    with open(os.path.join(args.save_path, 'test_log.txt'), 'a') as f:
+                        f.write('epoch %d reward_with %f reward_without %f\n' % (epoch, test_reward['with_pos'], test_reward['without_pos']))
+                
                 if args.use_dqn:
                     dqn_agent.train_model(args.batch_size, tt)
                 if epoch % args.save_freq == 0:
