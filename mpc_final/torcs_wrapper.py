@@ -19,20 +19,20 @@ class TorcsWrapper:
     def step(self, action):
         self.epi_len += 1
         obs, reward, real_done, info = self.env.step(action)
-        dist_this = info['speed']*(np.cos(info['angle'])-np.abs(np.sin(info['angle']))-np.abs(info['trackPos'])/9.0)
-        reward_with_pos = info['speed']*(np.cos(info['angle'])-np.abs(np.sin(info['angle']))-np.abs(info['trackPos'])/9.0)/40.0
-        reward_without_pos = info['speed']*(np.cos(info['angle'])-np.abs(np.sin(info['angle'])))/40.0
+        dist_this = info['speed'] * (np.cos(info['angle']) - np.abs(np.sin(info['angle'])))
+        reward_with_pos = info['speed'] * (np.cos(info['angle']) - np.abs(np.sin(info['angle'])) - np.abs(info['trackPos'])/9.0) / 40.0
+        reward_without_pos = info['speed'] * (np.cos(info['angle']) - np.abs(np.sin(info['angle']))) / 40.0
         done = self.doneCond.isdone(info['trackPos'], dist_this, info['pos'], info['angle']) or self.epi_len > 1000
         
-        off_flag = int(info['trackPos']>=3 or info['trackPos']<=-1)
-        coll_flag = int(abs(info['trackPos'])>7)
+        off_flag = int(info['trackPos'] >= 3 or info['trackPos'] <= -1)
+        coll_flag = int(abs(info['trackPos']) > 7 or reward <= -2.5 or info['is_stuck'])
         obs = cv2.resize(obs, self.imsize)
         reward = {}
         reward['with_pos'] = reward_with_pos
         reward['without_pos'] = reward_without_pos
         info['off_flag'] = off_flag
         info['coll_flag'] = coll_flag
-        return obs, reward, done, info
+        return obs, reward, real_done, info
 
     def close(self):
         self.env.close()

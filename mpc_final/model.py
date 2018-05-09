@@ -139,20 +139,21 @@ class ConvLSTMNet(nn.Module):
             hidden, cell = self.lstm(encode, [hidden, cell])
             nx_feature_enc = hidden#.view(-1, self.args.hidden_dim)
        
+        output_dict = dict()
+        
         ''' next feature encoding: seg_pred ''' 
+        if self.args.use_seg:
+            output_dict['seg_pred'] = self.up_sampler(nx_feature_enc[:, -self.args.classes:, :, :])
+            nx_feature_enc = nx_feature_enc.detach()
+        else:
+            output_dict['seg_pred'] = self.outfeature_encode(F.relu(nx_feature_enc))
 
         # major outputs
-        output_dict = dict()
         output_dict['coll_prob'] = self.coll_layer(nx_feature_enc, action_enc)
         output_dict['offroad_prob'] = self.off_layer(nx_feature_enc, action_enc)
         output_dict['dist'] = self.dist_layer(nx_feature_enc, action_enc)
 
         # optional outputs
-        if self.args.use_seg:
-            output_dict['seg_pred'] = self.up_sampler(nx_feature_enc[:, -self.args.classes:, :, :])
-        else:
-            output_dict['seg_pred'] = self.outfeature_encode(F.relu(nx_feature_enc))
-
         if self.args.use_pos:
             output_dict['pos'] = self.pos_layer(nx_feature_enc, action_enc)
         if self.args.use_angle:

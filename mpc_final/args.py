@@ -26,6 +26,9 @@ def init_parser(parser):
 	parser.add_argument('--drn-model', type = str, default = 'drn_d_22')
 	parser.add_argument('--classes', type = int, default = 4)
 
+	parser.add_argument('--use-collision', action = 'store_true')
+	parser.add_argument('--use-offroad', action = 'store_true')
+	parser.add_argument('--use-distance', action = 'store_true')
 	parser.add_argument('--use-pos', action = 'store_true')
 	parser.add_argument('--use-angle', action = 'store_true')
 	parser.add_argument('--use-speed', action = 'store_true')

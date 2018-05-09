@@ -26,8 +26,8 @@ class IMGBuffer(object):
     def get_avg_std(self, gpu=0):
         avg = np.mean(self.imgs[:self.num_in_buffer],0)
         std = np.std(self.imgs[:self.num_in_buffer], 0)
-        avg_t = torch.from_numpy(avg.transpose(2,0,1)).float().repeat(self.frame_history_len, 1, 1).cuda()
-        std_t = torch.from_numpy(std.transpose(2,0,1)).float().repeat(self.frame_history_len, 1, 1).cuda()
+        avg_t = torch.from_numpy(avg.transpose(2 ,0, 1)).float().repeat(self.frame_history_len, 1, 1).cuda()
+        std_t = torch.from_numpy(std.transpose(2, 0, 1)).float().repeat(self.frame_history_len, 1, 1).cuda()
         return avg, std, avg_t, std_t
     
 class MPCBuffer(object):
@@ -79,21 +79,31 @@ class MPCBuffer(object):
 
         data_dict['obs_batch'] = np.concatenate([np.concatenate([self._encode_observation(idx+ii)[np.newaxis,:] for ii in range(self.args.pred_step)], 0)[np.newaxis,:] for idx in idxes], 0)
         data_dict['nx_obs_batch'] = np.concatenate([np.concatenate([self._encode_observation(idx+1+ii)[np.newaxis,:] for ii in range(self.args.pred_step)], 0)[np.newaxis,:] for idx in idxes], 0)
-        data_dict['act_batch'] = np.concatenate([np.concatenate([self.action[idx+ii, :][np.newaxis,:] for ii in range(self.args.pred_step)],0)[np.newaxis,:] for idx in idxes], 0)
-        data_dict['sp_batch'] = np.concatenate([np.concatenate([self.speed[idx+ii,:][np.newaxis,:] for ii in range(self.args.pred_step+1)],0)[np.newaxis,:] for idx in idxes], 0)
-        data_dict['off_batch'] = np.concatenate([np.concatenate([self.offroad[idx+ii,:][np.newaxis,:] for ii in range(self.args.pred_step)],0)[np.newaxis,:] for idx in idxes], 0)
-        data_dict['coll_batch'] = np.concatenate([np.concatenate([self.coll[idx+ii,:][np.newaxis,:] for ii in range(self.args.pred_step)], 0)[np.newaxis,:] for idx in idxes], 0)
-        data_dict['pos_batch'] = np.concatenate([np.concatenate([self.pos[idx+ii,:][np.newaxis,:] for ii in range(self.args.pred_step+1)],0)[np.newaxis,:] for idx in idxes], 0)
-        data_dict['angle_batch'] = np.concatenate([np.concatenate([self.angle[idx+ii,:][np.newaxis,:] for ii in range(self.args.pred_step+1)],0)[np.newaxis,:] for idx in idxes], 0)
-        data_dict['dist_batch'] = data_dict['sp_batch'] * (np.cos(data_dict['angle_batch']) - np.abs(np.sin(data_dict['angle_batch']))) 
+        data_dict['act_batch'] = np.concatenate([self.action[idx: idx + self.args.pred_step, :][np.newaxis, :] for idx in idxes], 0)
+        data_dict['sp_batch'] = np.concatenate([self.speed[idx: idx + self.args.pred_step + 1, :][np.newaxis, :] for idx in idxes], 0)
         
-        data_dict['angle_batch'] /= (math.pi / 2)
-        data_dict['pos_batch'] /= 7.0
+        if self.args.use_collision:
+            data_dict['coll_batch'] = np.concatenate([self.coll[idx: idx + self.args.pred_step, :][np.newaxis, :] for idx in idxes], 0)
+        
+        if self.args.use_offroad:
+            data_dict['off_batch'] = np.concatenate([self.offroad[idx: idx + self.args.pred_step, :][np.newaxis, :] for idx in idxes], 0)
+        
+        if self.args.use_pos:
+            data_dict['pos_batch'] = np.concatenate([self.pos[idx: idx + self.args.pred_step + 1, :][np.newaxis, :] for idx in idxes], 0)
+            data_dict['pos_batch'] /= 7.0
+        
+        if self.args.use_angle:
+            data_dict['angle_batch'] = np.concatenate([self.angle[idx: idx + self.args.pred_step + 1, :][np.newaxis, :] for idx in idxes], 0)
+            data_dict['angle_batch'] /= (math.pi / 2)
+        
+        if self.args.use_distance:
+            data_dict['dist_batch'] = data_dict['sp_batch'] * (np.cos(data_dict['angle_batch']) - np.abs(np.sin(data_dict['angle_batch']))) 
+        
         if self.args.use_seg:
-            data_dict['seg_batch'] = np.concatenate([np.concatenate([self.seg[idx + ii, :][np.newaxis, :] for ii in range(self.args.pred_step)],0)[np.newaxis,:] for idx in idxes], 0)
+            data_dict['seg_batch'] = np.concatenate([self.seg[idx: idx + self.args.pred_step, :][np.newaxis, :] for idx in idxes], 0)
         
         if self.args.use_xyz:
-            data_dict['xyz_batch'] = np.concatenate([np.concatenate([self.xyz[idx + ii, :][np.newaxis, :] for ii in range(self.args.pred_step)],0)[np.newaxis,:] for idx in idxes], 0)
+            data_dict['xyz_batch'] = np.concatenate([self.xyz[idx: idx + self.args.pred_step, :][np.newaxis, :] for idx in idxes], 0)
 
         return data_dict
 
@@ -149,8 +159,10 @@ class MPCBuffer(object):
             self.action   = np.zeros([self.args.buffer_size] + [self.args.num_total_act], dtype = np.int32)
             self.done     = np.empty([self.args.buffer_size],                             dtype = np.int32)
 
-            self.coll     = np.empty([self.args.buffer_size] + [2], dtype=np.int32)
-            self.offroad  = np.empty([self.args.buffer_size] + [2], dtype=np.int32)
+            if self.args.use_collision:
+                self.coll = np.empty([self.args.buffer_size] + [1], dtype=np.int32)
+            if self.args.use_offroad:
+                self.offroad = np.empty([self.args.buffer_size] + [1], dtype=np.int32)
 
             self.pos      = np.empty([self.args.buffer_size, 1],    dtype=np.float32)
             self.angle    = np.empty([self.args.buffer_size, 1],    dtype=np.float32)
@@ -183,11 +195,13 @@ class MPCBuffer(object):
             self.seg[idx, :] = seg
 
         self.done[idx]   = int(done)
-        self.coll[idx, int(coll)] = 1
-        self.offroad[idx, int(off)] = 1
-        self.speed[idx,0] = speed
-        self.angle[idx,0] = angle
-        self.pos[idx,0] = pos
-        st_idx = max(idx-15,0)
-        ed_idx = st_idx+15
-        self.rewards[st_idx,0] = np.sum(self.speed[st_idx:ed_idx,0]*(np.cos(self.angle[st_idx:ed_idx,0])-np.abs(np.sin(self.angle[st_idx:ed_idx,0]))-np.abs(self.pos[st_idx:ed_idx,0]/9.0))/40.0)
+        if self.args.use_collision:
+            self.coll[idx, 0] = int(coll)
+        if self.args.use_offroad:
+            self.offroad[idx, 0] = int(off)
+        self.speed[idx, 0] = speed
+        self.angle[idx, 0] = angle
+        self.pos[idx, 0] = pos
+        st_idx = max(idx - 15,0)
+        ed_idx = st_idx + 15
+        self.rewards[st_idx, 0] = np.sum(self.speed[st_idx: ed_idx, 0] * (np.cos(self.angle[st_idx: ed_idx, 0]) - np.abs(np.sin(self.angle[st_idx: ed_idx, 0])) - np.abs(self.pos[st_idx: ed_idx, 0] / 9.0)) / 40.0)
