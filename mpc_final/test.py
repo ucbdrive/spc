@@ -42,6 +42,7 @@ def test(args, env, net, dqn_agent, mpc_buffer):
 
         speed_np, pos_np, posxyz_np = get_info_np(info, use_pos_class = False)
         offroad_flag, coll_flag = info['off_flag'], info['coll_flag']
+        print('collision: %d' % int(coll_flag))
         speed_list, pos_list = get_info_ls(prev_info)
         if args.use_xyz:
             xyz = np.array(info['pos'])

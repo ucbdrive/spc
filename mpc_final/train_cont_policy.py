@@ -45,6 +45,8 @@ def train_policy(args, env, num_steps=40000000, save_path='model'):
         dqn_agent = DQNAgent(args.frame_history_len, 10, args.lr, exploration, args.save_path)
         if args.resume:
             dqn_agent.load_model()
+    else:
+        dqn_agent = None
         
     epi_rewards, rewards = [], 0.0
     _ = env.reset()
@@ -154,7 +156,9 @@ def train_policy(args, env, num_steps=40000000, save_path='model'):
                 epoch += 1
 
                 if epoch % 10 == 0:
+                    print('Begin testing.')
                     test_reward = test(args, env, net, dqn_agent, mpc_buffer)
+                    print('Finish testing.')
                     with open(os.path.join(args.save_path, 'test_log.txt'), 'a') as f:
                         f.write('epoch %d reward_with %f reward_without %f\n' % (epoch, test_reward['with_pos'], test_reward['without_pos']))
                 

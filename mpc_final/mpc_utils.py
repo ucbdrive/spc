@@ -101,7 +101,7 @@ class MPCBuffer(object):
         data_dict['sp_batch'] /= 20.0
 
         if self.args.use_seg:
-            data_dict['seg_batch'] = np.concatenate([self.seg[idx: idx + self.args.pred_step, :][np.newaxis, :] for idx in idxes], 0)
+            data_dict['seg_batch'] = np.concatenate([self.seg[idx: idx + self.args.pred_step + 1, :][np.newaxis, :] for idx in idxes], 0)
         
         if self.args.use_xyz:
             data_dict['xyz_batch'] = np.concatenate([self.xyz[idx: idx + self.args.pred_step, :][np.newaxis, :] for idx in idxes], 0)

@@ -1,5 +1,6 @@
 from utils import *
 import cv2
+import math
 import numpy as np
 import pdb
 
@@ -9,11 +10,13 @@ class TorcsWrapper:
         self.imsize = imsize
         self.doneCond = DoneCondition(30)
         self.epi_len = 0
+        self.coll_cnt = 0
 
     def reset(self):
         obs = self.env.reset()
         self.doneCond = DoneCondition(30)
         self.epi_len = 0
+        self.coll_cnt = 0
         return cv2.resize(obs, self.imsize)
          
     def step(self, action):
@@ -26,6 +29,14 @@ class TorcsWrapper:
         
         off_flag = int(info['trackPos'] >= 3 or info['trackPos'] <= -1)
         coll_flag = int(abs(info['trackPos'] + info['angle']) > 6.5 or reward <= -2.5 or (info['damage'] > 0 and info['angle'] > 0.5 and info['speed'] < 15))
+        if coll_flag:
+            self.coll_cnt += 1
+        else:
+            self.coll_cnt = 0
+        if self.coll_cnt > 10:
+            real_done = True
+        if abs(info['angle']) >= (math.pi / 2):
+            real_done = True
         obs = cv2.resize(obs, self.imsize)
         reward = {}
         reward['with_pos'] = reward_with_pos

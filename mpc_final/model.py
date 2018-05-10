@@ -143,6 +143,8 @@ class ConvLSTMNet(nn.Module):
         
         ''' next feature encoding: seg_pred ''' 
         if self.args.use_seg:
+            if with_encode == False:
+                output_dict['seg_current'] = self.up_sampler(x[:, -self.args.classes:, :, :])
             output_dict['seg_pred'] = self.up_sampler(nx_feature_enc[:, -self.args.classes:, :, :])
             nx_feature_enc = nx_feature_enc.detach()
         else:
@@ -204,6 +206,7 @@ class ConvLSTMMulti(nn.Module):
         final_dict = dict()
         for key in output_dict.keys():
             final_dict[key] = [output_dict[key]]
+        final_dict['seg_pred'] = [output_dict['seg_current'], output_dict['seg_pred']]
         # final_dict['pred_list'] = [pred]
 
         for i in range(1, self.args.pred_step):

@@ -4,7 +4,7 @@ def init_parser(parser):
 	parser.add_argument('--pred-step', type = int, default = 15)
 	parser.add_argument('--batch-size', type = int, default = 32)
 	parser.add_argument('--save-freq', type = int, default = 10)
-	parser.add_argument('--save-path', type = str, default = 'mpc_12_step')
+	parser.add_argument('--save-path', type = str, default = 'mpc_15_step')
 	parser.add_argument('--normalize', action = 'store_true')
 	parser.add_argument('--buffer-size', type = int, default = 50000)
 	parser.add_argument('--num-total-act', type = int, default = 2)
@@ -13,7 +13,8 @@ def init_parser(parser):
 	parser.add_argument('--learning-freq', type = int, default = 100)
 	parser.add_argument('--target-update-freq', type = int, default = 100)
 	parser.add_argument('--batch-step', type = int, default = 400)
-	parser.add_argument('--resume', type = bool, default = False)
+	parser.add_argument('--resume', action = 'store_true')
+	parser.add_argument('--seed', type = float, default = 233)
 
 	# enviroument configurations
 	parser.add_argument('--env', type = str, default = 'torcs-v0', metavar = 'ENV', help = 'environment')

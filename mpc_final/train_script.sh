@@ -1,7 +1,10 @@
 #!/bin/bash
-python train_torcs.py \
+python2 train_torcs.py \
     --normalize \
+    --use-dqn \
     --num-total-act 2 \
-    --with-dla \
-    --use-xyz \
-    --use-dqn  
+    --use-pos \
+    --use-angle \
+    --use-speed \
+    --use-xyz 
+

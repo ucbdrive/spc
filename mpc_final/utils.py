@@ -13,6 +13,7 @@ import PIL.Image as Image
 import random
 from sklearn.metrics import confusion_matrix
 import pdb
+from scipy.misc import imsave
 
 def weights_init(m):
     classname = m.__class__.__name__
@@ -103,8 +104,8 @@ def train_model(args, train_net, mpc_buffer, epoch, avg_img_t, std_img_t):
         print('dist ls', dist_ls.data.cpu().numpy())
     
     if args.use_seg:
-        output['seg_pred'] = output['seg_pred'].view(args.batch_size * args.pred_step, args.classes, 256, 256)
-        target['seg_batch'] = target['seg_batch'].view(args.batch_size * args.pred_step, 256, 256)
+        output['seg_pred'] = output['seg_pred'].view(args.batch_size * (args.pred_step + 1), args.classes, 256, 256)
+        target['seg_batch'] = target['seg_batch'].view(args.batch_size * (args.pred_step + 1), 256, 256)
         pred_ls = nn.CrossEntropyLoss()(output['seg_pred'], target['seg_batch'])
     else:
         pred_ls = nn.L1Loss()(output['seg_pred'], nximg_enc).sum()
@@ -143,8 +144,57 @@ def train_model(args, train_net, mpc_buffer, epoch, avg_img_t, std_img_t):
     #    float(pred_ls.data.cpu().numpy()), float(dist_ls.data.cpu().numpy()), \
     #    float(xyz_loss.data.cpu().numpy()), float(seg_loss.data.cpu().numpy()), float(loss.data.cpu().numpy()), epoch, 1)
     print('1 step training')
+    visualize(args, target, output)
     return loss
- 
+
+def draw_from_pred(pred):
+    illustration = np.zeros((256, 256, 3)).astype(np.uint8)
+    illustration[:, :, 0] = 255
+    illustration[pred == 1] = np.array([0, 255, 0])
+    illustration[pred == 2] = np.array([0, 0, 0])
+    illustration[pred == 3] = np.array([0, 0, 255])
+    return illustration
+
+def visualize(args, target, output):
+    batch_id = np.random.randint(args.batch_size)
+    if args.use_seg:
+        observation = (from_variable_to_numpy(target['obs_batch'][batch_id, :, -3:, :, :]) * 56.1524832523 + 112.62289744791671).astype(np.uint8).transpose(0, 2, 3, 1)
+        target['seg_batch'] = target['seg_batch'].view(args.batch_size, args.pred_step + 1, 256, 256)
+        segmentation = from_variable_to_numpy(target['seg_batch'][batch_id])
+        output['seg_pred'] = output['seg_pred'].view(args.batch_size, args.pred_step + 1, args.classes, 256, 256)
+        _, prediction = torch.max(output['seg_pred'][batch_id], 1)
+        prediction = from_variable_to_numpy(prediction)
+        for i in range(args.pred_step):
+            imsave('visualize/%d.png' % i, np.concatenate([observation[i], draw_from_pred(segmentation[i]), draw_from_pred(prediction[i])], 1))
+    with open('visualize/report.txt', 'w') as f:
+        f.write('target collision:\n')
+        f.write(str(from_variable_to_numpy(target['coll_batch'][batch_id])) + '\n')
+        f.write('output collision:\n')
+        f.write(str(from_variable_to_numpy(output['coll_prob'][batch_id])) + '\n')
+
+        f.write('target offroad:\n')
+        f.write(str(from_variable_to_numpy(target['off_batch'][batch_id])) + '\n')
+        f.write('output offroad:\n')
+        f.write(str(from_variable_to_numpy(output['offroad_prob'][batch_id])) + '\n')
+
+        if args.use_pos:
+            f.write('target pos:\n')
+            f.write(str(from_variable_to_numpy(target['pos_batch'][batch_id, :-1])) + '\n')
+            f.write('output pos:\n')
+            f.write(str(from_variable_to_numpy(output['pos'][batch_id])) + '\n')
+
+        if args.use_angle:
+            f.write('target angle:\n')
+            f.write(str(from_variable_to_numpy(target['angle_batch'][batch_id, :-1])) + '\n')
+            f.write('output angle:\n')
+            f.write(str(from_variable_to_numpy(output['angle'][batch_id])) + '\n')
+
+        if args.use_speed:
+            f.write('target speed:\n')
+            f.write(str(from_variable_to_numpy(target['sp_batch'][batch_id, :-1])) + '\n')
+            f.write('output speed:\n')
+            f.write(str(from_variable_to_numpy(output['speed'][batch_id])) + '\n')
+
 class DoneCondition:
     def __init__(self, size):
         self.size = size
@@ -152,7 +202,7 @@ class DoneCondition:
         self.pos = []
 
     def isdone(self, pos, dist, posxyz, angle):
-        if pos <=-6.2 and dist < 0:
+        if pos <= -6.2 and dist < 0:
             self.off_cnt += 1
         elif pos > -6.2 or dist > 0:
             self.off_cnt = 0
@@ -399,35 +449,35 @@ def sample_discrete_action(args, net, obs_var, prev_action = None):
 
 def get_action_loss(args, net, imgs, actions, target = None, hidden = None, cell = None, gpu = 0):
     batch_size = int(imgs.size()[0])
+    if args.continuous:
+        batch_size = 1
     if target is None:
         target = dict()
-        if args.continuous:
-            target_coll_np = np.zeros(args.pred_step)
-        else:
-            target_coll_np = np.zeros((batch_size, args.pred_step))
-        target['coll_batch'] = Variable(torch.from_numpy(target_coll_np), requires_grad = False).type(torch.LongTensor)
-        target['off_batch'] = Variable(torch.from_numpy(target_coll_np), requires_grad = False).type(torch.LongTensor)
+        target['coll_batch'] = Variable(torch.zeros(batch_size * args.pred_step), requires_grad = False).type(torch.LongTensor)
+        target['off_batch'] = Variable(torch.zeros(batch_size * args.pred_step), requires_grad = False).type(torch.LongTensor)
+        if args.use_pos and args.use_angle:
+            target['pos_batch'] = Variable(torch.zeros(batch_size, args.pred_step, 1), requires_grad = False)
+
         if torch.cuda.is_available():
             target['coll_batch'] = target['coll_batch'].cuda()
             target['off_batch'] = target['off_batch'].cuda()
+            if args.use_pos and args.use_angle:
+                target['pos_batch'] = target['pos_batch'].cuda()
 
     weight = (0.97 ** np.arange(args.pred_step)).reshape((1, args.pred_step, 1))
     weight = Variable(torch.from_numpy(weight).float().cuda()).repeat(batch_size, 1, 1)
     output = net(imgs, actions, hidden = hidden, cell = cell)
 
-    coll_ls = nn.CrossEntropyLoss(reduce = False)(output['coll_prob'].view(args.pred_step, 2), target['coll_batch'])
-    off_ls = nn.CrossEntropyLoss(reduce = False)(output['offroad_prob'].view(args.pred_step, 2), target['off_batch'])
+    coll_ls = nn.CrossEntropyLoss(reduce = False)(output['coll_prob'].view(batch_size * args.pred_step, 2), target['coll_batch'])
+    off_ls = nn.CrossEntropyLoss(reduce = False)(output['offroad_prob'].view(batch_size * args.pred_step, 2), target['off_batch'])
     coll_ls = (coll_ls.view(-1, args.pred_step, 1) * weight).sum()
     off_ls = (off_ls.view(-1, args.pred_step, 1) * weight).sum()
     dist_ls = (output['dist'].view(-1, args.pred_step, 1) * weight).sum()
     loss = off_ls + coll_ls - 0.1 * dist_ls
 
-    if 'pos_batch' in target.keys():
-        pos_loss = torch.sqrt(nn.MSELoss()(output['pos'], target['pos_batch']))
+    if 'pos_batch' in target.keys() and 'angle_batch' in target.keys():
+        pos_loss = torch.sqrt(nn.MSELoss()(output['pos'] + torch.sin(output['angle'] * math.pi / 2), target['pos_batch']))
         loss += pos_loss
-    if 'angle_batch' in target.keys():
-        angle_loss = torch.sqrt(nn.MSELoss()(output['angle'], target['angle_batch']))
-        loss += angle_loss
     if 'sp_batch' in target.keys():
         speed_loss = torch.sqrt(nn.MSELoss()(output['speed'], target['sp_batch']))
         loss += speed_loss
@@ -438,7 +488,7 @@ def get_action_loss(args, net, imgs, actions, target = None, hidden = None, cell
     return loss
 
 def show_accuracy(output, target, label):
-    tn, fp, fn, tp = confusion_matrix(output, target).ravel()
+    tn, fp, fn, tp = confusion_matrix(output, target, labels = [0, 1]).ravel()
     print('%s accuracy: %0.2f%%' % (label, (tn + tp) / (tn + fp + fn + tp) * 100.0))
 
 if __name__ == '__main__':
