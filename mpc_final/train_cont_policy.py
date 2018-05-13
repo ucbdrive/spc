@@ -103,10 +103,10 @@ def train_policy(args, env, num_steps=40000000):
         img_buffer.store_frame(obs)
         if args.continuous:
             print('action', "{0:.2f}".format(action[0]), "{0:.2f}".format(action[1]), ' pos ', "{0:.2f}".format(info['trackPos']), "{0:.2f}".format(info['pos'][0]), "{0:.2f}".format(info['pos'][1]),\
-                ' angle ', "{0:.2f}".format(info['angle']), ' reward ', "{0:.2f}".format(reward['with_pos']))
+                ' angle ', "{0:.2f}".format(info['angle']), ' reward ', "{0:.2f}".format(reward['with_pos']), ' explore ', "{0:.2f}".format(exploration.value(tt)))
         else:
             print('action', '%d' % real_action, ' pos ', "{0:.2f}".format(info['trackPos']), "{0:.2f}".format(info['pos'][0]), "{0:.2f}".format(info['pos'][1]),\
-                ' angle ', "{0:.2f}".format(info['angle']), ' reward ', "{0:.2f}".format(reward['with_pos']))
+                ' angle ', "{0:.2f}".format(info['angle']), ' reward ', "{0:.2f}".format(reward['with_pos']), ' explore ', "{0:.2f}".format(exploration.value(tt)))
         prev_act = action
         speed_np, pos_np, posxyz_np = get_info_np(info, use_pos_class = False)
         offroad_flag, coll_flag = info['off_flag'], info['coll_flag']
@@ -166,15 +166,6 @@ def train_policy(args, env, num_steps=40000000):
                 optimizer.step()
                 net.load_state_dict(train_net.module.state_dict())
                 epoch += 1
-
-                '''
-                if epoch % 1000 == 0:
-                    print('Begin testing.')
-                    test_reward = test(args, env, net, dqn_agent, mpc_buffer)
-                    print('Finish testing.')
-                    with open(os.path.join(args.save_path, 'test_log.txt'), 'a') as f:
-                        f.write('epoch %d reward_with %f reward_without %f\n' % (epoch, test_reward['with_pos'], test_reward['without_pos']))
-                '''
 
                 if args.use_dqn:
                     dqn_agent.train_model(args.batch_size, tt)
