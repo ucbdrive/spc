@@ -11,7 +11,7 @@ def init_parser(parser):
 	parser.add_argument('--epsilon-frames', type = int, default = 50000)
 	parser.add_argument('--learning-starts', type = int, default = 100)
 	parser.add_argument('--learning-freq', type = int, default = 100)
-	parser.add_argument('--target-update-freq', type = int, default = 100)
+	parser.add_argument('--target-update-freq', type = int, default = 1000)
 	parser.add_argument('--batch-step', type = int, default = 400)
 	parser.add_argument('--resume', action = 'store_true')
 	parser.add_argument('--seed', type = float, default = 233)
