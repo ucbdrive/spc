@@ -373,7 +373,7 @@ def sample_cont_action(args, net, imgs, prev_action = None):
     prev_loss = 1000
     sign = True
     cnt = 0
-    optimizer = optim.Adam([this_action], lr = 0.06)
+    optimizer = optim.Adam([this_action], lr = 0.01)
     while sign:
         loss = get_action_loss(args, net, imgs, this_action, None, None, None)
         optimizer.zero_grad()
