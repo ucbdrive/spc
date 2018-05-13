@@ -74,7 +74,9 @@ def train_policy(args, env, num_steps=40000000, save_path='model'):
         this_obs_np = obs_buffer.store_frame(obs, avg_img, std_img)
         obs_var = Variable(torch.from_numpy(this_obs_np).unsqueeze(0)).float().cuda()
 
-        if args.continuous:
+        if tt % args.num_same_step != 0:
+            action = prev_act
+        elif args.continuous:
             if random.random() <= 1 - exploration.value(tt):
                 ## todo: finish sample continuous action function
                 action = sample_cont_action(args, net, obs_var, prev_action = prev_act)
