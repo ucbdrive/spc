@@ -1,5 +1,5 @@
 def init_parser(parser):
-	parser.add_argument('--lr', type = float, default = 0.01, metavar = 'LR', help = 'learning rate')
+	parser.add_argument('--lr', type = float, default = 1e-3, metavar = 'LR', help = 'learning rate')
 	parser.add_argument('--frame-history-len', type = int, default = 3)
 	parser.add_argument('--pred-step', type = int, default = 15)
 	parser.add_argument('--batch-size', type = int, default = 32)
