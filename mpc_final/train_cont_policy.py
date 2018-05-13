@@ -27,6 +27,8 @@ def train_policy(args, env, num_steps=40000000, save_path='model'):
         train_net = train_net.cuda()
         net = net.cuda()
     train_net.train()
+    for param in net.parameters():
+        param.requires_grad = False
     net.eval()
  
     ''' load buffers '''
