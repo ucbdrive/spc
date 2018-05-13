@@ -1,5 +1,5 @@
 def init_parser(parser):
-	parser.add_argument('--lr', type = float, default = 0.01, metavar = 'LR', help = 'learning rate')
+	parser.add_argument('--lr', type = float, default = 1e-3, metavar = 'LR', help = 'learning rate')
 	parser.add_argument('--frame-history-len', type = int, default = 3)
 	parser.add_argument('--pred-step', type = int, default = 15)
 	parser.add_argument('--batch-size', type = int, default = 32)
@@ -15,6 +15,7 @@ def init_parser(parser):
 	parser.add_argument('--batch-step', type = int, default = 400)
 	parser.add_argument('--resume', action = 'store_true')
 	parser.add_argument('--seed', type = float, default = 233)
+	parser.add_argument('--id', type = int, default = 0)
 
 	# enviroument configurations
 	parser.add_argument('--env', type = str, default = 'torcs-v0', metavar = 'ENV', help = 'environment')
@@ -40,6 +41,7 @@ def init_parser(parser):
 	parser.add_argument('--num-dqn-action', type=int, default=10)
 	parser.add_argument('--sample-with-offroad', action='store_true')
 	parser.add_argument('--sample-with-collision', action='store_true')
+	parser.add_argument('--sample-with-distance', action='store_true')
 	parser.add_argument('--num-same-step', type=int, default=1)
 	
 	parser.add_argument('--hidden-dim', type = int, default = 1024)

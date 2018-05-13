@@ -13,7 +13,7 @@ from test import test
 
 def train_policy(args, env, num_steps=40000000, save_path='model'):
     ''' basics '''
-    env = TorcsWrapper(env)
+    env = TorcsWrapper(env, random_reset = args.use_random_reset, continuous = args.continuous)
 
     ''' create model '''
     train_net = ConvLSTMMulti(args)
@@ -27,6 +27,8 @@ def train_policy(args, env, num_steps=40000000, save_path='model'):
         train_net = train_net.cuda()
         net = net.cuda()
     train_net.train()
+    for param in net.parameters():
+        param.requires_grad = False
     net.eval()
  
     ''' load buffers '''
@@ -42,7 +44,7 @@ def train_policy(args, env, num_steps=40000000, save_path='model'):
     )
 
     if args.use_dqn:
-        dqn_agent = DQNAgent(args.frame_history_len, 10, args.lr, exploration, args.save_path)
+        dqn_agent = DQNAgent(args.frame_history_len, args.num_dqn_action, args.lr, exploration, args.save_path)
         if args.resume:
             dqn_agent.load_model()
     else:
@@ -72,7 +74,9 @@ def train_policy(args, env, num_steps=40000000, save_path='model'):
         this_obs_np = obs_buffer.store_frame(obs, avg_img, std_img)
         obs_var = Variable(torch.from_numpy(this_obs_np).unsqueeze(0)).float().cuda()
 
-        if args.continuous:
+        if tt % args.num_same_step != 0:
+            action = prev_act
+        elif args.continuous:
             if random.random() <= 1 - exploration.value(tt):
                 ## todo: finish sample continuous action function
                 action = sample_cont_action(args, net, obs_var, prev_action = prev_act)
@@ -155,7 +159,7 @@ def train_policy(args, env, num_steps=40000000, save_path='model'):
                 net.load_state_dict(train_net.module.state_dict())
                 epoch += 1
 
-                if epoch % 10 == 0:
+                if epoch % 1000 == 0:
                     print('Begin testing.')
                     test_reward = test(args, env, net, dqn_agent, mpc_buffer)
                     print('Finish testing.')
@@ -166,5 +170,5 @@ def train_policy(args, env, num_steps=40000000, save_path='model'):
                     dqn_agent.train_model(args.batch_size, tt)
                 if epoch % args.save_freq == 0:
                     torch.save(train_net.module.state_dict(), args.save_path+'/model/pred_model_'+str(tt).zfill(9)+'.pt')
-                    torch.save(optimizer.state_dict(), args.save_path+'/optimizer/optim_'+str(tt).zfill(9)+'.pt')
+                    torch.save(optimizer.state_dict(), args.save_path+'/optimizer/optimizer.pt')
                     pkl.dump(epoch, open(args.save_path+'/epoch.pkl', 'wb'))

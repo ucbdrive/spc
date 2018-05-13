@@ -91,12 +91,24 @@ def train_model(args, train_net, mpc_buffer, epoch, avg_img_t, std_img_t):
 
     if args.use_collision:
         show_accuracy(target['coll_batch'].view(-1), torch.max(output['coll_prob'].view(-1, 2), -1)[1], 'collision')
-        coll_ls = Focal_Loss(output['coll_prob'].view(-1, 2), target['coll_batch'].view(-1), reduce = True)
+        weight = torch.zeros(2)
+        weight[0] = target['coll_batch'].sum() / args.batch_size / args.pred_step
+        weight[1] = 1 - weight[0]
+        if torch.cuda.is_available():
+            weight = weight.cuda()
+        coll_ls = nn.CrossEntropyLoss(weight = weight)(output['coll_prob'].view(args.batch_size * args.pred_step, 2), target['coll_batch'].view(args.batch_size * args.pred_step).long())
+        # coll_ls = Focal_Loss(output['coll_prob'].view(-1, 2), target['coll_batch'].view(-1), reduce = True)
         print('coll ls', coll_ls.data.cpu().numpy())
 
     if args.use_offroad:
         show_accuracy(target['off_batch'].view(-1), torch.max(output['offroad_prob'].view(-1, 2), -1)[1], 'offroad')
-        offroad_ls = Focal_Loss(output['offroad_prob'].view(-1, 2), target['off_batch'].view(-1), reduce = True)
+        weight = torch.zeros(2)
+        weight[0] = target['off_batch'].sum() / args.batch_size / args.pred_step
+        weight[1] = 1 - weight[0]
+        if torch.cuda.is_available():
+            weight = weight.cuda()
+        offroad_ls = nn.CrossEntropyLoss(weight = weight)(output['offroad_prob'].view(args.batch_size * args.pred_step, 2), target['off_batch'].view(args.batch_size * args.pred_step).long())
+        # offroad_ls = Focal_Loss(output['offroad_prob'].view(-1, 2), target['off_batch'].view(-1), reduce = True)
         print('offroad ls', offroad_ls.data.cpu().numpy())
 
     if args.use_distance:
@@ -316,7 +328,7 @@ def load_model(path, net, data_parallel = True, optimizer = None, resume=True):
         net = net.cuda()
 
     if optimizer is not None and epoch > 0:
-        optimizer.load_state_dict(torch.load(os.path.join(path, 'optimizer/optim_' + model_path.split('_')[-1])))
+        optimizer.load_state_dict(torch.load(os.path.join(path, 'optimizer', 'optimizer.pt')))
 
     if optimizer is None:
         return net, epoch
@@ -466,12 +478,18 @@ def get_action_loss(args, net, imgs, actions, target = None, hidden = None, cell
     weight = Variable(torch.from_numpy(weight).float().cuda()).repeat(batch_size, 1, 1)
     output = net(imgs, actions, hidden = hidden, cell = cell)
 
-    coll_ls = nn.CrossEntropyLoss(reduce = False)(output['coll_prob'].view(batch_size * args.pred_step, 2), target['coll_batch'])
-    off_ls = nn.CrossEntropyLoss(reduce = False)(output['offroad_prob'].view(batch_size * args.pred_step, 2), target['off_batch'])
-    coll_ls = (coll_ls.view(-1, args.pred_step, 1) * weight).sum()
-    off_ls = (off_ls.view(-1, args.pred_step, 1) * weight).sum()
-    dist_ls = (output['dist'].view(-1, args.pred_step, 1) * weight).sum()
-    loss = off_ls + coll_ls - 0.1 * dist_ls
+    loss = 0
+    if args.sample_with_collision:
+        coll_ls = nn.CrossEntropyLoss(reduce = False)(output['coll_prob'].view(batch_size * args.pred_step, 2), target['coll_batch'])
+        coll_ls = (coll_ls.view(-1, args.pred_step, 1) * weight).sum()
+        loss += coll_ls
+    if args.sample_with_offroad:
+        off_ls = nn.CrossEntropyLoss(reduce = False)(output['offroad_prob'].view(batch_size * args.pred_step, 2), target['off_batch'])
+        off_ls = (off_ls.view(-1, args.pred_step, 1) * weight).sum()
+        loss += off_ls
+    if args.sample_with_distance:
+        dist_ls = (output['dist'].view(-1, args.pred_step, 1) * weight).sum()
+        loss -= 0.1 * dist_ls
 
     if 'pos_batch' in target.keys() and 'angle_batch' in target.keys():
         pos_loss = torch.sqrt(nn.MSELoss()(output['pos'] + torch.sin(output['angle'] * math.pi / 2), target['pos_batch']))
