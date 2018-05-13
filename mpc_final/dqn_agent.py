@@ -76,5 +76,5 @@ class DQNAgent:
         
         if self.num_param_updates % 100 == 0:
             self.target_q_net.load_state_dict(self.dqn_net.state_dict())
-        torch.save(self.target_q_net.state_dict(), self.model_path+'/model_'+str(save_num)+'.pt')
-        torch.save(self.optimizer.state_dict(), self.optim_path+'/optimizer.pt')
+            torch.save(self.target_q_net.state_dict(), self.model_path+'/model_'+str(save_num)+'.pt')
+            torch.save(self.optimizer.state_dict(), self.optim_path+'/optimizer.pt')
