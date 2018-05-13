@@ -43,7 +43,7 @@ class TorcsWrapper:
         
         off_flag = int(info['trackPos'] >= 3 or info['trackPos'] <= -1)
         #coll_flag = int(abs(info['trackPos'] + info['angle']) > 6.5 or reward <= -2.5 or (info['damage'] > 0 and info['angle'] > 0.5 and info['speed'] < 15))
-        coll_flag = int(abs(info['trackPos'])>7.0)
+        coll_flag = int(abs(info['trackPos']) > 7.0)
         if coll_flag:
             self.coll_cnt += 1
         else:
@@ -54,7 +54,7 @@ class TorcsWrapper:
         reward['without_pos'] = reward_without_pos
         info['off_flag'] = off_flag
         info['coll_flag'] = coll_flag
-        return obs, reward, real_done, info
+        return obs, reward, done, info
 
     def close(self):
         self.env.close()
