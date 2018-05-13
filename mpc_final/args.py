@@ -36,6 +36,11 @@ def init_parser(parser):
 	parser.add_argument('--use-seg', action = 'store_true')
 	parser.add_argument('--use-xyz', action = 'store_true')
 	parser.add_argument('--use-dqn', action = 'store_true')
-
+	parser.add_argument('--use-reset', action = 'store_true')
+	parser.add_argument('--num-dqn-action', type=int, default=10)
+	parser.add_argument('--sample-with-offroad', action='store_true')
+	parser.add_argument('--sample-with-collision', action='store_true')
+	parser.add_argument('--num-same-step', type=int, default=1)
+	
 	parser.add_argument('--hidden-dim', type = int, default = 1024)
 	parser.add_argument('--info-dim', type = int, default = 32)
