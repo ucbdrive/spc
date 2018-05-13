@@ -466,12 +466,18 @@ def get_action_loss(args, net, imgs, actions, target = None, hidden = None, cell
     weight = Variable(torch.from_numpy(weight).float().cuda()).repeat(batch_size, 1, 1)
     output = net(imgs, actions, hidden = hidden, cell = cell)
 
-    coll_ls = nn.CrossEntropyLoss(reduce = False)(output['coll_prob'].view(batch_size * args.pred_step, 2), target['coll_batch'])
-    off_ls = nn.CrossEntropyLoss(reduce = False)(output['offroad_prob'].view(batch_size * args.pred_step, 2), target['off_batch'])
-    coll_ls = (coll_ls.view(-1, args.pred_step, 1) * weight).sum()
-    off_ls = (off_ls.view(-1, args.pred_step, 1) * weight).sum()
-    dist_ls = (output['dist'].view(-1, args.pred_step, 1) * weight).sum()
-    loss = off_ls + coll_ls - 0.1 * dist_ls
+    loss = 0
+    if args.sample_with_collision:
+        coll_ls = nn.CrossEntropyLoss(reduce = False)(output['coll_prob'].view(batch_size * args.pred_step, 2), target['coll_batch'])
+        coll_ls = (coll_ls.view(-1, args.pred_step, 1) * weight).sum()
+        loss += coll_ls
+    if args.sample_with_offroad:
+        off_ls = nn.CrossEntropyLoss(reduce = False)(output['offroad_prob'].view(batch_size * args.pred_step, 2), target['off_batch'])
+        off_ls = (off_ls.view(-1, args.pred_step, 1) * weight).sum()
+        loss += off_ls
+    if args.sample_with_distance:
+        dist_ls = (output['dist'].view(-1, args.pred_step, 1) * weight).sum()
+        loss -= 0.1 * dist_ls
 
     if 'pos_batch' in target.keys() and 'angle_batch' in target.keys():
         pos_loss = torch.sqrt(nn.MSELoss()(output['pos'] + torch.sin(output['angle'] * math.pi / 2), target['pos_batch']))

@@ -44,7 +44,7 @@ def train_policy(args, env, num_steps=40000000, save_path='model'):
     )
 
     if args.use_dqn:
-        dqn_agent = DQNAgent(args.frame_history_len, 10, args.lr, exploration, args.save_path)
+        dqn_agent = DQNAgent(args.frame_history_len, args.num_dqn_action, args.lr, exploration, args.save_path)
         if args.resume:
             dqn_agent.load_model()
     else:
