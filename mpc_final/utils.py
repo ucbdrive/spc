@@ -316,7 +316,7 @@ def load_model(path, net, data_parallel = True, optimizer = None, resume=True):
         net = net.cuda()
 
     if optimizer is not None and epoch > 0:
-        optimizer.load_state_dict(torch.load(os.path.join(path, 'optimizer/optim_' + model_path.split('_')[-1])))
+        optimizer.load_state_dict(torch.load(os.path.join(path, 'optimizer', 'optimizer.pt')))
 
     if optimizer is None:
         return net, epoch
