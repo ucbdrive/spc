@@ -9,7 +9,7 @@ from model import *
 from torch.autograd import Variable
 
 class DQNAgent:
-    def __init__(self, frame_history_len=4, num_actions=11, lr=0.0001, exploration=None, save_path=None):
+    def __init__(self, frame_history_len=4, num_actions=11, lr=0.0001, exploration=None, save_path=None, args=None):
         self.dqn_net = atari_model(3 * frame_history_len, num_actions, frame_history_len).cuda().float().train()
         self.target_q_net = atari_model(3 * frame_history_len, num_actions, frame_history_len).cuda().float().eval()
         self.optimizer = optim.Adam(self.dqn_net.parameters(), lr = lr, amsgrad=True)
@@ -20,6 +20,7 @@ class DQNAgent:
         self.exploration = exploration
         self.num_param_updates = 0
         self.save_path = save_path
+        self.target_update_freq = args.target_update_freq
         if os.path.isdir(os.path.join(save_path, 'dqn')) == False:
             os.mkdir(os.path.join(save_path, 'dqn'))
         if os.path.isdir(os.path.join(save_path, 'dqn', 'model')) == False:
@@ -74,7 +75,7 @@ class DQNAgent:
         self.optimizer.step()
         self.num_param_updates += 1
         
-        if self.num_param_updates % 100 == 0:
+        if self.num_param_updates % self.target_update_freq == 0:
             self.target_q_net.load_state_dict(self.dqn_net.state_dict())
             torch.save(self.target_q_net.state_dict(), self.model_path+'/model_'+str(save_num)+'.pt')
             torch.save(self.optimizer.state_dict(), self.optim_path+'/optimizer.pt')
