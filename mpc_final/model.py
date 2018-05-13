@@ -148,7 +148,7 @@ class ConvLSTMNet(nn.Module):
             output_dict['seg_pred'] = self.up_sampler(nx_feature_enc[:, -self.args.classes:, :, :])
             nx_feature_enc = nx_feature_enc.detach()
         else:
-            output_dict['seg_pred'] = self.outfeature_encode(F.relu(nx_feature_enc))
+            output_dict['seg_pred'] = self.outfeature_encode(F.relu(torch.cat([nx_feature_enc, action_enc], dim=1)))
 
         # major outputs
         output_dict['coll_prob'] = self.coll_layer(nx_feature_enc, action_enc)
@@ -206,14 +206,13 @@ class ConvLSTMMulti(nn.Module):
         final_dict = dict()
         for key in output_dict.keys():
             final_dict[key] = [output_dict[key]]
-        final_dict['seg_pred'] = [output_dict['seg_current'], output_dict['seg_pred']]
-        # final_dict['pred_list'] = [pred]
+        if self.args.use_seg:
+            final_dict['seg_pred'] = [output_dict['seg_current'], output_dict['seg_pred']]
 
         for i in range(1, self.args.pred_step):
             output_dict, pred, hidden, cell = self.conv_lstm(pred, actions[:, i, :], with_encode=True, hidden=hidden, cell=cell)
             for key in output_dict.keys():
                 final_dict[key].append(output_dict[key])
-            # final_dict['pred_list'].append(pred)
 
         for key in final_dict.keys():
             final_dict[key] = torch.stack(final_dict[key], dim = 1)
