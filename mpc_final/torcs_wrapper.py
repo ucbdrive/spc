@@ -33,10 +33,6 @@ class TorcsWrapper:
             self.coll_cnt += 1
         else:
             self.coll_cnt = 0
-        if self.coll_cnt > 10:
-            real_done = True
-        if abs(info['angle']) >= (math.pi / 2):
-            real_done = True
         obs = cv2.resize(obs, self.imsize)
         reward = {}
         reward['with_pos'] = reward_with_pos
