@@ -97,6 +97,7 @@ class MPCBuffer(object):
         
         if self.args.use_distance:
             data_dict['dist_batch'] = data_dict['sp_batch'] * (np.cos(data_dict['angle_batch']) - np.abs(np.sin(data_dict['angle_batch']))) 
+        
         data_dict['sp_batch'] /= 20.0
 
         if self.args.use_seg:
