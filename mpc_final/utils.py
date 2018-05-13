@@ -208,9 +208,7 @@ class DoneCondition:
             self.off_cnt = 0
         if self.off_cnt > self.size:
             return True
-        if abs(pos) >= 7.0:
-            return True
-        if abs(angle) >= (math.pi / 2):
+        if abs(pos) >= 21.0:
             return True
         self.pos.append(list(posxyz))
         real_pos = np.concatenate(self.pos[-100:])
