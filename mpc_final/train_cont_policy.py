@@ -155,7 +155,7 @@ def train_policy(args, env, num_steps=40000000, save_path='model'):
                 net.load_state_dict(train_net.module.state_dict())
                 epoch += 1
 
-                if epoch % 10 == 0:
+                if epoch % 1000 == 0:
                     print('Begin testing.')
                     test_reward = test(args, env, net, dqn_agent, mpc_buffer)
                     print('Finish testing.')
