@@ -65,7 +65,7 @@ class MPCBuffer(object):
         if idx < 10 or idx >= self.num_in_buffer - self.args.pred_step - 10:
             return False
         else:
-            done_list = self.done[idx - self.args.frame_history_len + 1: idx - self.args.frame_history_len + 1 + self.args.pred_step]
+            done_list = self.done[idx - self.args.frame_history_len: idx - self.args.frame_history_len + 1 + self.args.pred_step]
             if np.sum(done_list) >= 1.0:
                 return False
             else:
