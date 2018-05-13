@@ -13,7 +13,7 @@ from test import test
 
 def train_policy(args, env, num_steps=40000000, save_path='model'):
     ''' basics '''
-    env = TorcsWrapper(env)
+    env = TorcsWrapper(env, random_reset = args.use_random_reset, continuous = args.continuous)
 
     ''' create model '''
     train_net = ConvLSTMMulti(args)

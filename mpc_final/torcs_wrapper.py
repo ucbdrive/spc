@@ -4,24 +4,38 @@ import math
 import numpy as np
 import pdb
 
+def naive_driver(info, continuous):
+    if info['angle'] > 0.5 or (info['trackPos'] < -1 and info['angle'] > 0):
+        return np.array([1.0, 1.0]) if continuous else 0
+    elif info['angle'] < -0.5 or (info['trackPos'] > 3 and info['angle'] < 0):
+        return np.array([1.0, -1.0]) if continuous else 2
+    return np.array([1.0, 0.0]) if continuous else 1
+
 class TorcsWrapper:
-    def __init__(self, env, imsize=(256, 256)):
+    def __init__(self, env, imsize=(256, 256), random_reset = True, continuous = True):
         self.env = env
         self.imsize = imsize
+        self.random_reset = random_reset
+        self.continuous = continuous
         self.doneCond = DoneCondition(30)
         self.epi_len = 0
         self.coll_cnt = 0
 
     def reset(self):
         obs = self.env.reset()
+        if self.random_reset:
+            for i in range(np.random.randint(200)):
+                obs, _, _, _ = self.env.step(naive_driver(self.env.get_info(), self.continuous))
         self.doneCond = DoneCondition(30)
         self.epi_len = 0
         self.coll_cnt = 0
         return cv2.resize(obs, self.imsize)
          
     def step(self, action):
+        real_action = action
+        real_action[0] = real_action[0] * 0.5 + 0.5
         self.epi_len += 1
-        obs, reward, real_done, info = self.env.step(action)
+        obs, reward, real_done, info = self.env.step(real_action)
         dist_this = info['speed'] * (np.cos(info['angle']) - np.abs(np.sin(info['angle'])))
         reward_with_pos = info['speed'] * (np.cos(info['angle']) - np.abs(np.sin(info['angle'])) - np.abs(info['trackPos']) / 9.0) / 40.0
         reward_without_pos = info['speed'] * (np.cos(info['angle']) - np.abs(np.sin(info['angle']))) / 40.0
