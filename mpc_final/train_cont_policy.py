@@ -166,5 +166,5 @@ def train_policy(args, env, num_steps=40000000, save_path='model'):
                     dqn_agent.train_model(args.batch_size, tt)
                 if epoch % args.save_freq == 0:
                     torch.save(train_net.module.state_dict(), args.save_path+'/model/pred_model_'+str(tt).zfill(9)+'.pt')
-                    torch.save(optimizer.state_dict(), args.save_path+'/optimizer/optim_'+str(tt).zfill(9)+'.pt')
+                    torch.save(optimizer.state_dict(), args.save_path+'/optimizer/optimizer.pt')
                     pkl.dump(epoch, open(args.save_path+'/epoch.pkl', 'wb'))
