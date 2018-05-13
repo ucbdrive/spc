@@ -103,14 +103,13 @@ def train_policy(args, env, num_steps=40000000):
         img_buffer.store_frame(obs)
         if args.continuous:
             print('action', "{0:.2f}".format(action[0]), "{0:.2f}".format(action[1]), ' pos ', "{0:.2f}".format(info['trackPos']), "{0:.2f}".format(info['pos'][0]), "{0:.2f}".format(info['pos'][1]),\
-                ' reward ', "{0:.2f}".format(reward['with_pos']))
+                ' angle ', "{0:.2f}".format(info['angle']), ' reward ', "{0:.2f}".format(reward['with_pos']))
         else:
             print('action', '%d' % real_action, ' pos ', "{0:.2f}".format(info['trackPos']), "{0:.2f}".format(info['pos'][0]), "{0:.2f}".format(info['pos'][1]),\
-                ' reward ', "{0:.2f}".format(reward['with_pos']))
+                ' angle ', "{0:.2f}".format(info['angle']), ' reward ', "{0:.2f}".format(reward['with_pos']))
         prev_act = action
         speed_np, pos_np, posxyz_np = get_info_np(info, use_pos_class = False)
         offroad_flag, coll_flag = info['off_flag'], info['coll_flag']
-        print('collision: %d' % int(coll_flag))
         speed_list, pos_list = get_info_ls(prev_info)
         if args.use_xyz:
             xyz = np.array(info['pos'])
