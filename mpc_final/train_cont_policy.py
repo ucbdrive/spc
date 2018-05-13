@@ -128,6 +128,12 @@ def train_policy(args, env, num_steps=40000000, save_path='model'):
             obs_buffer.clear()
             epi_rewards_with.append(rewards_with)
             epi_rewards_without.append(rewards_without)
+            if len(epi_rewards_with) % 100 == 0:
+                print('begin testing')
+                test_reward = test(args, env, net, dqn_agent, mpc_buffer)
+                print('Finish testing.')
+                with open(os.path.join(args.save_path, 'test_log.txt'), 'a') as f:
+                    f.write('epoch %d reward_with %f reward_without %f\n' % (epoch, test_reward['with_pos'], test_reward['without_pos']))
             obs = env.reset()
             rewards_with, rewards_without = 0, 0
             prev_act = np.array([1.0, 0.0]) if args.continuous else 1
@@ -159,13 +165,15 @@ def train_policy(args, env, num_steps=40000000, save_path='model'):
                 net.load_state_dict(train_net.module.state_dict())
                 epoch += 1
 
+                '''
                 if epoch % 1000 == 0:
                     print('Begin testing.')
                     test_reward = test(args, env, net, dqn_agent, mpc_buffer)
                     print('Finish testing.')
                     with open(os.path.join(args.save_path, 'test_log.txt'), 'a') as f:
                         f.write('epoch %d reward_with %f reward_without %f\n' % (epoch, test_reward['with_pos'], test_reward['without_pos']))
-                
+                '''
+
                 if args.use_dqn:
                     dqn_agent.train_model(args.batch_size, tt)
                 if epoch % args.save_freq == 0:
