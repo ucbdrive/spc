@@ -42,5 +42,5 @@ if __name__ == '__main__':
     obs, reward, done, info = env.step(np.array([1.0, 0.0]) if args.continuous else 1) # Action space is (-1,1)^2
     print(obs.shape, reward, done, info)
 
-    train_policy(args, env, num_steps = 40000000, save_path = 'model')
+    train_policy(args, env, num_steps = 40000000)
     env.close()

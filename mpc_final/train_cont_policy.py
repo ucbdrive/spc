@@ -11,7 +11,7 @@ from torcs_wrapper import *
 from dqn_agent import *
 from test import test
 
-def train_policy(args, env, num_steps=40000000, save_path='model'):
+def train_policy(args, env, num_steps=40000000):
     ''' basics '''
     env = TorcsWrapper(env, random_reset = args.use_random_reset, continuous = args.continuous)
 
