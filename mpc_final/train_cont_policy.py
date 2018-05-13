@@ -76,6 +76,9 @@ def train_policy(args, env, num_steps=40000000):
 
         if tt % args.num_same_step != 0:
             action = prev_act
+            real_action = action
+            if args.continuous:
+                real_action[0] = real_action[0] * 0.5 + 0.5        
         elif args.continuous:
             if random.random() <= 1 - exploration.value(tt):
                 ## todo: finish sample continuous action function
