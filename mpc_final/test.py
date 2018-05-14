@@ -3,21 +3,30 @@ import torch
 from torch.autograd import Variable
 import copy
 from utils import *
+from dqn_utils import *
 
-def test(args, env, net, dqn_agent, mpc_buffer):
+def test(args, env, net, avg_img, std_img):
     obs_buffer = ObsBuffer(args.frame_history_len)
-    _ = env.reset()
+    _ = env.reset(rand_reset=False) # always start from the same place
     prev_act = np.array([1.0, 0.0]) if args.continuous else 1
     obs, reward, done, info = env.step(prev_act)
     prev_info = copy.deepcopy(info)
     prev_xyz = np.array(info['pos'])
     rewards_with, rewards_without = 0, 0
+    exploration = PiecewiseSchedule([(0, 0.0), (1000, 0.0)], outside_value = 0.0)
+        
+    if args.use_dqn:
+        dqn_agent = DQNAgent(args.frame_history_len, args.num_dqn_action, args.lr, exploration, args.save_path, args=args)
+        dqn_agent.load_model() 
+    else:
+        dqn_agent = None
 
+    mpc_buffer = MPCBuffer(args)
     while not done:
         if args.use_dqn:
             dqn_action = dqn_agent.sample_action(obs, 1e8)
         ret = mpc_buffer.store_frame(obs)
-        this_obs_np = obs_buffer.store_frame(obs, 112.62289744791671, 56.1524832523)
+        this_obs_np = obs_buffer.store_frame(obs, avg_img, std_img)
         obs_var = Variable(torch.from_numpy(this_obs_np).unsqueeze(0)).float().cuda()
 
         if args.continuous:
@@ -42,7 +51,6 @@ def test(args, env, net, dqn_agent, mpc_buffer):
 
         speed_np, pos_np, posxyz_np = get_info_np(info, use_pos_class = False)
         offroad_flag, coll_flag = info['off_flag'], info['coll_flag']
-        print('collision: %d' % int(coll_flag))
         speed_list, pos_list = get_info_ls(prev_info)
         if args.use_xyz:
             xyz = np.array(info['pos'])

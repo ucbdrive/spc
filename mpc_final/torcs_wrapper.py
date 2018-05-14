@@ -21,9 +21,9 @@ class TorcsWrapper:
         self.epi_len = 0
         self.coll_cnt = 0
 
-    def reset(self):
+    def reset(self, rand_reset=True):
         obs = self.env.reset()
-        if self.random_reset:
+        if self.random_reset and rand_reset:
             rand_step = np.random.randint(500)
             for i in range(rand_step):
                 obs, _, _, _ = self.env.step(naive_driver(self.env.get_info(), self.continuous))

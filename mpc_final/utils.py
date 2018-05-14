@@ -237,8 +237,7 @@ class ObsBuffer:
         self.last_obs_all = []
 
     def store_frame(self, frame, avg_img, std_img):
-        #obs_np = (frame-avg_img)/(std_img+0.0001)
-        obs_np = (frame - 112.62289744791671) / 56.1524832523
+        obs_np = (frame-avg_img)/(std_img+0.0001)
         obs_np = obs_np.transpose(2,0,1)
         if len(self.last_obs_all) < self.frame_history_len:
             self.last_obs_all = []

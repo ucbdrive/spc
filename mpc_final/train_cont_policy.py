@@ -134,9 +134,9 @@ def train_policy(args, env, num_steps=40000000):
             obs_buffer.clear()
             epi_rewards_with.append(rewards_with)
             epi_rewards_without.append(rewards_without)
-            if len(epi_rewards_with) % 100 == 0:
+            if len(epi_rewards_with) % 10 == 0:
                 print('begin testing')
-                test_reward = test(args, env, net, dqn_agent, mpc_buffer)
+                test_reward = test(args, env, net, avg_img, std_img)
                 print('Finish testing.')
                 with open(os.path.join(args.save_path, 'test_log.txt'), 'a') as f:
                     f.write('epoch %d reward_with %f reward_without %f\n' % (epoch, test_reward['with_pos'], test_reward['without_pos']))
