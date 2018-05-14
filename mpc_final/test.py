@@ -4,6 +4,8 @@ from torch.autograd import Variable
 import copy
 from utils import *
 from dqn_utils import *
+from dqn_agent import *
+from mpc_utils import *
 
 def test(args, env, net, avg_img, std_img):
     obs_buffer = ObsBuffer(args.frame_history_len)
