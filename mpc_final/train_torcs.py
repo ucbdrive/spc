@@ -4,7 +4,6 @@ import argparse
 from args import init_parser
 import numpy as np
 import torch
-# from envs import create_env
 from train_cont_policy import train_policy
 from utils import init_dirs
 import sys
@@ -12,7 +11,6 @@ sys.path.append('/media/xinleipan/data/git/pyTORCS/py_TORCS')
 sys.path.append('/media/xinleipan/data/git/pyTORCS/')
 from py_TORCS import torcs_envs
 import torch.multiprocessing as mp
-# from mpc_agent import *
 
 parser = argparse.ArgumentParser(description = 'Train-torcs')
 init_parser(parser) # See `args.py` for default arguments
@@ -33,7 +31,7 @@ if __name__ == '__main__':
     if os.path.exists('/home/cxy/pyTORCS/game_config/michigan.xml'):
         args.game_config = '/home/cxy/pyTORCS/game_config/michigan.xml'
         args.xvfb = False
-    
+ 
     envs = torcs_envs(num = 1, game_config = args.game_config, mkey_start = 817 + args.id, screen_id = 160 + args.id,
                       isServer = int(args.xvfb), continuous = args.continuous, resize = True)
     env = envs.get_envs()[0]
