@@ -494,11 +494,10 @@ def get_action_loss(args, net, imgs, actions, target = None, hidden = None, cell
         dist_ls = (output['dist'].view(-1, args.pred_step, 1) * weight).sum()
         loss -= 0.1 * dist_ls
 
-    '''
     if 'pos_batch' in target.keys() and 'angle_batch' in target.keys():
-        pos_loss = torch.sqrt(nn.MSELoss()(output['pos'] + torch.sin(output['angle'] * math.pi / 2), target['pos_batch']))
+        pos_loss = torch.sqrt(nn.MSELoss()(output['pos'] + torch.sin(output['angle']), target['pos_batch']))
         loss += pos_loss
-    '''
+    
     if 'sp_batch' in target.keys():
         speed_loss = torch.sqrt(nn.MSELoss()(output['speed'], target['sp_batch']))
         loss += speed_loss

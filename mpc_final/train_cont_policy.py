@@ -71,6 +71,7 @@ def train_policy(args, env, num_steps=40000000):
 
     epi_rewards_with, epi_rewards_without = [], []
     rewards_with, rewards_without = 0, 0
+    start_testing = False
     for tt in range(num_imgs_start, num_steps):
         if args.use_dqn:
             dqn_action = dqn_agent.sample_action(obs, tt)
@@ -160,6 +161,9 @@ def train_policy(args, env, num_steps=40000000):
             dqn_agent.store_effect(dqn_action, reward['with_pos'], done)
         
         if tt % args.learning_freq == 0 and tt > args.learning_starts and mpc_buffer.can_sample(args.batch_size):
+            start_testing = True
+            
+        if start_testing and done:
             for ep in range(10):
                 optimizer.zero_grad()
                 
