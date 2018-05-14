@@ -316,11 +316,15 @@ def make_dir(path):
 def load_model(path, net, data_parallel = True, optimizer = None, resume=True):
     if resume:
         file_list = sorted(os.listdir(path+'/model')) 
-        model_path = file_list[-1]
-        epoch = pkl.load(open(path+'/epoch.pkl', 'rb'))
-        state_dict = torch.load(os.path.join(path, 'model', model_path))
-        net.load_state_dict(state_dict)
-        print('load success')
+        if len(file_list) == 0:
+            print('no model to resume!')
+            epoch = 0
+        else:
+            model_path = file_list[-1]
+            epoch = pkl.load(open(path+'/epoch.pkl', 'rb'))
+            state_dict = torch.load(os.path.join(path, 'model', model_path))
+            net.load_state_dict(state_dict)
+            print('load success')
     else:
         epoch = 0
     if torch.cuda.is_available():

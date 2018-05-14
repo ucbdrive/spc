@@ -33,13 +33,19 @@ class DQNAgent:
     def load_model(self):
         model_path, optim_path = self.model_path, self.optim_path
         file_list = sorted(os.listdir(model_path))
-        file_name = os.path.join(model_path, file_list[-1])
-        self.dqn_net.load_state_dict(torch.load(os.path.join(file_name)))
-        self.target_q_net.load_state_dict(torch.load(os.path.join(file_name)))
+        if len(file_list) == 0:
+            print('no model to resume!')
+        else:
+            file_name = os.path.join(model_path, file_list[-1])
+            self.dqn_net.load_state_dict(torch.load(os.path.join(file_name)))
+            self.target_q_net.load_state_dict(torch.load(os.path.join(file_name)))
         
         optim_list = sorted(os.listdir(optim_path))
-        optim_name = os.path.join(optim_path, optim_list[-1])
-        self.optimizer.load_state_dict(torch.load(os.path.join(optim_name)))
+        if len(optim_list) == 0:
+            print('no optimizer to resume!')
+        else:
+            optim_name = os.path.join(optim_path, optim_list[-1])
+            self.optimizer.load_state_dict(torch.load(os.path.join(optim_name)))
         
     def sample_action(self, obs, t):
         self.ret = self.replay_buffer.store_frame(cv2.resize(obs, (84, 84)))

@@ -61,7 +61,11 @@ def train_policy(args, env, num_steps=40000000):
     prev_xyz = np.array(info['pos'])
 
     if args.resume:
-        num_imgs_start = max(int(open(args.save_path + '/log_train_torcs.txt').readlines()[-1].split(' ')[1]) - 1000,0)
+        try:
+            num_imgs_start = max(int(open(args.save_path + '/log_train_torcs.txt').readlines()[-1].split(' ')[1]) - 1000,0)
+        except:
+            print('cannot find file, num_imgs_start is 0')
+            num_imgs_start = 0
     else:
         num_imgs_start = 0
 

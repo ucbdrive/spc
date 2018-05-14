@@ -10,18 +10,13 @@ import sys
 sys.path.append('/media/xinleipan/data/git/pyTORCS/py_TORCS')
 sys.path.append('/media/xinleipan/data/git/pyTORCS/')
 from py_TORCS import torcs_envs
+from torcs_wrapper import *
 
 parser = argparse.ArgumentParser(description = 'Train-torcs')
 init_parser(parser) # See `args.py` for default arguments
 args = parser.parse_args()
 
 if __name__ == '__main__':
-    init_dirs([args.save_path,
-               os.path.join(args.save_path, 'model'),
-               os.path.join(args.save_path,'optimizer'),
-               os.path.join(args.save_path, 'cnfmat')])
-    torch.manual_seed(args.seed)
-    np.random.seed(args.seed)
     # For tarasque
     if os.path.exists('/home/qizhicai/multitask/spn_new2/semantic-predictive-learning/game_config/michigan.xml'):
         args.game_config = '/home/qizhicai/multitask/spn_new2/semantic-predictive-learning/game_config/michigan.xml'
@@ -39,5 +34,7 @@ if __name__ == '__main__':
     obs, reward, done, info = env.step(np.array([1.0, 0.0]) if args.continuous else 1) # Action space is (-1,1)^2
     print(obs.shape, reward, done, info)
 
-    train_policy(args, env, num_steps = 40000000)
-    env.close()
+    for i in range(600):
+        action = naive_driver(info, True)
+        obs, reward, done, info = env.step(action)
+        print('step ', i, ' pos ', info['pos'], ' angle ', info['angle'], ' pos ', info['trackPos'])        
