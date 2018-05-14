@@ -5,9 +5,9 @@ import numpy as np
 import pdb
 
 def naive_driver(info, continuous):
-    if info['angle'] > 0:# or (info['trackPos'] < -1 and info['angle'] > 0.05):
+    if info['angle'] > 0.5 or (info['trackPos'] < -1 and info['angle'] > 0):
         return np.array([1.0, 0.1]) if continuous else 0
-    elif info['angle'] < 0:#-0.3 or (info['trackPos'] > 3 and info['angle'] < -0.05):
+    elif info['angle'] < -0.5 or (info['trackPos'] > 3 and info['angle'] < 0):
         return np.array([1.0, -0.1]) if continuous else 2
     return np.array([1.0, 0.0]) if continuous else 1
 
@@ -43,7 +43,6 @@ class TorcsWrapper:
         done = self.doneCond.isdone(info['trackPos'], dist_this, info['pos'], info['angle']) or self.epi_len > 1000
         
         off_flag = int(info['trackPos'] >= 3 or info['trackPos'] <= -1)
-        #coll_flag = int(abs(info['trackPos'] + info['angle']) > 6.5 or reward <= -2.5 or (info['damage'] > 0 and info['angle'] > 0.5 and info['speed'] < 15))
         coll_flag = int(abs(info['trackPos']) > 7.0)
         if coll_flag:
             self.coll_cnt += 1
