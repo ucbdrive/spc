@@ -135,12 +135,6 @@ def train_policy(args, env, num_steps=40000000):
             obs_buffer.clear()
             epi_rewards_with.append(rewards_with)
             epi_rewards_without.append(rewards_without)
-            if len(epi_rewards_with) % 10 == 0:
-                print('begin testing')
-                test_reward = test(args, env, net, avg_img, std_img)
-                print('Finish testing.')
-                with open(os.path.join(args.save_path, 'test_log.txt'), 'a') as f:
-                    f.write('epoch %d reward_with %f reward_without %f\n' % (tt, test_reward['with_pos'], test_reward['without_pos']))
             obs = env.reset()
             rewards_with, rewards_without = 0, 0
             prev_act = np.array([1.0, 0.0]) if args.continuous else 1
@@ -162,8 +156,6 @@ def train_policy(args, env, num_steps=40000000):
         
         if tt % args.learning_freq == 0 and tt > args.learning_starts and mpc_buffer.can_sample(args.batch_size):
             start_testing = True
-            
-        if start_testing and done:
             for ep in range(10):
                 optimizer.zero_grad()
                 
@@ -181,3 +173,11 @@ def train_policy(args, env, num_steps=40000000):
                     torch.save(train_net.module.state_dict(), args.save_path+'/model/pred_model_'+str(tt).zfill(9)+'.pt')
                     torch.save(optimizer.state_dict(), args.save_path+'/optimizer/optimizer.pt')
                     pkl.dump(epoch, open(args.save_path+'/epoch.pkl', 'wb'))
+
+        if start_testing and done:
+            print('begin testing')
+            test_reward = test(args, env, net, avg_img, std_img)
+            print('Finish testing.')
+            with open(os.path.join(args.save_path, 'test_log.txt'), 'a') as f:
+                f.write('step %d reward_with %f reward_without %f\n' % (tt, test_reward['with_pos'], test_reward['without_pos']))
+            start_testing = False
