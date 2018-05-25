@@ -162,9 +162,8 @@ def train_model(args, train_net, mpc_buffer, epoch, avg_img_t, std_img_t):
 def draw_from_pred(pred):
     illustration = np.zeros((256, 256, 3)).astype(np.uint8)
     illustration[:, :, 0] = 255
-    illustration[pred == 1] = np.array([0, 255, 0])
-    illustration[pred == 2] = np.array([0, 0, 0])
-    illustration[pred == 3] = np.array([0, 0, 255])
+    illustration[pred == 1] = np.array([0, 0, 0])
+    illustration[pred == 2] = np.array([0, 0, 255])
     return illustration
 
 def visualize(args, target, output):
@@ -468,14 +467,26 @@ def get_action_loss(args, net, imgs, actions, target = None, hidden = None, cell
         target = dict()
         target['coll_batch'] = Variable(torch.zeros(batch_size * args.pred_step), requires_grad = False).type(torch.LongTensor)
         target['off_batch'] = Variable(torch.zeros(batch_size * args.pred_step), requires_grad = False).type(torch.LongTensor)
-        if args.use_pos and args.use_angle:
+        if args.sample_with_pos:
             target['pos_batch'] = Variable(torch.zeros(batch_size, args.pred_step, 1), requires_grad = False)
+        if args.sample_with_angle:
+            target['angle_batch'] = Variable(torch.zeros(batch_size, args.pred_step, 1), requires_grad = False)
+        if args.target_speed > 0:
+            target['speed_batch'] = Variable(torch.ones(batch_size, args.pred_step, 1) * args.target_speed, requires_grad = False)
+        if args.target_dist > 0:
+            target['dist_batch'] = Variable(torch.ones(batch_size, args.pred_step, 1) * args.target_dist, requires_grad = False)
 
         if torch.cuda.is_available():
             target['coll_batch'] = target['coll_batch'].cuda()
             target['off_batch'] = target['off_batch'].cuda()
-            if args.use_pos and args.use_angle:
+            if args.sample_with_pos:
                 target['pos_batch'] = target['pos_batch'].cuda()
+            if args.sample_with_angle:
+                target['angle_batch'] = target['angle_batch'].cuda()
+            if args.target_speed > 0:
+                target['speed_batch'] = target['speed_batch'].cuda()
+            if args.target_dist > 0:
+                target['dist_batch'] = target['dist_batch'].cuda()
 
     weight = (0.97 ** np.arange(args.pred_step)).reshape((1, args.pred_step, 1))
     weight = Variable(torch.from_numpy(weight).float().cuda()).repeat(batch_size, 1, 1)
@@ -490,16 +501,22 @@ def get_action_loss(args, net, imgs, actions, target = None, hidden = None, cell
         off_ls = nn.CrossEntropyLoss(reduce = False)(output['offroad_prob'].view(batch_size * args.pred_step, 2), target['off_batch'])
         off_ls = (off_ls.view(-1, args.pred_step, 1) * weight).sum()
         loss += off_ls
-    if args.sample_with_distance:
+    if args.target_dist > 0:
+        dist_loss = torch.sqrt(nn.MSELoss()(output['dist'], target['dist_batch']))
+        loss += dist_loss
+    elif args.sample_with_distance:
         dist_ls = (output['dist'].view(-1, args.pred_step, 1) * weight).sum()
         loss -= 0.1 * dist_ls
 
-    if 'pos_batch' in target.keys() and 'angle_batch' in target.keys():
-        pos_loss = torch.sqrt(nn.MSELoss()(output['pos'] + torch.sin(output['angle']), target['pos_batch']))
+    if args.sample_with_pos:
+        pos_loss = torch.sqrt(nn.MSELoss()(output['pos'], target['pos_batch']))
+        loss += pos_loss
+    if args.sample_with_angle:
+        pos_loss = torch.sqrt(nn.MSELoss()(output['angle'], target['angle_batch']))
         loss += pos_loss
     
-    if 'sp_batch' in target.keys():
-        speed_loss = torch.sqrt(nn.MSELoss()(output['speed'], target['sp_batch']))
+    if args.target_speed > 0:
+        speed_loss = torch.sqrt(nn.MSELoss()(output['speed'], target['speed_batch']))
         loss += speed_loss
     if 'xyz_batch' in target.keys():
         xyz_loss = torch.sqrt(nn.MSELoss()(output['xyz'], target['xyz_batch'])) / 100.0

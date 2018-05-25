@@ -10,6 +10,7 @@ import pdb
 from PRED import PRED
 from end_layer import end_layer
 from conv_lstm import convLSTM
+from fcn import fcn
 from utils import weights_init
 
 class atari_model(nn.Module):
@@ -88,9 +89,11 @@ class ConvLSTMNet(nn.Module):
 
         # feature extraction part
         if args.use_seg:
-            self.action_encode = nn.Linear(args.num_total_act, 1*32*32)
+            self.action_encode = nn.Linear(args.num_total_act, 1*32*32) 
+            if not args.use_lstm:
+                self.actionEncoder = nn.Linear(args.num_total_act, 32)
             self.drnseg = DRNSeg(args)
-            self.feature_map_predictor = convLSTM(args.classes * args.frame_history_len + 1, args.classes)
+            self.feature_map_predictor = convLSTM(args.classes * args.frame_history_len + 1, args.classes) if args.use_lstm else fcn(args.classes * args.frame_history_len, args.classes)
             self.up_sampler = lambda x: F.upsample(x, scale_factor = 8, mode = 'bilinear', align_corners = True)
         else:
             self.action_encode = nn.Linear(args.num_total_act, args.info_dim)
@@ -127,29 +130,29 @@ class ConvLSTMNet(nn.Module):
                 hidden = x # Variable(torch.zeros(x.size()))
                 cell = x # Variable(torch.zeros(x.size()))
 
+        output_dict = dict()
         if self.args.use_seg:
             action_enc = self.action_encode(action).view(-1, 1, 32, 32)
-            combined = torch.cat([action_enc, x], dim = 1)
-            hidden, cell = self.feature_map_predictor(combined, (hidden, cell))
-            nx_feature_enc = torch.cat([x[:, self.args.classes:, :, :], hidden], dim = 1)
+            if self.args.use_lstm:
+                combined = torch.cat([action_enc, x], dim = 1)
+                hidden, cell = self.feature_map_predictor(combined, (hidden, cell))
+            else:
+                action_encoding = self.actionEncoder(action)
+                hidden = self.feature_map_predictor(x, action_encoding)
+
+            if with_encode == False:
+                output_dict['seg_current'] = self.up_sampler(x[:, -self.args.classes:, :, :])
+            output_dict['seg_pred'] = self.up_sampler(hidden)
+            feature_enc = torch.cat([x[:, self.args.classes:, :, :], hidden], dim = 1)
+            nx_feature_enc = feature_enc.detach()
         else:
             action_enc = F.relu(self.action_encode(action))
             encode = torch.cat([x, action_enc], dim = 1)
             encode = F.relu(self.info_encode(encode))
             hidden, cell = self.lstm(encode, [hidden, cell])
             nx_feature_enc = hidden#.view(-1, self.args.hidden_dim)
+            output_dict['seg_pred'] = self.outfeature_encode(F.relu(torch.cat([nx_feature_enc, action_enc], dim = 1)))
        
-        output_dict = dict()
-        
-        ''' next feature encoding: seg_pred ''' 
-        if self.args.use_seg:
-            if with_encode == False:
-                output_dict['seg_current'] = self.up_sampler(x[:, -self.args.classes:, :, :])
-            output_dict['seg_pred'] = self.up_sampler(nx_feature_enc[:, -self.args.classes:, :, :])
-            nx_feature_enc = nx_feature_enc.detach()
-        else:
-            output_dict['seg_pred'] = self.outfeature_encode(F.relu(torch.cat([nx_feature_enc, action_enc], dim=1)))
-
         # major outputs
         output_dict['coll_prob'] = self.coll_layer(nx_feature_enc, action_enc)
         output_dict['offroad_prob'] = self.off_layer(nx_feature_enc, action_enc)
@@ -165,6 +168,8 @@ class ConvLSTMNet(nn.Module):
         if self.args.use_xyz:
             output_dict['xyz'] = self.xyz_layer(nx_feature_enc, action_enc)
         
+        if self.args.use_seg:
+            nx_feature_enc = feature_enc
         return output_dict, nx_feature_enc, hidden, cell
      
     def get_feature(self, x):

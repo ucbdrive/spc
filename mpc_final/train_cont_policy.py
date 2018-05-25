@@ -15,6 +15,11 @@ def train_policy(args, env, num_steps=40000000):
     ''' basics '''
     env = TorcsWrapper(env, random_reset = args.use_random_reset, continuous = args.continuous)
 
+    if args.target_speed > 0 and os.path.exists(os.path.join(args.save_path, 'speedlog.txt')):
+        os.remove(os.path.exists(os.path.join(args.save_path, 'speedlog.txt')))
+    if args.target_dist > 0 and os.path.exists(os.path.join(args.save_path, 'distlog.txt')):
+        os.remove(os.path.exists(os.path.join(args.save_path, 'distlog.txt')))
+
     ''' create model '''
     train_net = ConvLSTMMulti(args)
     net = ConvLSTMMulti(args)
@@ -50,6 +55,7 @@ def train_policy(args, env, num_steps=40000000):
     else:
         dqn_agent = None
         
+    done_cnt = 0
     epi_rewards, rewards = [], 0.0
     _ = env.reset()
     prev_act = np.array([1.0, 0.0]) if args.continuous else 1
@@ -72,6 +78,7 @@ def train_policy(args, env, num_steps=40000000):
     epi_rewards_with, epi_rewards_without = [], []
     rewards_with, rewards_without = 0, 0
     start_testing = False
+    done_cnt = 0
     for tt in range(num_imgs_start, num_steps):
         if args.use_dqn:
             dqn_action = dqn_agent.sample_action(obs, tt)
@@ -105,6 +112,12 @@ def train_policy(args, env, num_steps=40000000):
             action = real_action
 
         obs, reward, done, info = env.step(real_action)
+        if args.target_speed > 0:
+            with open(os.path.join(args.save_path, 'speedlog.txt'), 'a') as f:
+                f.write('step %d speed %0.4f\n' % (tt, info['speed']))
+        if args.target_dist > 0:
+            with open(os.path.join(args.save_path, 'distlog.txt'), 'a') as f:
+                f.write('step %d dist %0.4f\n' % (tt, info['speed'] * (np.cos(info['angle']) - np.abs(np.sin(info['angle'])))))
         img_buffer.store_frame(obs)
         if args.continuous:
             print('action', "{0:.2f}".format(action[0]), "{0:.2f}".format(action[1]), ' pos ', "{0:.2f}".format(info['trackPos']), "{0:.2f}".format(info['pos'][0]), "{0:.2f}".format(info['pos'][1]),\
@@ -139,7 +152,7 @@ def train_policy(args, env, num_steps=40000000):
             rewards_with, rewards_without = 0, 0
             prev_act = np.array([1.0, 0.0]) if args.continuous else 1
             obs, reward, done, info = env.step(prev_act)
-            speed_np, pos_np, posxyz_np = get_info_np(info, use_pos_class=False)
+            speed_np, pos_np, posxyz_np = get_info_np(info, use_pos_class = False)
             print('past 100 episode rewards is ', \
                 "{0:.3f}".format(np.mean(epi_rewards_with[-100:])), \
                 ' std is ', "{0:.15f}".format(np.std(epi_rewards_with[-100:])))
@@ -149,6 +162,14 @@ def train_policy(args, env, num_steps=40000000):
                 fi.write(' std ' + str(np.std(epi_rewards_with[-10:])))
                 fi.write(' reward_without ' + str(np.mean(epi_rewards_without[-10:])))
                 fi.write(' std ' + str(np.std(epi_rewards_without[-10:])) + '\n')
+            done_cnt += 1
+            if done_cnt % 5 == 0:
+                print('begin testing')
+                test_reward = test(args, env, net, avg_img, std_img)
+                print('Finish testing.')
+                with open(os.path.join(args.save_path, 'test_log.txt'), 'a') as f:
+                    f.write('step %d reward_with %f reward_without %f\n' % (tt, test_reward['with_pos'], test_reward['without_pos']))
+            
         
         prev_info = copy.deepcopy(info) 
         if args.use_dqn:
@@ -156,7 +177,7 @@ def train_policy(args, env, num_steps=40000000):
         
         if tt % args.learning_freq == 0 and tt > args.learning_starts and mpc_buffer.can_sample(args.batch_size):
             start_testing = True
-            for ep in range(10):
+            for ep in range(50):
                 optimizer.zero_grad()
                 
                 # TODO : FINISH TRAIN MPC MODEL FUNCTION
@@ -174,10 +195,3 @@ def train_policy(args, env, num_steps=40000000):
                     torch.save(optimizer.state_dict(), args.save_path+'/optimizer/optimizer.pt')
                     pkl.dump(epoch, open(args.save_path+'/epoch.pkl', 'wb'))
 
-        if start_testing and done:
-            print('begin testing')
-            test_reward = test(args, env, net, avg_img, std_img)
-            print('Finish testing.')
-            with open(os.path.join(args.save_path, 'test_log.txt'), 'a') as f:
-                f.write('step %d reward_with %f reward_without %f\n' % (tt, test_reward['with_pos'], test_reward['without_pos']))
-            start_testing = False
