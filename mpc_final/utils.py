@@ -366,7 +366,7 @@ def Focal_Loss(probs, target, reduce=True):
         loss = loss.sum()/(batch_size*1.0)
     return loss
 
-def sample_cont_action(args, net, imgs, prev_action = None):
+def sample_cont_action(args, net, imgs, prev_action = None, testing = False):
     imgs = imgs.contiguous()
     batch_size, c, w, h = int(imgs.size()[0]), int(imgs.size()[-3]), int(imgs.size()[-2]), int(imgs.size()[-1])
     imgs = imgs.view(batch_size, 1, c, w, h)
@@ -380,7 +380,10 @@ def sample_cont_action(args, net, imgs, prev_action = None):
     cnt = 0
     optimizer = optim.Adam([this_action], lr = 0.01)
     while sign:
-        loss = get_action_loss(args, net, imgs, this_action, None, None, None)
+        if testing:
+            loss = get_action_loss_test(args, net, imgs, this_action, None, None, None)
+        else:
+            loss = get_action_loss(args, net, imgs, this_action, None, None, None)
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
@@ -515,8 +518,8 @@ def get_action_loss(args, net, imgs, actions, target = None, hidden = None, cell
         pos_loss = torch.sqrt(nn.MSELoss()(output['pos'], target['pos_batch']))
         loss += pos_loss
     if args.sample_with_angle:
-        pos_loss = torch.sqrt(nn.MSELoss()(output['angle'], target['angle_batch']))
-        loss += pos_loss
+        angle_loss = torch.sqrt(nn.MSELoss()(output['angle'], target['angle_batch']))
+        loss += angle_loss
     
     if args.target_speed > 0:
         speed_loss = torch.sqrt(nn.MSELoss()(output['speed'], target['speed_batch']))
@@ -542,3 +545,26 @@ if __name__ == '__main__':
     print(all_actions.size())
     print(one_hot_actions)
     print(one_hot_actions.size())
+
+def get_action_loss_test(args, net, imgs, actions, target = None, hidden = None, cell = None, gpu = 0):
+    batch_size = int(imgs.size()[0])
+    if args.continuous:
+        batch_size = 1
+    if target is None:
+        target = dict()
+        target['angle_batch'] = Variable(torch.zeros(batch_size, args.pred_step, 1), requires_grad = False)
+        if torch.cuda.is_available():
+            target['angle_batch'] = target['angle_batch'].cuda()
+
+    weight = (0.97 ** np.arange(args.pred_step)).reshape((1, args.pred_step, 1))
+    weight = Variable(torch.from_numpy(weight).float().cuda()).repeat(batch_size, 1, 1)
+    output = net(imgs, actions, hidden = hidden, cell = cell)
+
+    loss = 0
+    dist_ls = (output['dist'].view(-1, args.pred_step, 1) * weight).sum()
+    loss -= 0.1 * dist_ls
+
+    angle_loss = torch.sqrt(nn.MSELoss()(output['angle'], target['angle_batch']))
+    loss += angle_loss
+
+    return loss

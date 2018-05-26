@@ -32,7 +32,7 @@ def test(args, env, net, avg_img, std_img):
         obs_var = Variable(torch.from_numpy(this_obs_np).unsqueeze(0)).float().cuda()
 
         if args.continuous:
-            action = sample_cont_action(args, net, obs_var, prev_action = prev_act)
+            action = sample_cont_action(args, net, obs_var, prev_action = prev_act, testing = True)
             action = np.clip(action, -1, 1)
             if args.use_dqn:
                 if abs(action[1]) <= dqn_action * 0.1:
