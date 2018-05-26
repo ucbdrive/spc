@@ -79,8 +79,10 @@ def train_model(args, train_net, mpc_buffer, epoch, avg_img_t, std_img_t):
 
     #img_batch = Variable(((x[5].float()-avg_img_t)/(std_img_t+0.0001)), requires_grad=False)
     #nximg_batch = Variable(((x[6].float()-avg_img_t)/(std_img_t+0.0001)), requires_grad=False)
-    target['obs_batch'] = (target['obs_batch'] - 112.62289744791671) / 56.1524832523
-    target['nx_obs_batch'] = (target['nx_obs_batch'] - 112.62289744791671) / 56.1524832523
+    # target['obs_batch'] = (target['obs_batch'] - 112.62289744791671) / 56.1524832523
+    # target['nx_obs_batch'] = (target['nx_obs_batch'] - 112.62289744791671) / 56.1524832523
+    target['obs_batch'] = target['obs_batch'] / 255.0
+    target['nx_obs_batch'] = target['nx_obs_batch'] / 255.0
     if args.use_seg:
         target['seg_batch'] = target['seg_batch'].long()
     else:
@@ -169,7 +171,8 @@ def draw_from_pred(pred):
 def visualize(args, target, output):
     batch_id = np.random.randint(args.batch_size)
     if args.use_seg:
-        observation = (from_variable_to_numpy(target['obs_batch'][batch_id, :, -3:, :, :]) * 56.1524832523 + 112.62289744791671).astype(np.uint8).transpose(0, 2, 3, 1)
+        # observation = (from_variable_to_numpy(target['obs_batch'][batch_id, :, -3:, :, :]) * 56.1524832523 + 112.62289744791671).astype(np.uint8).transpose(0, 2, 3, 1)
+        observation = (from_variable_to_numpy(target['obs_batch'][batch_id, :, -3:, :, :]) * 255.0).astype(np.uint8).transpose(0, 2, 3, 1)
         target['seg_batch'] = target['seg_batch'].view(args.batch_size, args.pred_step + 1, 256, 256)
         segmentation = from_variable_to_numpy(target['seg_batch'][batch_id])
         output['seg_pred'] = output['seg_pred'].view(args.batch_size, args.pred_step + 1, args.classes, 256, 256)
