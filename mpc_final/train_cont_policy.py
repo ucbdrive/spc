@@ -88,7 +88,7 @@ class BufferManager:
     def store_frame(self, obs):
         self.mpc_ret = self.mpc_buffer.store_frame(obs)
         this_obs_np = self.obs_buffer.store_frame(obs, self.avg_img, self.std_img)
-        obs_var = Variable(torch.from_numpy(this_obs_np).unsqueeze(0)).float.cuda()
+        obs_var = Variable(torch.from_numpy(this_obs_np).unsqueeze(0).float().cuda())
         self.img_buffer.store_frame(obs)
         return self.mpc_ret, obs_var
     
@@ -257,4 +257,3 @@ def train_policy(args, env, num_steps=40000000):
                     torch.save(train_net.module.state_dict(), args.save_path+'/model/pred_model_'+str(tt).zfill(9)+'.pt')
                     torch.save(optimizer.state_dict(), args.save_path+'/optimizer/optimizer.pt')
                     pkl.dump(epoch, open(args.save_path+'/epoch.pkl', 'wb'))
-
