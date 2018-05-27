@@ -225,11 +225,11 @@ def train_policy(args, env, num_steps=40000000):
         if done:
             done_cnt += 1
             if done_cnt % 5 == 0:
-                test_reward = test(args, env, net, avg_img, std_img)
+                test_reward = test(args, env, net, buffer_manager.avg_img, buffer_manager.std_img)
                 with open(os.path.join(args.save_path, 'test_log.txt'), 'a') as f:
                     f.write('step %d reward_with %f reward_without %f\n' % (tt, test_reward['with_pos'], test_reward['without_pos']))
             obs = env.reset()
-            obs, reward, done, info = env.step(prev_act)
+            obs, reward, done, info = env.step(buffer_manager.prev_act)
             buffer_manager.reset(info, tt)
             action_manager.reset()
         buffer_manager.store_info(info)
@@ -237,15 +237,18 @@ def train_policy(args, env, num_steps=40000000):
         if args.use_dqn:
             dqn_agent.store_effect(dqn_action, reward['with_pos'], done)
         
-        if tt % args.learning_freq == 0 and tt > args.learning_starts and mpc_buffer.can_sample(args.batch_size):
+        if tt % args.learning_freq == 0 and tt > args.learning_starts and buffer_manager.mpc_buffer.can_sample(args.batch_size):
             for ep in range(50):
                 optimizer.zero_grad()
                 
-                loss = train_model(args, train_net, mpc_buffer, epoch, avg_img_t, std_img_t)
+                loss = train_model(args, train_net, buffer_manager.mpc_buffer, epoch, buffer_manager.avg_img_t, buffer_manager.std_img_t)
                 print('loss = %0.4f\n' % loss.data.cpu().numpy())
                 loss.backward()
                 optimizer.step()
-                net.load_state_dict(train_net.module.state_dict())
+                if self.args.data_parallel:
+                    net.load_state_dict(train_net.module.state_dict())
+                else:
+                    net.load_state_dict(train_net.state_dict())
                 epoch += 1
 
                 if args.use_dqn:
