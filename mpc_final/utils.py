@@ -194,7 +194,7 @@ class ObsBuffer:
         self.last_obs_all = []
 
     def store_frame(self, frame):
-        obs_np = obs_np.transpose(2,0,1)
+        obs_np = frame.transpose(2,0,1)
         if len(self.last_obs_all) < self.frame_history_len:
             self.last_obs_all = []
             for ii in range(self.frame_history_len):
