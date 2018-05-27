@@ -11,6 +11,26 @@ from torcs_wrapper import *
 from dqn_agent import *
 from test import test
 
+def init_models(args):
+    train_net = ConvLSTMMulti(args)
+    net = ConvLSTMMulti(args)
+    optimizer = optim.Adam(train_net.parameters(), lr = args.lr, amsgrad = True)
+    train_net, epoch, optimizer = load_model(args.save_path, train_net, data_parallel=args.data_parallel, optimizer=optimizer, resume=args.resume)
+    if args.data_parallel:
+        net.load_state_dict(train_net.module.state_dict())
+    else:
+        net.load_state_dict(train_net.state_dict())
+    
+    if torch.cuda.is_available():
+        train_net = train_net.cuda()
+        net = net.cuda()
+    train_net.train()
+    for param in net.parameters():
+        param.requires_grad = False
+    net.eval()
+
+    return train_net, net, optimizer, epoch
+
 def train_policy(args, env, num_steps=40000000):
     ''' basics '''
     env = TorcsWrapper(env, random_reset = args.use_random_reset, continuous = args.continuous)
@@ -21,21 +41,8 @@ def train_policy(args, env, num_steps=40000000):
         os.remove(os.path.join(args.save_path, 'distlog.txt'))
 
     ''' create model '''
-    train_net = ConvLSTMMulti(args)
-    net = ConvLSTMMulti(args)
-    optimizer = optim.Adam(train_net.parameters(), lr = args.lr, amsgrad = True)
-
-    train_net, epoch, optimizer = load_model(args.save_path, train_net, data_parallel = True, optimizer = optimizer, resume = args.resume)
-    net.load_state_dict(train_net.module.state_dict())
-
-    if torch.cuda.is_available():
-        train_net = train_net.cuda()
-        net = net.cuda()
-    train_net.train()
-    for param in net.parameters():
-        param.requires_grad = False
-    net.eval()
- 
+    train_net, net, optimizer, epoch = init_models(args)
+    
     ''' load buffers '''
     mpc_buffer = MPCBuffer(args)
     img_buffer = IMGBuffer(1000)
@@ -177,7 +184,6 @@ def train_policy(args, env, num_steps=40000000):
             for ep in range(50):
                 optimizer.zero_grad()
                 
-                # TODO : FINISH TRAIN MPC MODEL FUNCTION
                 loss = train_model(args, train_net, mpc_buffer, epoch, avg_img_t, std_img_t)
                 print('loss = %0.4f\n' % loss.data.cpu().numpy())
                 loss.backward()
