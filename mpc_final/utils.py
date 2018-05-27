@@ -74,7 +74,7 @@ def train_model(args, train_net, mpc_buffer, epoch, avg_img_t, std_img_t):
         print('offroad ls', offroad_ls.data.cpu().numpy())
 
     if args.use_distance:
-        dist_ls = torch.sqrt(nn.MSELoss()(output['dist'].view(-1, args.pred_step), target['dist_batch'][:, 1:].view(-1, args.pred_step))) / 40
+        dist_ls = torch.sqrt(nn.MSELoss()(output['dist'].view(-1, args.pred_step), target['dist_batch'][:, 1:].view(-1, args.pred_step))) 
         print('dist ls', dist_ls.data.cpu().numpy())
     
     if args.use_seg:
@@ -87,15 +87,15 @@ def train_model(args, train_net, mpc_buffer, epoch, avg_img_t, std_img_t):
     loss = pred_ls + coll_ls + offroad_ls + dist_ls
 
     if args.use_pos:
-        pos_loss = torch.sqrt(nn.MSELoss()(output['pos'], target['pos_batch'][:, :-1, :]))
+        pos_loss = torch.sqrt(nn.MSELoss()(output['pos'], target['pos_batch'][:, 1:, :]))
         loss += pos_loss
         print('pos ls', pos_loss.data.cpu().numpy())
     if args.use_angle:
-        angle_loss = torch.sqrt(nn.MSELoss()(output['angle'], target['angle_batch'][:, :-1, :]))
+        angle_loss = torch.sqrt(nn.MSELoss()(output['angle'], target['angle_batch'][:, 1:, :]))
         loss += angle_loss
         print('angle ls', angle_loss.data.cpu().numpy())
     if args.use_speed:
-        speed_loss = torch.sqrt(nn.MSELoss()(output['speed'], target['sp_batch'][:, :-1, :]))
+        speed_loss = torch.sqrt(nn.MSELoss()(output['speed'], target['sp_batch'][:, 1:, :]))
         loss += speed_loss
         print('speed ls', speed_loss.data.cpu().numpy())
     if args.use_xyz:
@@ -107,8 +107,6 @@ def train_model(args, train_net, mpc_buffer, epoch, avg_img_t, std_img_t):
     if np.isnan(loss_value):
         pdb.set_trace()
 
-    print('1 step training')
-    visualize(args, target, output)
     return loss
 
 def draw_from_pred(pred):
@@ -206,59 +204,6 @@ class ObsBuffer:
     def clear(self):
         self.last_obs_all = []
         return
-
-def log_info(pred_coll, coll_batch, pred_off, offroad_batch, 
-            total_coll_ls, total_off_ls, total_pred_ls, 
-            total_dist_ls, xyz_loss, seg_loss, total_loss, 
-            epoch, num_batch):
-    coll_label, coll_pred, off_label, off_pred = [], [], [], []
-    pred_coll_np = pred_coll.view(-1,2).data.cpu().numpy()
-    coll_np = coll_batch.view(-1,2).data.cpu().numpy()
-    pred_coll_np = np.argmax(pred_coll_np, 1)
-    coll_np = np.argmax(coll_np, 1)
-    coll_label.append(coll_np)
-    coll_pred.append(pred_coll_np)
-
-    pred_off_np = pred_off.view(-1,2).data.cpu().numpy()
-    off_np = offroad_batch.view(-1,2).data.cpu().numpy()
-    pred_off_np = np.argmax(pred_off_np, 1)
-    off_np = np.argmax(off_np, 1)
-    off_label.append(off_np)
-    off_pred.append(pred_off_np)
-    
-    coll_label = np.concatenate(coll_label)
-    coll_pred = np.concatenate(coll_pred)
-    off_label = np.concatenate(off_label)
-    off_pred = np.concatenate(off_pred)
-    cnf_matrix = confusion_matrix(coll_label, coll_pred)
-    cnf_matrix_off = confusion_matrix(off_label, off_pred)
-    coll_acc, off_accuracy = 0, 0
-    try:
-        coll_acc = (cnf_matrix[0,0] + cnf_matrix[1,1]) / (cnf_matrix.sum() * 1.0)
-        off_accuracy = (cnf_matrix_off[0,0] + cnf_matrix_off[1,1]) / (cnf_matrix_off.sum() * 1.0)
-        if epoch % 20 == 0:
-            print('sample early collacc', "{0:.3f}".format(coll_acc), \
-                "{0:.3f}".format(total_coll_ls / num_batch), \
-                'offacc', "{0:.3f}".format(off_accuracy), \
-                "{0:.3f}".format(total_off_ls / num_batch), \
-                'xyzls', "{0:.3f}".format(xyz_loss / num_batch), \
-                'segls', "{0:.3f}".format(seg_loss / num_batch), \
-                'ttls', "{0:.3f}".format(total_loss / num_batch), \
-                'predls', "{0:.3f}".format(total_pred_ls / num_batch), \
-                'distls', "{0:.3f}".format(total_dist_ls / num_batch))
-        else:
-            print('collacc', "{0:.3f}".format(coll_acc), \
-                "{0:.3f}".format(total_coll_ls / num_batch), \
-                'offacc', "{0:.3f}".format(off_accuracy), \
-                "{0:.3f}".format(total_off_ls / num_batch), \
-                'xyzls', "{0:.3f}".format(xyz_loss / num_batch), \
-                'segls', "{0:.3f}".format(seg_loss / num_batch), \
-                'ttls', "{0:.3f}".format(total_loss / num_batch), \
-                'predls', "{0:.3f}".format(total_pred_ls / num_batch), \
-                'distls', "{0:.3f}".format(total_dist_ls / num_batch))
-    except:
-        print('dist ls', total_dist_ls / num_batch)
-    return coll_acc, off_accuracy, total_dist_ls / num_batch
 
 def init_dirs(dir_list):
     for path in dir_list:
