@@ -55,22 +55,24 @@ def train_model(args, train_net, mpc_buffer, epoch, avg_img_t, std_img_t):
 
     if args.use_collision:
         show_accuracy(target['coll_batch'].view(-1), torch.max(output['coll_prob'].view(-1, 2), -1)[1], 'collision')
-        weight = torch.zeros(2)
-        weight[0] = target['coll_batch'].sum() / args.batch_size / args.pred_step
-        weight[1] = 1 - weight[0]
-        if torch.cuda.is_available():
-            weight = weight.cuda()
-        coll_ls = nn.CrossEntropyLoss(weight = weight)(output['coll_prob'].view(args.batch_size * args.pred_step, 2), target['coll_batch'].view(args.batch_size * args.pred_step).long())
+        # weight = torch.zeros(2)
+        # weight[0] = target['coll_batch'].sum() / args.batch_size / args.pred_step
+        # weight[1] = 1 - weight[0]
+        # if torch.cuda.is_available():
+        #    weight = weight.cuda()
+        # coll_ls = nn.CrossEntropyLoss(weight = weight)(output['coll_prob'].view(args.batch_size * args.pred_step, 2), target['coll_batch'].view(args.batch_size * args.pred_step).long())
+        coll_ls = Focal_Loss(output['coll_prob'].view(-1, 2), target['coll_batch'].view(-1).long())
         print('coll ls', coll_ls.data.cpu().numpy())
 
     if args.use_offroad:
         show_accuracy(target['off_batch'].view(-1), torch.max(output['offroad_prob'].view(-1, 2), -1)[1], 'offroad')
-        weight = torch.zeros(2)
-        weight[0] = target['off_batch'].sum() / args.batch_size / args.pred_step
-        weight[1] = 1 - weight[0]
-        if torch.cuda.is_available():
-            weight = weight.cuda()
-        offroad_ls = nn.CrossEntropyLoss(weight = weight)(output['offroad_prob'].view(args.batch_size * args.pred_step, 2), target['off_batch'].view(args.batch_size * args.pred_step).long())
+        #weight = torch.zeros(2)
+        #weight[0] = target['off_batch'].sum() / args.batch_size / args.pred_step
+        #weight[1] = 1 - weight[0]
+        #if torch.cuda.is_available():
+        #    weight = weight.cuda()
+        #offroad_ls = nn.CrossEntropyLoss(weight = weight)(output['offroad_prob'].view(args.batch_size * args.pred_step, 2), target['off_batch'].view(args.batch_size * args.pred_step).long())
+        offroad_ls = Focal_Loss(output['offroad_prob'].view(-1, 2), target['off_batch'].view(-1).long())
         print('offroad ls', offroad_ls.data.cpu().numpy())
 
     if args.use_distance:
