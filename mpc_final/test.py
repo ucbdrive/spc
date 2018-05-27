@@ -38,7 +38,6 @@ def test(args, env, net, avg_img, std_img):
                 if abs(action[1]) <= dqn_action * 0.1:
                     action[1] = 0
             real_action = action
-            real_action[0] = real_action[0] * 0.5 + 0.5
         else:
             action = real_action = sample_discrete_action(args, net, obs_var, prev_action = prev_act)
 

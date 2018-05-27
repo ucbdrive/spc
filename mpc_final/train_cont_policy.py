@@ -93,7 +93,7 @@ class BufferManager:
         return self.mpc_ret, obs_var
     
     def store_effect(self, action, reward, done, info, seg):
-        self.prev_act = action
+        self.prev_act = copy.deepcopy(action)
         self.speed_np, self.pos_np, self.posxyz_np = get_info_np(info, use_pos_class = False)
         offroad_flag, coll_flag = info['off_flag'], info['coll_flag']
         speed_list, pos_list = get_info_ls(self.prev_info)
