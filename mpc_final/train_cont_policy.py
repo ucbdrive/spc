@@ -87,7 +87,7 @@ class BufferManager:
 
     def store_frame(self, obs):
         self.mpc_ret = self.mpc_buffer.store_frame(obs)
-        this_obs_np = self.obs_buffer.store_frame(obs, self.avg_img, self.std_img)
+        this_obs_np = self.obs_buffer.store_frame(obs)
         obs_var = Variable(torch.from_numpy(this_obs_np).unsqueeze(0).float().cuda())
         self.img_buffer.store_frame(obs)
         return self.mpc_ret, obs_var
