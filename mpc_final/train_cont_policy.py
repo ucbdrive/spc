@@ -145,6 +145,11 @@ def train_policy(args, env, num_steps=40000000):
             avg_img, std_img, avg_img_t, std_img_t = img_buffer.get_avg_std()
 
         if done:
+            done_cnt += 1
+            if done_cnt % 5 == 0:
+                test_reward = test(args, env, net, avg_img, std_img)
+                with open(os.path.join(args.save_path, 'test_log.txt'), 'a') as f:
+                    f.write('step %d reward_with %f reward_without %f\n' % (tt, test_reward['with_pos'], test_reward['without_pos']))
             obs_buffer.clear()
             epi_rewards_with.append(rewards_with)
             epi_rewards_without.append(rewards_without)
@@ -162,14 +167,6 @@ def train_policy(args, env, num_steps=40000000):
                 fi.write(' std ' + str(np.std(epi_rewards_with[-10:])))
                 fi.write(' reward_without ' + str(np.mean(epi_rewards_without[-10:])))
                 fi.write(' std ' + str(np.std(epi_rewards_without[-10:])) + '\n')
-            done_cnt += 1
-            if done_cnt % 5 == 0:
-                print('begin testing')
-                test_reward = test(args, env, net, avg_img, std_img)
-                print('Finish testing.')
-                with open(os.path.join(args.save_path, 'test_log.txt'), 'a') as f:
-                    f.write('step %d reward_with %f reward_without %f\n' % (tt, test_reward['with_pos'], test_reward['without_pos']))
-            
         
         prev_info = copy.deepcopy(info) 
         if args.use_dqn:
