@@ -29,7 +29,19 @@ def init_models(args):
         param.requires_grad = False
     net.eval()
 
-    return train_net, net, optimizer, epoch
+    exploration = PiecewiseSchedule([
+            (0, 1.0),
+            (args.epsilon_frames, 0.02),
+        ], outside_value = 0.02
+    )
+
+    if args.use_dqn:
+        dqn_agent = DQNAgent(args.frame_history_len, args.num_dqn_action, args.lr, exploration, args.save_path, args=args)
+        if args.resume:
+            dqn_agent.load_model()
+    else:
+        dqn_agent = None 
+    return train_net, net, optimizer, epoch, exploration, dqn_agent
 
 def train_policy(args, env, num_steps=40000000):
     ''' basics '''
@@ -41,27 +53,13 @@ def train_policy(args, env, num_steps=40000000):
         os.remove(os.path.join(args.save_path, 'distlog.txt'))
 
     ''' create model '''
-    train_net, net, optimizer, epoch = init_models(args)
+    train_net, net, optimizer, epoch, exploration, dqn_agent = init_models(args)
     
     ''' load buffers '''
     mpc_buffer = MPCBuffer(args)
     img_buffer = IMGBuffer(1000)
     obs_buffer = ObsBuffer(args.frame_history_len)
     
-    ''' environment basics '''
-    exploration = PiecewiseSchedule([
-            (0, 1.0),
-            (args.epsilon_frames, 0.02),
-        ], outside_value=0.02
-    )
-
-    if args.use_dqn:
-        dqn_agent = DQNAgent(args.frame_history_len, args.num_dqn_action, args.lr, exploration, args.save_path, args=args)
-        if args.resume:
-            dqn_agent.load_model()
-    else:
-        dqn_agent = None
-        
     done_cnt = 0
     epi_rewards, rewards = [], 0.0
     _ = env.reset()
