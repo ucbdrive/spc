@@ -221,8 +221,12 @@ class DoneCondition:
         elif pos > -6.2 or dist > 0:
             self.off_cnt = 0
         if self.off_cnt > self.size:
+            self.off_cnt = 0
+            self.pos = []
             return True
         if abs(pos) >= 21.0:
+            self.off_cnt = 0
+            self.pos = []
             return True
         self.pos.append(list(posxyz))
         real_pos = np.concatenate(self.pos[-100:])
@@ -230,6 +234,7 @@ class DoneCondition:
         std = np.sum(np.std(real_pos, 0))
         if std < 2.0 and len(self.pos) > 100:
             self.pos = []
+            self.off_cnt = 0
             return True
         return False 
 
