@@ -36,7 +36,7 @@ def init_models(args):
     )
 
     if args.use_dqn:
-        dqn_agent = DQNAgent(args.frame_history_len, args.num_dqn_action, args.lr, exploration, args.save_path, args=args)
+        dqn_agent = DQNAgent(args, exploration, args.save_path)
         if args.resume:
             dqn_agent.load_model()
     else:

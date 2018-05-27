@@ -9,7 +9,10 @@ from model import *
 from torch.autograd import Variable
 
 class DQNAgent:
-    def __init__(self, frame_history_len=4, num_actions=11, lr=0.0001, exploration=None, save_path=None, args=None):
+    def __init__(self, args, exploration=None, save_path=None):
+        frame_history_len = args.frame_history_len
+        num_actions = args.num_dqn_action
+        lr = args.lr
         self.dqn_net = atari_model(3 * frame_history_len, num_actions, frame_history_len).cuda().float().train()
         self.target_q_net = atari_model(3 * frame_history_len, num_actions, frame_history_len).cuda().float().eval()
         self.optimizer = optim.Adam(self.dqn_net.parameters(), lr = lr, amsgrad=True)
