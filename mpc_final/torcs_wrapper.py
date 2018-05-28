@@ -28,10 +28,15 @@ class TorcsWrapper:
             rand_step = np.random.randint(500)
             for i in range(rand_step):
                 obs, _, _, _ = self.env.step(naive_driver(self.env.get_info(), self.continuous))
+        info = self.env.get_info()
+        off_flag = int(info['trackPos'] >=3 or info['trackPos'] <= -1)
+        coll_flag = int(abs(info['trackPos']) > 7.0)
+        info['off_flag'] = off_flag
+        info['coll_flag'] = coll_flag
         self.doneCond = DoneCondition(30)
         self.epi_len = 0
         self.coll_cnt = 0
-        return cv2.resize(obs, self.imsize)
+        return cv2.resize(obs, self.imsize), info
          
     def step(self, action):
         real_action = copy.deepcopy(action)
