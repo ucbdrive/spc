@@ -119,6 +119,7 @@ class BufferManager:
         self.rewards_with, self.rewards_without = 0, 0
         self.prev_act = np.array([1.0, 0.0]) if self.args.continuous else 1
         self.speed_np, self.pos_np, self.posxyz_np = get_info_np(info, use_pos_class = False)
+        self.prev_xyz = np.array(info['pos'])
         print('past 100 episode rewards is', \
             "{0:.3f}".format(np.mean(self.epi_rewards_with[-100:])), \
                 ' std is ', "{0:.15f}".format(np.std(self.epi_rewards_with[-100:])))
@@ -226,9 +227,9 @@ def train_policy(args, env, num_steps=40000000):
                 test_reward = test(args, env, net)
                 with open(os.path.join(args.save_path, 'test_log.txt'), 'a') as f:
                     f.write('step %d reward_with %f reward_without %f\n' % (tt, test_reward['with_pos'], test_reward['without_pos']))
-            obs = env.reset()
+            obs, prev_info = env.reset()
             obs, reward, done, info = env.step(np.array([1.0, 0.0]))
-            buffer_manager.reset(info, tt)
+            buffer_manager.reset(prev_info, tt)
             action_manager.reset()
         buffer_manager.store_info(info)
         
