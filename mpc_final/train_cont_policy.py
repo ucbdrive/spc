@@ -225,7 +225,7 @@ def train_policy(args, env, num_steps=40000000):
         if done:
             done_cnt += 1
             if done_cnt % 5 == 0:
-                test_reward = test(args, env, net, buffer_manager.avg_img, buffer_manager.std_img)
+                test_reward = test(args, env, net)
                 with open(os.path.join(args.save_path, 'test_log.txt'), 'a') as f:
                     f.write('step %d reward_with %f reward_without %f\n' % (tt, test_reward['with_pos'], test_reward['without_pos']))
             obs = env.reset()
@@ -245,7 +245,7 @@ def train_policy(args, env, num_steps=40000000):
                 print('loss = %0.4f\n' % loss.data.cpu().numpy())
                 loss.backward()
                 optimizer.step()
-                if self.args.data_parallel:
+                if args.data_parallel:
                     net.load_state_dict(train_net.module.state_dict())
                 else:
                     net.load_state_dict(train_net.state_dict())
