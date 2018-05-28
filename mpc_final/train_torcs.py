@@ -7,6 +7,7 @@ import torch
 from train_cont_policy import train_policy
 from utils import init_dirs
 import sys
+import random
 sys.path.append('/media/xinleipan/data/git/pyTORCS/py_TORCS')
 sys.path.append('/media/xinleipan/data/git/pyTORCS/')
 from py_TORCS import torcs_envs
@@ -22,6 +23,7 @@ if __name__ == '__main__':
                os.path.join(args.save_path, 'cnfmat')])
     torch.manual_seed(args.seed)
     np.random.seed(args.seed)
+    random.seed(args.seed)
     # For tarasque
     if os.path.exists('/home/qizhicai/multitask/spn_new2/semantic-predictive-learning/game_config/michigan.xml'):
         args.game_config = '/home/qizhicai/multitask/spn_new2/semantic-predictive-learning/game_config/michigan.xml'
