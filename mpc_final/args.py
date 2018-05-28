@@ -3,7 +3,7 @@ def init_parser(parser):
     parser.add_argument('--frame-history-len', type = int, default = 3)
     parser.add_argument('--pred-step', type = int, default = 15)
     parser.add_argument('--batch-size', type = int, default = 32)
-    parser.add_argument('--save-freq', type = int, default = 1000)
+    parser.add_argument('--save-freq', type = int, default = 100)
     parser.add_argument('--save-path', type = str, default = 'mpc_15_step')
     parser.add_argument('--normalize', action = 'store_true')
     parser.add_argument('--buffer-size', type = int, default = 50000)
