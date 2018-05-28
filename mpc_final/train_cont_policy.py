@@ -77,7 +77,7 @@ class BufferManager:
         self.mpc_ret = 0
         
     def step_first(self, obs, info):
-        self.store_frame(obs)
+        self.img_buffer.store_frame(obs)
         self.prev_info = info
         self.avg_img, self.std_img = self.img_buffer.get_avg_std()
         self.speed_np, self.pos_np, self.posxyz_np = get_info_np(info, use_pos_class=False)
