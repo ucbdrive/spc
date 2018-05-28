@@ -49,7 +49,6 @@ class MPCBuffer(object):
         self.seg      = None
         self.xyz      = None
 
-        self.loss     = np.ones(args.buffer_size) * 1000
         self.rewards  = np.ones((args.buffer_size, 1))
 
     def sample_n_unique(self, sampling_f, n):
@@ -115,10 +114,6 @@ class MPCBuffer(object):
         else:
             idxes = self.sample_n_unique(lambda: random.randint(0, int(self.num_in_buffer / 3) - 2), batch_size)
         return self._encode_sample(idxes), idxes
-
-    def store_loss(self, losses, idxes):
-        self.loss[idxes] = (self.loss[idxes]+losses)/2.0
-        return       
 
     def encode_recent_observation(self):
         assert self.num_in_buffer > 0
