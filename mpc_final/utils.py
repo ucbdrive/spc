@@ -254,8 +254,8 @@ def Focal_Loss(probs, target, reduce=True):
         loss = loss.sum()/(batch_size*1.0)
     return loss
 
-def sample_cont_action(args, net, imgs, prev_action = None, testing = False):
-    imgs = imgs.contiguous()/255.0
+def sample_cont_action(args, net, imgs, prev_action = None, testing = False, avg_img=0, std_img=1.0):
+    imgs = (imgs.contiguous()-avg_img)/(std_img)
     batch_size, c, w, h = int(imgs.size()[0]), int(imgs.size()[-3]), int(imgs.size()[-2]), int(imgs.size()[-1])
     imgs = imgs.view(batch_size, 1, c, w, h)
     prev_action = prev_action.reshape((1, 1, 2))
