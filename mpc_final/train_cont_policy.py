@@ -96,24 +96,15 @@ class BufferManager:
             self.prev_xyz = xyz
         else:
             rela_xyz = None
+        self.mpc_buffer.store_effect(self.mpc_ret, coll_flag, off_flag, info['speed'], info['angle'], pos_list[0], rela_xyz, seg)
         this_obs_np = self.obs_buffer.store_frame(obs)
         obs_var = Variable(torch.from_numpy(this_obs_np).unsqueeze(0).float().cuda())
         self.img_buffer.store_frame(obs)
         return self.mpc_ret, obs_var
     
-    def store_effect(self, action, reward, done, info, seg):
+    def store_effect(self, action, reward, done):
         self.prev_act = copy.deepcopy(action)
-        self.speed_np, self.pos_np, self.posxyz_np = get_info_np(info, use_pos_class = False)
-        offroad_flag, coll_flag = info['off_flag'], info['coll_flag']
-        speed_list, pos_list = get_info_ls(self.prev_info)
-        if self.args.use_xyz:
-            xyz = np.array(info['pos'])
-            rela_xyz = xyz - self.prev_xyz
-            self.prev_xyz = xyz
-        else:
-            rela_xyz = None
-        self.mpc_buffer.store_effect(self.mpc_ret, action, done, coll_flag, offroad_flag, info['speed'], \
-                    info['angle'], pos_list[0], rela_xyz, seg)
+        self.mpc_buffer.store_action(self.mpc_ret, action, done)
         self.rewards_with += reward['with_pos']
         self.rewards_without += reward['without_pos']
 
