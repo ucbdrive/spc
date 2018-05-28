@@ -43,8 +43,8 @@ def train_model(args, train_net, mpc_buffer, epoch, avg_img_t, std_img_t):
         if torch.cuda.is_available():
             target[key] = target[key].cuda()
 
-    target['obs_batch'] = target['obs_batch'] / 255.0
-    target['nx_obs_batch'] = target['nx_obs_batch'] / 255.0
+    target['obs_batch'] = (target['obs_batch']-avg_img_t) / std_img_t
+    target['nx_obs_batch'] = (target['nx_obs_batch']-avg_img_t) / std_img_t
     if args.use_seg:
         target['seg_batch'] = target['seg_batch'].long()
     else:
