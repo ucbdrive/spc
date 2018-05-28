@@ -177,20 +177,22 @@ class MPCBuffer(object):
         self.num_in_buffer = min(self.args.buffer_size, self.num_in_buffer + 1)
         self.ret = ret
         return ret
-
-    def store_effect(self, idx, action, done, coll, off, speed, angle, pos, xyz, seg):
+    
+    def store_action(self, idx, action, done):
         if self.args.continuous:
             self.action[idx, :] = action
         else:
             self.action[idx, int(action)] = 1
-
+        self.done[idx]   = int(done)
+        
+    def store_effect(self, idx, coll, off, speed, angle, pos, xyz, seg):
         if self.args.use_xyz:
             self.xyz[idx, :] = xyz
 
         if self.args.use_seg:
             self.seg[idx, :] = seg
 
-        self.done[idx]   = int(done)
+        
         if self.args.use_collision:
             self.coll[idx, 0] = int(coll)
         if self.args.use_offroad:
