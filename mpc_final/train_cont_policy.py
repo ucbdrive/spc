@@ -229,7 +229,7 @@ def train_policy(args, env, num_steps=40000000):
                 with open(os.path.join(args.save_path, 'test_log.txt'), 'a') as f:
                     f.write('step %d reward_with %f reward_without %f\n' % (tt, test_reward['with_pos'], test_reward['without_pos']))
             obs = env.reset()
-            obs, reward, done, info = env.step(buffer_manager.prev_act)
+            obs, reward, done, info = env.step(np.array([1.0, 0.0]))
             buffer_manager.reset(info, tt)
             action_manager.reset()
         buffer_manager.store_info(info)
