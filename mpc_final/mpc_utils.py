@@ -74,13 +74,13 @@ class MPCBuffer(object):
         data_dict['sp_batch'] = np.concatenate([self.speed[idx: idx + self.args.pred_step + 1, :][np.newaxis, :] for idx in idxes], 0)
         
         if self.args.use_collision:
-            data_dict['coll_batch'] = np.concatenate([self.coll[idx: idx + self.args.pred_step, :][np.newaxis, :] for idx in idxes], 0)
+            data_dict['coll_batch'] = np.concatenate([self.coll[idx + 1: idx + self.args.pred_step + 1, :][np.newaxis, :] for idx in idxes], 0)
         
         if self.args.use_offroad:
-            data_dict['off_batch'] = np.concatenate([self.offroad[idx: idx + self.args.pred_step, :][np.newaxis, :] for idx in idxes], 0)
+            data_dict['off_batch'] = np.concatenate([self.offroad[idx + 1: idx + self.args.pred_step + 1, :][np.newaxis, :] for idx in idxes], 0)
         
         if self.args.use_pos:
-            data_dict['pos_batch'] = np.concatenate([self.pos[idx: idx + self.args.pred_step + 1, :][np.newaxis, :] for idx in idxes], 0)
+            data_dict['pos_batch'] = np.concatenate([self.pos[idx + 1: idx + self.args.pred_step + 1, :][np.newaxis, :] for idx in idxes], 0)
             data_dict['pos_batch'] /= -7.0
         
         if self.args.use_angle:
@@ -95,7 +95,7 @@ class MPCBuffer(object):
             data_dict['seg_batch'] = np.concatenate([self.seg[idx: idx + self.args.pred_step + 1, :][np.newaxis, :] for idx in idxes], 0)
         
         if self.args.use_xyz:
-            data_dict['xyz_batch'] = np.concatenate([self.xyz[idx: idx + self.args.pred_step, :][np.newaxis, :] for idx in idxes], 0)
+            data_dict['xyz_batch'] = np.concatenate([self.xyz[idx: idx + self.args.pred_step + 1, :][np.newaxis, :] for idx in idxes], 0)
 
         return data_dict
 
