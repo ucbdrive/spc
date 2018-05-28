@@ -434,18 +434,6 @@ def show_accuracy(output, target, label):
     tn, fp, fn, tp = confusion_matrix(output, target, labels = [0, 1]).ravel()
     print('%s accuracy: %0.2f%%' % (label, (tn + tp) / (tn + fp + fn + tp) * 100.0))
 
-if __name__ == '__main__':
-    class dummy(object):
-        def __init__(self):
-            self.num_total_act = 3
-    prob = torch.ones(3, 3) / 3
-    all_actions = generate_action_sample(dummy(), prob, 6, 15, 1)
-    one_hot_actions = generate_one_hot_actions(all_actions, 3)
-    print(all_actions)
-    print(all_actions.size())
-    print(one_hot_actions)
-    print(one_hot_actions.size())
-
 def get_action_loss_test(args, net, imgs, actions, target = None, hidden = None, cell = None, gpu = 0):
     batch_size = int(imgs.size()[0])
     if args.continuous:
@@ -468,3 +456,16 @@ def get_action_loss_test(args, net, imgs, actions, target = None, hidden = None,
     loss += angle_loss
 
     return loss
+
+if __name__ == '__main__':
+    class dummy(object):
+        def __init__(self):
+            self.num_total_act = 3
+    prob = torch.ones(3, 3) / 3
+    all_actions = generate_action_sample(dummy(), prob, 6, 15, 1)
+    one_hot_actions = generate_one_hot_actions(all_actions, 3)
+    print(all_actions)
+    print(all_actions.size())
+    print(one_hot_actions)
+    print(one_hot_actions.size())
+
