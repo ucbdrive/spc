@@ -232,5 +232,3 @@ if __name__ == '__main__':
     result = net(img, action)
     for i in result:
         print(i.size())
-
-
