@@ -76,7 +76,7 @@ def train_model(args, train_net, mpc_buffer, epoch, avg_img_t, std_img_t):
     loss = pred_ls + coll_ls + offroad_ls + dist_ls
 
     if args.use_pos:
-        pos_loss = torch.sqrt(nn.MSELoss()(output['pos'], target['pos_batch'][:, 1:, :]))
+        pos_loss = torch.sqrt(nn.MSELoss()(output['pos'], target['pos_batch'][:, :, :]))
         loss += pos_loss
         print('pos ls', pos_loss.data.cpu().numpy())
     if args.use_angle:
@@ -88,7 +88,7 @@ def train_model(args, train_net, mpc_buffer, epoch, avg_img_t, std_img_t):
         loss += speed_loss
         print('speed ls', speed_loss.data.cpu().numpy())
     if args.use_xyz:
-        xyz_loss = torch.sqrt(nn.MSELoss()(output['xyz'], target['xyz_batch'])) / 100.0
+        xyz_loss = torch.sqrt(nn.MSELoss()(output['xyz'], target['xyz_batch'][:, 1:, :])) / 100.0
         loss += xyz_loss
         print('xyz ls', xyz_loss.data.cpu().numpy())
 
