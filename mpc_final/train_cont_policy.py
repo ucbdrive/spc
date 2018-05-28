@@ -57,7 +57,7 @@ class BufferManager:
     def __init__(self, args=None):
         self.args = args
         self.mpc_buffer = MPCBuffer(args)
-        self.img_buffer = IMGBuffer(1000)
+        self.img_buffer = IMGBuffer()
         self.obs_buffer = ObsBuffer(args.frame_history_len)
         self.epi_rewards = []
         self.rewards = 0.0
@@ -66,8 +66,6 @@ class BufferManager:
         self.prev_info = None
         self.avg_img = None
         self.std_img = None
-        self.avg_img_t = None
-        self.std_img_t = None
         self.speed_np = None
         self.pos_np = None
         self.posxyz_np = None
@@ -79,9 +77,9 @@ class BufferManager:
         self.mpc_ret = 0
         
     def step_first(self, obs, info):
-        self.img_buffer.store_frame(obs)
+        self.store_frame(obs)
         self.prev_info = info
-        self.avg_img, self.std_img, self.avg_img_t, self.std_img_t = self.img_buffer.get_avg_std(gpu=0)
+        self.avg_img, self.std_img = self.img_buffer.get_avg_std()
         self.speed_np, self.pos_np, self.posxyz_np = get_info_np(info, use_pos_class=False)
         self.prev_xyz = np.array(info['pos'])
 
@@ -112,7 +110,7 @@ class BufferManager:
         self.prev_info = info
 
     def update_avg_std_img(self):
-        self.avg_img, self.std_img, self.avg_img_t, self.std_img_t = self.img_buffer.get_avg_std()
+        self.avg_img, self.std_img = self.img_buffer.get_avg_std()
     
     def reset(self, info, step):
         self.obs_buffer.clear()
@@ -240,8 +238,7 @@ def train_policy(args, env, num_steps=40000000):
         if tt % args.learning_freq == 0 and tt > args.learning_starts and buffer_manager.mpc_buffer.can_sample(args.batch_size):
             for ep in range(50):
                 optimizer.zero_grad()
-                
-                loss = train_model(args, train_net, buffer_manager.mpc_buffer, epoch, buffer_manager.avg_img_t, buffer_manager.std_img_t)
+                loss = train_model(args, train_net, buffer_manager.mpc_buffer, epoch, buffer_manager.avg_img, buffer_manager.std_img)
                 print('loss = %0.4f\n' % loss.data.cpu().numpy())
                 loss.backward()
                 optimizer.step()
