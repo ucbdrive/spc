@@ -134,13 +134,13 @@ class ActionSampleManager:
         else:
             self.prev_dqn_act = None
 
-    def sample_action(self, net, dqn_net, obs, obs_var, exploration, tt):
+    def sample_action(self, net, dqn_net, obs, obs_var, exploration, tt, avg_img, std_img):
         if tt % self.args.num_same_step != 0:
             return self.process_act(self.prev_act, self.prev_dqn_act)
         else:
             if self.args.continuous:
                 if random.random() <= 1 - exploration.value(tt):
-                    action = sample_cont_action(self.args, net, obs_var, prev_action=self.prev_act)
+                    action = sample_cont_action(self.args, net, obs_var, prev_action=self.prev_act, avg_img=avg_img, std_img=std_img)
                 else:
                     action = np.random.rand(self.args.num_total_act)*2-1
                 action = np.clip(action, -1, 1)
@@ -196,7 +196,8 @@ def train_policy(args, env, num_steps=40000000):
     for tt in range(num_imgs_start, num_steps):
         seg = env.env.get_segmentation().reshape((1, 256, 256)) if args.use_seg else None
         ret, obs_var = buffer_manager.store_frame(obs, info, seg)
-        action, dqn_action = action_manager.sample_action(net, dqn_agent, obs, obs_var, exploration, tt)
+        avg_img, std_img = buffer_manager.img_buffer.avg_img, buffer_manager.img_buffer.std_img
+        action, dqn_action = action_manager.sample_action(net, dqn_agent, obs, obs_var, exploration, tt, avg_img, std_img)
         obs, reward, done, info = env.step(action)
         if args.target_speed > 0:
             with open(os.path.join(args.save_path, 'speedlog.txt'), 'a') as f:
