@@ -200,8 +200,8 @@ def train_policy(args, env, num_steps=40000000):
     buffer_manager.step_first(obs, info)
     done_cnt = 0
     for tt in range(num_imgs_start, num_steps):
-        ret, obs_var = buffer_manager.store_frame(obs)
-
+        seg = env.env.get_segmentation().reshape((1, 256, 256)) if args.use_seg else None
+        ret, obs_var = buffer_manager.store_frame(obs, info)
         action, dqn_action = action_manager.sample_action(net, dqn_agent, obs, obs_var, exploration, tt)
         obs, reward, done, info = env.step(action)
         if args.target_speed > 0:
@@ -216,8 +216,8 @@ def train_policy(args, env, num_steps=40000000):
         else:
             print('action', '%d' % real_action, ' pos ', "{0:.2f}".format(info['trackPos']), "{0:.2f}".format(info['pos'][0]), "{0:.2f}".format(info['pos'][1]),\
                 ' angle ', "{0:.2f}".format(info['angle']), ' reward ', "{0:.2f}".format(reward['with_pos']), ' explore ', "{0:.2f}".format(exploration.value(tt)))
-        seg = env.env.get_segmentation().reshape((1, 256, 256)) if args.use_seg else None
-        buffer_manager.store_effect(action, reward, done, info, seg)
+        
+        buffer_manager.store_effect(action, reward, done)
 
         if tt % 100 == 0:
             buffer_manager.update_avg_std_img()
