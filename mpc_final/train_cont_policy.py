@@ -232,7 +232,7 @@ def train_policy(args, env, num_steps=40000000):
             dqn_agent.store_effect(dqn_action, reward['with_pos'], done)
         
         if tt % args.learning_freq == 0 and tt > args.learning_starts and buffer_manager.mpc_buffer.can_sample(args.batch_size):
-            for ep in range(50):
+            for ep in range(10):
                 optimizer.zero_grad()
                 loss = train_model(args, train_net, buffer_manager.mpc_buffer, epoch, buffer_manager.avg_img, buffer_manager.std_img)
                 print('loss = %0.4f\n' % loss.data.cpu().numpy())
