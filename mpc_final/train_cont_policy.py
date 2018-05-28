@@ -85,8 +85,17 @@ class BufferManager:
         self.speed_np, self.pos_np, self.posxyz_np = get_info_np(info, use_pos_class=False)
         self.prev_xyz = np.array(info['pos'])
 
-    def store_frame(self, obs):
+    def store_frame(self, obs, info, seg):
         self.mpc_ret = self.mpc_buffer.store_frame(obs)
+        self.speed_np, self.pos_np, self.posxyz_np = get_info_np(info, use_pos_class = False)
+        off_flag, coll_flag = info['off_flag'], info['coll_flag']
+        speed_list, pos_list = get_info_ls(info)
+        if self.args.use_xyz:
+            xyz = np.array(info['pos'])
+            rela_xyz = xyz - self.prev_xyz
+            self.prev_xyz = xyz
+        else:
+            rela_xyz = None
         this_obs_np = self.obs_buffer.store_frame(obs)
         obs_var = Variable(torch.from_numpy(this_obs_np).unsqueeze(0).float().cuda())
         self.img_buffer.store_frame(obs)
@@ -195,7 +204,7 @@ def train_policy(args, env, num_steps=40000000):
     action_manager = ActionSampleManager(args)
 
     done_cnt = 0
-    _ = env.reset()
+    _, info = env.reset()
     obs, reward, done, info = env.step(buffer_manager.prev_act)
     buffer_manager.step_first(obs, info)
     done_cnt = 0
