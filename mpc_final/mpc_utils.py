@@ -41,8 +41,6 @@ class MPCBuffer(object):
         self.seg      = None
         self.xyz      = None
 
-        self.rewards  = np.ones((args.buffer_size, 1))
-
     def sample_n_unique(self, sampling_f, n):
         res = []
         while len(res) < n:
