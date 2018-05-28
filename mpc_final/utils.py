@@ -50,7 +50,6 @@ def train_model(args, train_net, mpc_buffer, epoch, avg_img_t, std_img_t):
     else:
         with torch.no_grad():
             nximg_enc = train_net(target['nx_obs_batch'], get_feature = True).detach()
-
     output = train_net(target['obs_batch'], target['act_batch'])
 
     if args.use_collision:
