@@ -259,7 +259,7 @@ def get_info_ls(info):
 def Focal_Loss(probs, target, reduce=True):
     # probs : batch * num_class
     # target : batch,
-    loss = -1.0 * (1-probs).pow(1) * torch.log(probs)
+    loss = -1.0 * (1-probs).pow(3) * torch.log(probs)
     batch_size = int(probs.size()[0])
     loss = loss[torch.arange(batch_size).long().cuda(), target.long()]
     if reduce == True:
