@@ -219,10 +219,10 @@ def train_policy(args, env, num_steps=40000000):
 
         if done:
             done_cnt += 1
-            if done_cnt % 5 == 0:
-                test_reward = test(args, env, net)
-                with open(os.path.join(args.save_path, 'test_log.txt'), 'a') as f:
-                    f.write('step %d reward_with %f reward_without %f\n' % (tt, test_reward['with_pos'], test_reward['without_pos']))
+            #if done_cnt % 5 == 0:
+            #    test_reward = test(args, env, net)
+            #    with open(os.path.join(args.save_path, 'test_log.txt'), 'a') as f:
+            #        f.write('step %d reward_with %f reward_without %f\n' % (tt, test_reward['with_pos'], test_reward['without_pos']))
             obs, prev_info = env.reset()
             obs, reward, done, info = env.step(np.array([1.0, 0.0]))
             buffer_manager.reset(prev_info, tt)
