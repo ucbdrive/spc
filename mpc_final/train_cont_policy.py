@@ -195,7 +195,7 @@ def train_policy(args, env, num_steps=40000000):
     done_cnt = 0
     for tt in range(num_imgs_start, num_steps):
         seg = env.env.get_segmentation().reshape((1, 256, 256)) if args.use_seg else None
-        ret, obs_var = buffer_manager.store_frame(obs, info)
+        ret, obs_var = buffer_manager.store_frame(obs, info, seg)
         action, dqn_action = action_manager.sample_action(net, dqn_agent, obs, obs_var, exploration, tt)
         obs, reward, done, info = env.step(action)
         if args.target_speed > 0:
