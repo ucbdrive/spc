@@ -63,7 +63,6 @@ class BufferManager:
         self.rewards = 0.0
         self.prev_act = np.array([1.0, 0.0]) if args.continuous else 1
         
-        self.prev_info = None
         self.avg_img = None
         self.std_img = None
         self.speed_np = None
@@ -78,7 +77,6 @@ class BufferManager:
         
     def step_first(self, obs, info):
         self.img_buffer.store_frame(obs)
-        self.prev_info = info
         self.avg_img, self.std_img = self.img_buffer.get_avg_std()
         self.speed_np, self.pos_np, self.posxyz_np = get_info_np(info, use_pos_class=False)
         self.prev_xyz = np.array(info['pos'])
@@ -105,9 +103,6 @@ class BufferManager:
         self.mpc_buffer.store_action(self.mpc_ret, action, done)
         self.rewards_with += reward['with_pos']
         self.rewards_without += reward['without_pos']
-
-    def store_info(self, info):
-        self.prev_info = info
 
     def update_avg_std_img(self):
         self.avg_img, self.std_img = self.img_buffer.get_avg_std()
@@ -231,7 +226,6 @@ def train_policy(args, env, num_steps=40000000):
             obs, reward, done, info = env.step(np.array([1.0, 0.0]))
             buffer_manager.reset(prev_info, tt)
             action_manager.reset()
-        buffer_manager.store_info(info)
         
         if args.use_dqn:
             dqn_agent.store_effect(dqn_action, reward['with_pos'], done)
