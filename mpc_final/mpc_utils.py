@@ -144,7 +144,7 @@ class MPCBuffer(object):
 
         if self.obs is None:
             self.obs      = np.empty([self.args.buffer_size] + list(frame.shape),         dtype = np.uint8)
-            self.action   = np.zeros([self.args.buffer_size] + [self.args.num_total_act], dtype = np.int32)
+            self.action   = np.zeros([self.args.buffer_size] + [self.args.num_total_act], dtype = np.float32)
             self.done     = np.empty([self.args.buffer_size],                             dtype = np.int32)
 
             if self.args.use_collision:
@@ -160,7 +160,7 @@ class MPCBuffer(object):
                 self.seg  = np.empty([self.args.buffer_size] + [1, 256, 256], dtype=np.uint8)
 
             if self.args.use_xyz:
-                self.xyz  = np.empty([self.args.buffer_size, 3], dtype=np.uint8)
+                self.xyz  = np.empty([self.args.buffer_size, 3], dtype=np.float32)
 
         self.obs[self.next_idx] = frame
 
