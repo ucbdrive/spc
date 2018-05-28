@@ -192,6 +192,3 @@ class MPCBuffer(object):
         self.speed[idx, 0] = speed
         self.angle[idx, 0] = angle
         self.pos[idx, 0] = pos
-        st_idx = max(idx - 15,0)
-        ed_idx = st_idx + 15
-        self.rewards[st_idx, 0] = np.sum(self.speed[st_idx: ed_idx, 0] * (np.cos(self.angle[st_idx: ed_idx, 0]) - np.abs(np.sin(self.angle[st_idx: ed_idx, 0])) - np.abs(self.pos[st_idx: ed_idx, 0] / 9.0)) / 40.0)
