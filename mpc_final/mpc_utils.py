@@ -1,3 +1,4 @@
+from __future__ import division, print_function
 import gym
 import numpy as np
 import random
@@ -6,29 +7,20 @@ import math
 import pdb
 
 class IMGBuffer(object):
-    def __init__(self, size, frame_history_len=3):
-        self.size = size
-        self.imgs = None
-        self.num_in_buffer = 0
-        self.next_idx = 0
-        self.frame_history_len = frame_history_len
+    def __init__(self):
+        self.cnt = 0
+        self.avg = 0
+        self.std = 0
 
     def store_frame(self, frame):
-        if self.num_in_buffer == 0:
-            self.imgs = np.empty([self.size] + list(frame.shape), dtype = np.uint8)
-        self.imgs[self.next_idx] = frame
-        self.num_in_buffer += 1
-        if self.num_in_buffer > self.size:
-            self.num_in_buffer = self.size
-        self.next_idx = (self.next_idx + 1) % self.size
-        return
+        avg = frame.mean()
+        std = frame.std()
+        self.avg = (self.cnt * self.avg + avg) / (self.cnt + 1)
+        self.std = math.sqrt((self.cnt * self.std ** 2 + std ** 2) / (self.cnt + 1))
+        self.cnt += 1
 
-    def get_avg_std(self, gpu=0):
-        avg = np.mean(self.imgs[:self.num_in_buffer],0)
-        std = np.std(self.imgs[:self.num_in_buffer], 0)
-        avg_t = torch.from_numpy(avg.transpose(2 ,0, 1)).float().repeat(self.frame_history_len, 1, 1).cuda()
-        std_t = torch.from_numpy(std.transpose(2, 0, 1)).float().repeat(self.frame_history_len, 1, 1).cuda()
-        return avg, std, avg_t, std_t
+    def get_avg_std(self):
+        return self.avg, self.std
     
 class MPCBuffer(object):
     def __init__(self, args):
