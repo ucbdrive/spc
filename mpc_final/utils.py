@@ -32,40 +32,6 @@ def weights_init(m):
         m.weight.data.uniform_(-w_bound, w_bound)
         m.bias.data.fill_(0)
 
-def train_model_imitation(train_net, mpc_buffer, batch_size, epoch, avg_img_t, std_img_t, pred_step = 15):
-    if epoch % 20 == 0:
-        x, idxes = mpc_buffer.sample(batch_size, sample_early = True)
-    else:
-        x, idxes = mpc_buffer.sample(batch_size, sample_early = False)
-    x = list(x)
-    for ii in range(len(x)):
-        if x[ii] is not None:
-            x[ii] = torch.from_numpy(x[ii]).float().cuda()
-    act_batch = Variable(x[0], requires_grad = False)
-    coll_batch = Variable(x[1], requires_grad = False)
-    offroad_batch = Variable(x[3], requires_grad = False)
-    dist_batch = Variable(x[4])
-    img_batch = Variable(((x[5].float() - avg_img_t) / (std_img_t + 0.0001)), requires_grad = False)
-    nximg_batch = Variable(((x[6].float() - avg_img_t) / (std_img_t + 0.0001)), requires_grad = False)
-    with torch.no_grad():
-        nximg_enc = train_net(nximg_batch, get_feature=True)
-        nximg_enc = nximg_enc.detach()
-    actions = torch.rand(*act_batch.size()).float()
-    actions = Variable(actions.cuda(), requires_grad=True)
-    actions.data.clamp(-1,1)
-    train_net.zero_grad()
-    for i in range(10):
-        pred_coll, pred_enc, pred_off, pred_dist, _, _ = train_net(img_batch,actions, pred_step)
-        coll_ls = Focal_Loss(pred_coll.view(-1, 2), (torch.max(coll_batch.view(-1, 2), -1)[1]).view(-1), reduce = True)
-        offroad_ls = Focal_Loss(pred_off.view(-1, 2), (torch.max(offroad_batch.view(-1, 2), -1)[1]).view(-1), reduce = True)
-        dist_ls = torch.sqrt(nn.MSELoss()(pred_dist.view(-1, pred_step), dist_batch[:, 1:].view(-1, pred_step)))
-        pred_ls = nn.L1Loss()(pred_enc, nximg_enc).sum()
-        loss = coll_ls + offroad_ls + dist_ls
-        loss.backward(retain_graph=True)
-        actions.data -= 0.001 * actions.grad.data
-        actions.data.clamp(-1,1)
-    action_loss = torch.sqrt(nn.MSELoss()(actions, act_batch))
-    return action_loss 
     
 def train_model(args, train_net, mpc_buffer, epoch, avg_img_t, std_img_t):
     if epoch % 20 == 0:
@@ -77,10 +43,6 @@ def train_model(args, train_net, mpc_buffer, epoch, avg_img_t, std_img_t):
         if torch.cuda.is_available():
             target[key] = target[key].cuda()
 
-    #img_batch = Variable(((x[5].float()-avg_img_t)/(std_img_t+0.0001)), requires_grad=False)
-    #nximg_batch = Variable(((x[6].float()-avg_img_t)/(std_img_t+0.0001)), requires_grad=False)
-    # target['obs_batch'] = (target['obs_batch'] - 112.62289744791671) / 56.1524832523
-    # target['nx_obs_batch'] = (target['nx_obs_batch'] - 112.62289744791671) / 56.1524832523
     target['obs_batch'] = target['obs_batch'] / 255.0
     target['nx_obs_batch'] = target['nx_obs_batch'] / 255.0
     if args.use_seg:
@@ -88,33 +50,32 @@ def train_model(args, train_net, mpc_buffer, epoch, avg_img_t, std_img_t):
     else:
         with torch.no_grad():
             nximg_enc = train_net(target['nx_obs_batch'], get_feature = True).detach()
-
     output = train_net(target['obs_batch'], target['act_batch'])
 
     if args.use_collision:
         show_accuracy(target['coll_batch'].view(-1), torch.max(output['coll_prob'].view(-1, 2), -1)[1], 'collision')
-        weight = torch.zeros(2)
-        weight[0] = target['coll_batch'].sum() / args.batch_size / args.pred_step
-        weight[1] = 1 - weight[0]
-        if torch.cuda.is_available():
-            weight = weight.cuda()
-        coll_ls = nn.CrossEntropyLoss(weight = weight)(output['coll_prob'].view(args.batch_size * args.pred_step, 2), target['coll_batch'].view(args.batch_size * args.pred_step).long())
-        # coll_ls = Focal_Loss(output['coll_prob'].view(-1, 2), target['coll_batch'].view(-1), reduce = True)
+        # weight = torch.zeros(2)
+        # weight[0] = target['coll_batch'].sum() / args.batch_size / args.pred_step
+        # weight[1] = 1 - weight[0]
+        # if torch.cuda.is_available():
+        #    weight = weight.cuda()
+        # coll_ls = nn.CrossEntropyLoss(weight = weight)(output['coll_prob'].view(args.batch_size * args.pred_step, 2), target['coll_batch'].view(args.batch_size * args.pred_step).long())
+        coll_ls = Focal_Loss(output['coll_prob'].view(-1, 2), target['coll_batch'].view(-1).long())
         print('coll ls', coll_ls.data.cpu().numpy())
 
     if args.use_offroad:
         show_accuracy(target['off_batch'].view(-1), torch.max(output['offroad_prob'].view(-1, 2), -1)[1], 'offroad')
-        weight = torch.zeros(2)
-        weight[0] = target['off_batch'].sum() / args.batch_size / args.pred_step
-        weight[1] = 1 - weight[0]
-        if torch.cuda.is_available():
-            weight = weight.cuda()
-        offroad_ls = nn.CrossEntropyLoss(weight = weight)(output['offroad_prob'].view(args.batch_size * args.pred_step, 2), target['off_batch'].view(args.batch_size * args.pred_step).long())
-        # offroad_ls = Focal_Loss(output['offroad_prob'].view(-1, 2), target['off_batch'].view(-1), reduce = True)
+        #weight = torch.zeros(2)
+        #weight[0] = target['off_batch'].sum() / args.batch_size / args.pred_step
+        #weight[1] = 1 - weight[0]
+        #if torch.cuda.is_available():
+        #    weight = weight.cuda()
+        #offroad_ls = nn.CrossEntropyLoss(weight = weight)(output['offroad_prob'].view(args.batch_size * args.pred_step, 2), target['off_batch'].view(args.batch_size * args.pred_step).long())
+        offroad_ls = Focal_Loss(output['offroad_prob'].view(-1, 2), target['off_batch'].view(-1).long())
         print('offroad ls', offroad_ls.data.cpu().numpy())
 
     if args.use_distance:
-        dist_ls = torch.sqrt(nn.MSELoss()(output['dist'].view(-1, args.pred_step), target['dist_batch'][:, 1:].view(-1, args.pred_step))) / 40
+        dist_ls = torch.sqrt(nn.MSELoss()(output['dist'].view(-1, args.pred_step), target['dist_batch'][:, 1:].view(-1, args.pred_step))) 
         print('dist ls', dist_ls.data.cpu().numpy())
     
     if args.use_seg:
@@ -127,15 +88,15 @@ def train_model(args, train_net, mpc_buffer, epoch, avg_img_t, std_img_t):
     loss = pred_ls + coll_ls + offroad_ls + dist_ls
 
     if args.use_pos:
-        pos_loss = torch.sqrt(nn.MSELoss()(output['pos'], target['pos_batch'][:, :-1, :]))
+        pos_loss = torch.sqrt(nn.MSELoss()(output['pos'], target['pos_batch'][:, 1:, :]))
         loss += pos_loss
         print('pos ls', pos_loss.data.cpu().numpy())
     if args.use_angle:
-        angle_loss = torch.sqrt(nn.MSELoss()(output['angle'], target['angle_batch'][:, :-1, :]))
+        angle_loss = torch.sqrt(nn.MSELoss()(output['angle'], target['angle_batch'][:, 1:, :]))
         loss += angle_loss
         print('angle ls', angle_loss.data.cpu().numpy())
     if args.use_speed:
-        speed_loss = torch.sqrt(nn.MSELoss()(output['speed'], target['sp_batch'][:, :-1, :]))
+        speed_loss = torch.sqrt(nn.MSELoss()(output['speed'], target['sp_batch'][:, 1:, :]))
         loss += speed_loss
         print('speed ls', speed_loss.data.cpu().numpy())
     if args.use_xyz:
@@ -147,18 +108,6 @@ def train_model(args, train_net, mpc_buffer, epoch, avg_img_t, std_img_t):
     if np.isnan(loss_value):
         pdb.set_trace()
 
-    #if use_seg:
-    #    seg_loss = sum([nn.CrossEntropyLoss()(seg_out[:, i], seg_batch[:, i]) for i in range(pred_step)])
-    #    loss += seg_loss
-    #else:
-    #    seg_loss = Variable(torch.zeros(1))
-
-    #coll_acc, off_acc, total_dist_ls = log_info(pred_coll, coll_batch, pred_off, offroad_batch, \
-    #    float(coll_ls.data.cpu().numpy()), float(offroad_ls.data.cpu().numpy()),\
-    #    float(pred_ls.data.cpu().numpy()), float(dist_ls.data.cpu().numpy()), \
-    #    float(xyz_loss.data.cpu().numpy()), float(seg_loss.data.cpu().numpy()), float(loss.data.cpu().numpy()), epoch, 1)
-    print('1 step training')
-    visualize(args, target, output)
     return loss
 
 def draw_from_pred(pred):
@@ -221,8 +170,12 @@ class DoneCondition:
         elif pos > -6.2 or dist > 0:
             self.off_cnt = 0
         if self.off_cnt > self.size:
+            self.off_cnt = 0
+            self.pos = []
             return True
         if abs(pos) >= 21.0:
+            self.off_cnt = 0
+            self.pos = []
             return True
         self.pos.append(list(posxyz))
         real_pos = np.concatenate(self.pos[-100:])
@@ -230,6 +183,7 @@ class DoneCondition:
         std = np.sum(np.std(real_pos, 0))
         if std < 2.0 and len(self.pos) > 100:
             self.pos = []
+            self.off_cnt = 0
             return True
         return False 
 
@@ -238,9 +192,8 @@ class ObsBuffer:
         self.frame_history_len = frame_history_len
         self.last_obs_all = []
 
-    def store_frame(self, frame, avg_img, std_img):
-        obs_np = (frame-avg_img)/(std_img+0.0001)
-        obs_np = obs_np.transpose(2,0,1)
+    def store_frame(self, frame):
+        obs_np = frame.transpose(2,0,1)
         if len(self.last_obs_all) < self.frame_history_len:
             self.last_obs_all = []
             for ii in range(self.frame_history_len):
@@ -252,59 +205,6 @@ class ObsBuffer:
     def clear(self):
         self.last_obs_all = []
         return
-
-def log_info(pred_coll, coll_batch, pred_off, offroad_batch, 
-            total_coll_ls, total_off_ls, total_pred_ls, 
-            total_dist_ls, xyz_loss, seg_loss, total_loss, 
-            epoch, num_batch):
-    coll_label, coll_pred, off_label, off_pred = [], [], [], []
-    pred_coll_np = pred_coll.view(-1,2).data.cpu().numpy()
-    coll_np = coll_batch.view(-1,2).data.cpu().numpy()
-    pred_coll_np = np.argmax(pred_coll_np, 1)
-    coll_np = np.argmax(coll_np, 1)
-    coll_label.append(coll_np)
-    coll_pred.append(pred_coll_np)
-
-    pred_off_np = pred_off.view(-1,2).data.cpu().numpy()
-    off_np = offroad_batch.view(-1,2).data.cpu().numpy()
-    pred_off_np = np.argmax(pred_off_np, 1)
-    off_np = np.argmax(off_np, 1)
-    off_label.append(off_np)
-    off_pred.append(pred_off_np)
-    
-    coll_label = np.concatenate(coll_label)
-    coll_pred = np.concatenate(coll_pred)
-    off_label = np.concatenate(off_label)
-    off_pred = np.concatenate(off_pred)
-    cnf_matrix = confusion_matrix(coll_label, coll_pred)
-    cnf_matrix_off = confusion_matrix(off_label, off_pred)
-    coll_acc, off_accuracy = 0, 0
-    try:
-        coll_acc = (cnf_matrix[0,0] + cnf_matrix[1,1]) / (cnf_matrix.sum() * 1.0)
-        off_accuracy = (cnf_matrix_off[0,0] + cnf_matrix_off[1,1]) / (cnf_matrix_off.sum() * 1.0)
-        if epoch % 20 == 0:
-            print('sample early collacc', "{0:.3f}".format(coll_acc), \
-                "{0:.3f}".format(total_coll_ls / num_batch), \
-                'offacc', "{0:.3f}".format(off_accuracy), \
-                "{0:.3f}".format(total_off_ls / num_batch), \
-                'xyzls', "{0:.3f}".format(xyz_loss / num_batch), \
-                'segls', "{0:.3f}".format(seg_loss / num_batch), \
-                'ttls', "{0:.3f}".format(total_loss / num_batch), \
-                'predls', "{0:.3f}".format(total_pred_ls / num_batch), \
-                'distls', "{0:.3f}".format(total_dist_ls / num_batch))
-        else:
-            print('collacc', "{0:.3f}".format(coll_acc), \
-                "{0:.3f}".format(total_coll_ls / num_batch), \
-                'offacc', "{0:.3f}".format(off_accuracy), \
-                "{0:.3f}".format(total_off_ls / num_batch), \
-                'xyzls', "{0:.3f}".format(xyz_loss / num_batch), \
-                'segls', "{0:.3f}".format(seg_loss / num_batch), \
-                'ttls', "{0:.3f}".format(total_loss / num_batch), \
-                'predls', "{0:.3f}".format(total_pred_ls / num_batch), \
-                'distls', "{0:.3f}".format(total_dist_ls / num_batch))
-    except:
-        print('dist ls', total_dist_ls / num_batch)
-    return coll_acc, off_accuracy, total_dist_ls / num_batch
 
 def init_dirs(dir_list):
     for path in dir_list:
@@ -367,7 +267,7 @@ def Focal_Loss(probs, target, reduce=True):
     return loss
 
 def sample_cont_action(args, net, imgs, prev_action = None, testing = False):
-    imgs = imgs.contiguous()
+    imgs = imgs.contiguous()/255.0
     batch_size, c, w, h = int(imgs.size()[0]), int(imgs.size()[-3]), int(imgs.size()[-2]), int(imgs.size()[-1])
     imgs = imgs.view(batch_size, 1, c, w, h)
     prev_action = prev_action.reshape((1, 1, 2))

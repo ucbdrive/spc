@@ -7,7 +7,7 @@ from dqn_utils import *
 from dqn_agent import *
 from mpc_utils import *
 
-def test(args, env, net, avg_img, std_img):
+def test(args, env, net):
     obs_buffer = ObsBuffer(args.frame_history_len)
     _ = env.reset(rand_reset=False) # always start from the same place
     prev_act = np.array([1.0, 0.0]) if args.continuous else 1
@@ -18,7 +18,7 @@ def test(args, env, net, avg_img, std_img):
     exploration = PiecewiseSchedule([(0, 0.0), (1000, 0.0)], outside_value = 0.0)
         
     if args.use_dqn:
-        dqn_agent = DQNAgent(args.frame_history_len, args.num_dqn_action, args.lr, exploration, args.save_path, args=args)
+        dqn_agent = DQNAgent(args, exploration, args.save_path)
         dqn_agent.load_model() 
     else:
         dqn_agent = None
@@ -28,7 +28,7 @@ def test(args, env, net, avg_img, std_img):
         if args.use_dqn:
             dqn_action = dqn_agent.sample_action(obs, 1e8)
         ret = mpc_buffer.store_frame(obs)
-        this_obs_np = obs_buffer.store_frame(obs, avg_img, std_img)
+        this_obs_np = obs_buffer.store_frame(obs)
         obs_var = Variable(torch.from_numpy(this_obs_np).unsqueeze(0)).float().cuda()
 
         if args.continuous:
@@ -38,7 +38,6 @@ def test(args, env, net, avg_img, std_img):
                 if abs(action[1]) <= dqn_action * 0.1:
                     action[1] = 0
             real_action = action
-            real_action[0] = real_action[0] * 0.5 + 0.5
         else:
             action = real_action = sample_discrete_action(args, net, obs_var, prev_action = prev_act)
 

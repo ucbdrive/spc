@@ -3,6 +3,7 @@ import cv2
 import math
 import numpy as np
 import pdb
+import copy
 
 def naive_driver(info, continuous):
     if info['angle'] > 0.5 or (info['trackPos'] < -1 and info['angle'] > 0):
@@ -33,7 +34,7 @@ class TorcsWrapper:
         return cv2.resize(obs, self.imsize)
          
     def step(self, action):
-        real_action = action
+        real_action = copy.deepcopy(action)
         real_action[0] = real_action[0] * 0.5 + 0.5
         self.epi_len += 1
         obs, reward, real_done, info = self.env.step(real_action)
