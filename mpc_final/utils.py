@@ -280,6 +280,8 @@ def sample_cont_action(args, net, imgs, prev_action = None, testing = False, avg
         if cnt >= 10 and (np.abs(prev_loss-this_loss)/prev_loss <= 0.0005 or this_loss > prev_loss):
             sign = False
             return this_action.data.cpu().numpy()[0,0,:].reshape(-1)
+        if cnt >= 15:
+            sign = False
         cnt += 1 
         this_action.data.clamp(-1, 1)# = torch.clamp(this_action, -1, 1)
         prev_loss = this_loss
