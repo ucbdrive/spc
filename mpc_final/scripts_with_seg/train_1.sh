@@ -1,7 +1,7 @@
 #!/bin/bash
 python3 train_torcs.py \
     --resume \
-    --save-path mpc_15_10_cont \
+    --save-path mpc_1_10_cont \
     --continuous \
     --use-seg \
     --normalize \
