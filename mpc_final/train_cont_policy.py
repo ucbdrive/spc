@@ -245,7 +245,7 @@ def train_policy(args, env, num_steps=40000000):
                 print('loss = %0.4f\n' % loss.data.cpu().numpy())
                 loss.backward()
                 optimizer.step()
-                if self.args.data_parallel:
+                if args.data_parallel:
                     net.load_state_dict(train_net.module.state_dict())
                 else:
                     net.load_state_dict(train_net.state_dict())
