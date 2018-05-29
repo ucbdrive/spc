@@ -9,7 +9,6 @@ import cv2
 from utils import *
 from torcs_wrapper import *
 from dqn_agent import *
-from test import test
 
 def init_models(args):
     train_net = ConvLSTMMulti(args)
