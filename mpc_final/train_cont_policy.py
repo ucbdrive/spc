@@ -206,7 +206,7 @@ def train_policy(args, env, num_steps=40000000):
         obs, reward, done, info = env.step(action)
         if args.target_speed > 0:
             with open(os.path.join(args.save_path, 'speedlog.txt'), 'a') as f:
-                f.write('step %d speed %0.4f\n' % (tt, info['speed']))
+                f.write('step %d speed %0.4f target %0.4f\n' % (tt, info['speed'], args.target_speed))
         if args.target_dist > 0:
             with open(os.path.join(args.save_path, 'distlog.txt'), 'a') as f:
                 f.write('step %d dist %0.4f\n' % (tt, info['speed'] * (np.cos(info['angle']) - np.abs(np.sin(info['angle'])))))
@@ -228,6 +228,7 @@ def train_policy(args, env, num_steps=40000000):
             obs, _, _, info = env.step(np.array([1.0, 0.0]))
             buffer_manager.reset(prev_info, tt)
             action_manager.reset()
+            args.target_speed = np.random.uniform(1, 60)
         
         if args.use_dqn:
             dqn_agent.store_effect(dqn_action, reward['with_pos'], done)
