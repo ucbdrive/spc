@@ -28,7 +28,7 @@ def test(args, env, net, file_name, dqn_name=None):
         dqn_agent.load_model(dqn_name)
     else:
         dqn_agent = None
-    while done_cnt < 10:
+    while done_cnt < 1:
         seg = env.env.get_segmentation().reshape((1, 256, 256)) if args.use_seg else None
         ret, obs_var = buffer_manager.store_frame(obs, info, seg)
         if args.normalize:
