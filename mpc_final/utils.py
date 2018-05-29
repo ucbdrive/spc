@@ -14,6 +14,7 @@ import random
 from sklearn.metrics import confusion_matrix
 import pdb
 from scipy.misc import imsave
+import copy
 
 def weights_init(m):
     classname = m.__class__.__name__
