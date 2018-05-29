@@ -31,7 +31,10 @@ def test(args, env, net, file_name, dqn_name=None):
     while done_cnt < 10:
         seg = env.env.get_segmentation().reshape((1, 256, 256)) if args.use_seg else None
         ret, obs_var = buffer_manager.store_frame(obs, info, seg)
-        avg_img, std_img = buffer_manager.img_buffer.get_avg_std()
+        if args.normalize:
+            avg_img, std_img = buffer_manager.img_buffer.get_avg_std()
+        else:
+            avg_img, std_img = None, None
         action, dqn_action = action_manager.sample_action(net, dqn_agent, obs, obs_var, exploration, 1e8, avg_img, std_img)
         obs, reward, done, info = env.step(action)
         print('action ', "{0:.2f}".format(action[0]), "{0:.2f}".format(action[1]), \
@@ -46,7 +49,7 @@ def test(args, env, net, file_name, dqn_name=None):
         if done:
             done_cnt += 1
             obs, prev_info = env.reset()
-            obs, reward, _, info = env.step(np.array([1.0, 0.0]))
+            obs, _, _, info = env.step(np.array([1.0, 0.0]))
             buffer_manager.reset(prev_info, file_name.split('_')[-1].split('.')[0], log_name='log_test_torcs.txt')
             action_manager.reset()
         if args.use_dqn:
