@@ -1,3 +1,4 @@
+from __future__ import division, print_function
 import gym
 import numpy as np
 import random
@@ -6,29 +7,20 @@ import math
 import pdb
 
 class IMGBuffer(object):
-    def __init__(self, size, frame_history_len=3):
-        self.size = size
-        self.imgs = None
-        self.num_in_buffer = 0
-        self.next_idx = 0
-        self.frame_history_len = frame_history_len
+    def __init__(self):
+        self.cnt = 0
+        self.avg = 0
+        self.std = 0
 
     def store_frame(self, frame):
-        if self.num_in_buffer == 0:
-            self.imgs = np.empty([self.size] + list(frame.shape), dtype = np.uint8)
-        self.imgs[self.next_idx] = frame
-        self.num_in_buffer += 1
-        if self.num_in_buffer > self.size:
-            self.num_in_buffer = self.size
-        self.next_idx = (self.next_idx + 1) % self.size
-        return
+        avg = frame.mean()
+        std = frame.std()
+        self.avg = (self.cnt * self.avg + avg) / (self.cnt + 1)
+        self.std = math.sqrt((self.cnt * self.std ** 2 + std ** 2) / (self.cnt + 1))
+        self.cnt += 1
 
-    def get_avg_std(self, gpu=0):
-        avg = np.mean(self.imgs[:self.num_in_buffer],0)
-        std = np.std(self.imgs[:self.num_in_buffer], 0)
-        avg_t = torch.from_numpy(avg.transpose(2 ,0, 1)).float().repeat(self.frame_history_len, 1, 1).cuda()
-        std_t = torch.from_numpy(std.transpose(2, 0, 1)).float().repeat(self.frame_history_len, 1, 1).cuda()
-        return avg, std, avg_t, std_t
+    def get_avg_std(self):
+        return self.avg, self.std
     
 class MPCBuffer(object):
     def __init__(self, args):
@@ -48,8 +40,6 @@ class MPCBuffer(object):
         self.speed    = None
         self.seg      = None
         self.xyz      = None
-
-        self.rewards  = np.ones((args.buffer_size, 1))
 
     def sample_n_unique(self, sampling_f, n):
         res = []
@@ -82,13 +72,13 @@ class MPCBuffer(object):
         data_dict['sp_batch'] = np.concatenate([self.speed[idx: idx + self.args.pred_step + 1, :][np.newaxis, :] for idx in idxes], 0)
         
         if self.args.use_collision:
-            data_dict['coll_batch'] = np.concatenate([self.coll[idx: idx + self.args.pred_step, :][np.newaxis, :] for idx in idxes], 0)
+            data_dict['coll_batch'] = np.concatenate([self.coll[idx + 1: idx + self.args.pred_step + 1, :][np.newaxis, :] for idx in idxes], 0)
         
         if self.args.use_offroad:
-            data_dict['off_batch'] = np.concatenate([self.offroad[idx: idx + self.args.pred_step, :][np.newaxis, :] for idx in idxes], 0)
+            data_dict['off_batch'] = np.concatenate([self.offroad[idx + 1: idx + self.args.pred_step + 1, :][np.newaxis, :] for idx in idxes], 0)
         
         if self.args.use_pos:
-            data_dict['pos_batch'] = np.concatenate([self.pos[idx: idx + self.args.pred_step + 1, :][np.newaxis, :] for idx in idxes], 0)
+            data_dict['pos_batch'] = np.concatenate([self.pos[idx + 1: idx + self.args.pred_step + 1, :][np.newaxis, :] for idx in idxes], 0)
             data_dict['pos_batch'] /= -7.0
         
         if self.args.use_angle:
@@ -103,7 +93,7 @@ class MPCBuffer(object):
             data_dict['seg_batch'] = np.concatenate([self.seg[idx: idx + self.args.pred_step + 1, :][np.newaxis, :] for idx in idxes], 0)
         
         if self.args.use_xyz:
-            data_dict['xyz_batch'] = np.concatenate([self.xyz[idx: idx + self.args.pred_step, :][np.newaxis, :] for idx in idxes], 0)
+            data_dict['xyz_batch'] = np.concatenate([self.xyz[idx: idx + self.args.pred_step + 1, :][np.newaxis, :] for idx in idxes], 0)
 
         return data_dict
 
@@ -152,7 +142,7 @@ class MPCBuffer(object):
 
         if self.obs is None:
             self.obs      = np.empty([self.args.buffer_size] + list(frame.shape),         dtype = np.uint8)
-            self.action   = np.zeros([self.args.buffer_size] + [self.args.num_total_act], dtype = np.int32)
+            self.action   = np.zeros([self.args.buffer_size] + [self.args.num_total_act], dtype = np.float32)
             self.done     = np.empty([self.args.buffer_size],                             dtype = np.int32)
 
             if self.args.use_collision:
@@ -168,7 +158,7 @@ class MPCBuffer(object):
                 self.seg  = np.empty([self.args.buffer_size] + [1, 256, 256], dtype=np.uint8)
 
             if self.args.use_xyz:
-                self.xyz  = np.empty([self.args.buffer_size, 3], dtype=np.uint8)
+                self.xyz  = np.empty([self.args.buffer_size, 3], dtype=np.float32)
 
         self.obs[self.next_idx] = frame
 
@@ -200,6 +190,3 @@ class MPCBuffer(object):
         self.speed[idx, 0] = speed
         self.angle[idx, 0] = angle
         self.pos[idx, 0] = pos
-        st_idx = max(idx - 15,0)
-        ed_idx = st_idx + 15
-        self.rewards[st_idx, 0] = np.sum(self.speed[st_idx: ed_idx, 0] * (np.cos(self.angle[st_idx: ed_idx, 0]) - np.abs(np.sin(self.angle[st_idx: ed_idx, 0])) - np.abs(self.pos[st_idx: ed_idx, 0] / 9.0)) / 40.0)

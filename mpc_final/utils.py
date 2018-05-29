@@ -43,8 +43,12 @@ def train_model(args, train_net, mpc_buffer, epoch, avg_img_t, std_img_t):
         if torch.cuda.is_available():
             target[key] = target[key].cuda()
 
-    target['obs_batch'] = target['obs_batch'] / 255.0
-    target['nx_obs_batch'] = target['nx_obs_batch'] / 255.0
+    if args.normalize:
+        target['obs_batch'] = (target['obs_batch']-avg_img_t) / std_img_t
+        target['nx_obs_batch'] = (target['nx_obs_batch']-avg_img_t) / std_img_t
+    else:
+        target['obs_batch'] = copy.deepcopy(target['obs_batch'])/255.0
+        target['nx_obs_batch'] = copy.deepcopy(target['nx_obs_batch'])/255.0
     if args.use_seg:
         target['seg_batch'] = target['seg_batch'].long()
     else:
@@ -54,23 +58,11 @@ def train_model(args, train_net, mpc_buffer, epoch, avg_img_t, std_img_t):
 
     if args.use_collision:
         show_accuracy(target['coll_batch'].view(-1), torch.max(output['coll_prob'].view(-1, 2), -1)[1], 'collision')
-        # weight = torch.zeros(2)
-        # weight[0] = target['coll_batch'].sum() / args.batch_size / args.pred_step
-        # weight[1] = 1 - weight[0]
-        # if torch.cuda.is_available():
-        #    weight = weight.cuda()
-        # coll_ls = nn.CrossEntropyLoss(weight = weight)(output['coll_prob'].view(args.batch_size * args.pred_step, 2), target['coll_batch'].view(args.batch_size * args.pred_step).long())
         coll_ls = Focal_Loss(output['coll_prob'].view(-1, 2), target['coll_batch'].view(-1).long())
         print('coll ls', coll_ls.data.cpu().numpy())
 
     if args.use_offroad:
         show_accuracy(target['off_batch'].view(-1), torch.max(output['offroad_prob'].view(-1, 2), -1)[1], 'offroad')
-        #weight = torch.zeros(2)
-        #weight[0] = target['off_batch'].sum() / args.batch_size / args.pred_step
-        #weight[1] = 1 - weight[0]
-        #if torch.cuda.is_available():
-        #    weight = weight.cuda()
-        #offroad_ls = nn.CrossEntropyLoss(weight = weight)(output['offroad_prob'].view(args.batch_size * args.pred_step, 2), target['off_batch'].view(args.batch_size * args.pred_step).long())
         offroad_ls = Focal_Loss(output['offroad_prob'].view(-1, 2), target['off_batch'].view(-1).long())
         print('offroad ls', offroad_ls.data.cpu().numpy())
 
@@ -88,7 +80,7 @@ def train_model(args, train_net, mpc_buffer, epoch, avg_img_t, std_img_t):
     loss = pred_ls + coll_ls + offroad_ls + dist_ls
 
     if args.use_pos:
-        pos_loss = torch.sqrt(nn.MSELoss()(output['pos'], target['pos_batch'][:, 1:, :]))
+        pos_loss = torch.sqrt(nn.MSELoss()(output['pos'], target['pos_batch'][:, :, :]))
         loss += pos_loss
         print('pos ls', pos_loss.data.cpu().numpy())
     if args.use_angle:
@@ -100,14 +92,14 @@ def train_model(args, train_net, mpc_buffer, epoch, avg_img_t, std_img_t):
         loss += speed_loss
         print('speed ls', speed_loss.data.cpu().numpy())
     if args.use_xyz:
-        xyz_loss = torch.sqrt(nn.MSELoss()(output['xyz'], target['xyz_batch'])) / 100.0
+        xyz_loss = torch.sqrt(nn.MSELoss()(output['xyz'], target['xyz_batch'][:, 1:, :])) / 100.0
         loss += xyz_loss
         print('xyz ls', xyz_loss.data.cpu().numpy())
 
     loss_value = float(loss.data.cpu().numpy())
     if np.isnan(loss_value):
         pdb.set_trace()
-
+    visualize(args, target, output)
     return loss
 
 def draw_from_pred(pred):
@@ -157,7 +149,13 @@ def visualize(args, target, output):
             f.write(str(from_variable_to_numpy(target['sp_batch'][batch_id, :-1])) + '\n')
             f.write('output speed:\n')
             f.write(str(from_variable_to_numpy(output['speed'][batch_id])) + '\n')
-
+        
+        if args.use_distance:
+            f.write('target dist:\n')
+            f.write(str(from_variable_to_numpy(target['dist_batch'][batch_id, 1:]))+'\n')
+            f.write('output dist:\n')
+            f.write(str(from_variable_to_numpy(output['dist'][batch_id, :]))+'\n')
+        
 class DoneCondition:
     def __init__(self, size):
         self.size = size
@@ -259,15 +257,19 @@ def get_info_ls(info):
 def Focal_Loss(probs, target, reduce=True):
     # probs : batch * num_class
     # target : batch,
-    loss = -1.0 * (1-probs).pow(1) * torch.log(probs)
+    loss = -1.0 * (1-probs).pow(3) * torch.log(probs)
     batch_size = int(probs.size()[0])
     loss = loss[torch.arange(batch_size).long().cuda(), target.long()]
     if reduce == True:
         loss = loss.sum()/(batch_size*1.0)
     return loss
 
-def sample_cont_action(args, net, imgs, prev_action = None, testing = False):
-    imgs = imgs.contiguous()/255.0
+def sample_cont_action(args, net, imgs, prev_action = None, testing = False, avg_img=0, std_img=1.0):
+    imgs = copy.deepcopy(imgs)
+    if args.normalize:
+        imgs = (imgs.contiguous()-avg_img)/(std_img)
+    else:
+        imgs = imgs / 255.0
     batch_size, c, w, h = int(imgs.size()[0]), int(imgs.size()[-3]), int(imgs.size()[-2]), int(imgs.size()[-1])
     imgs = imgs.view(batch_size, 1, c, w, h)
     prev_action = prev_action.reshape((1, 1, 2))
@@ -278,7 +280,7 @@ def sample_cont_action(args, net, imgs, prev_action = None, testing = False):
     prev_loss = 1000
     sign = True
     cnt = 0
-    optimizer = optim.Adam([this_action], lr = 0.01)
+    optimizer = optim.Adam([this_action], lr = 0.01, amsgrad=True)
     while sign:
         if testing:
             loss = get_action_loss_test(args, net, imgs, this_action, None, None, None)
@@ -292,6 +294,8 @@ def sample_cont_action(args, net, imgs, prev_action = None, testing = False):
         if cnt >= 10 and (np.abs(prev_loss-this_loss)/prev_loss <= 0.0005 or this_loss > prev_loss):
             sign = False
             return this_action.data.cpu().numpy()[0,0,:].reshape(-1)
+        if cnt >= 15:
+            sign = False
         cnt += 1 
         this_action.data.clamp(-1, 1)# = torch.clamp(this_action, -1, 1)
         prev_loss = this_loss
@@ -394,7 +398,7 @@ def get_action_loss(args, net, imgs, actions, target = None, hidden = None, cell
             if args.target_dist > 0:
                 target['dist_batch'] = target['dist_batch'].cuda()
 
-    weight = (0.97 ** np.arange(args.pred_step)).reshape((1, args.pred_step, 1))
+    weight = (0.99 ** np.arange(args.pred_step)).reshape((1, args.pred_step, 1))
     weight = Variable(torch.from_numpy(weight).float().cuda()).repeat(batch_size, 1, 1)
     output = net(imgs, actions, hidden = hidden, cell = cell)
 
@@ -434,6 +438,29 @@ def show_accuracy(output, target, label):
     tn, fp, fn, tp = confusion_matrix(output, target, labels = [0, 1]).ravel()
     print('%s accuracy: %0.2f%%' % (label, (tn + tp) / (tn + fp + fn + tp) * 100.0))
 
+def get_action_loss_test(args, net, imgs, actions, target = None, hidden = None, cell = None, gpu = 0):
+    batch_size = int(imgs.size()[0])
+    if args.continuous:
+        batch_size = 1
+    if target is None:
+        target = dict()
+        target['angle_batch'] = Variable(torch.zeros(batch_size, args.pred_step, 1), requires_grad = False)
+        if torch.cuda.is_available():
+            target['angle_batch'] = target['angle_batch'].cuda()
+
+    weight = (0.99 ** np.arange(args.pred_step)).reshape((1, args.pred_step, 1))
+    weight = Variable(torch.from_numpy(weight).float().cuda()).repeat(batch_size, 1, 1)
+    output = net(imgs, actions, hidden = hidden, cell = cell)
+
+    loss = 0
+    dist_ls = (output['dist'].view(-1, args.pred_step, 1) * weight).sum()
+    loss -= 0.1 * dist_ls
+
+    angle_loss = torch.sqrt(nn.MSELoss()(output['angle'], target['angle_batch']))
+    loss += angle_loss
+
+    return loss
+
 if __name__ == '__main__':
     class dummy(object):
         def __init__(self):
@@ -446,25 +473,3 @@ if __name__ == '__main__':
     print(one_hot_actions)
     print(one_hot_actions.size())
 
-def get_action_loss_test(args, net, imgs, actions, target = None, hidden = None, cell = None, gpu = 0):
-    batch_size = int(imgs.size()[0])
-    if args.continuous:
-        batch_size = 1
-    if target is None:
-        target = dict()
-        target['angle_batch'] = Variable(torch.zeros(batch_size, args.pred_step, 1), requires_grad = False)
-        if torch.cuda.is_available():
-            target['angle_batch'] = target['angle_batch'].cuda()
-
-    weight = (0.97 ** np.arange(args.pred_step)).reshape((1, args.pred_step, 1))
-    weight = Variable(torch.from_numpy(weight).float().cuda()).repeat(batch_size, 1, 1)
-    output = net(imgs, actions, hidden = hidden, cell = cell)
-
-    loss = 0
-    dist_ls = (output['dist'].view(-1, args.pred_step, 1) * weight).sum()
-    loss -= 0.1 * dist_ls
-
-    angle_loss = torch.sqrt(nn.MSELoss()(output['angle'], target['angle_batch']))
-    loss += angle_loss
-
-    return loss

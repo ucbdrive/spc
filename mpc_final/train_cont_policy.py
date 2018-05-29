@@ -57,17 +57,14 @@ class BufferManager:
     def __init__(self, args=None):
         self.args = args
         self.mpc_buffer = MPCBuffer(args)
-        self.img_buffer = IMGBuffer(1000)
+        self.img_buffer = IMGBuffer()
         self.obs_buffer = ObsBuffer(args.frame_history_len)
         self.epi_rewards = []
         self.rewards = 0.0
         self.prev_act = np.array([1.0, 0.0]) if args.continuous else 1
         
-        self.prev_info = None
         self.avg_img = None
         self.std_img = None
-        self.avg_img_t = None
-        self.std_img_t = None
         self.speed_np = None
         self.pos_np = None
         self.posxyz_np = None
@@ -79,9 +76,9 @@ class BufferManager:
         self.mpc_ret = 0
         
     def step_first(self, obs, info):
-        self.img_buffer.store_frame(obs)
-        self.prev_info = info
-        self.avg_img, self.std_img, self.avg_img_t, self.std_img_t = self.img_buffer.get_avg_std(gpu=0)
+        if self.args.normalize:
+            self.img_buffer.store_frame(obs)
+            self.avg_img, self.std_img = self.img_buffer.get_avg_std()
         self.speed_np, self.pos_np, self.posxyz_np = get_info_np(info, use_pos_class=False)
         self.prev_xyz = np.array(info['pos'])
 
@@ -96,44 +93,35 @@ class BufferManager:
             self.prev_xyz = xyz
         else:
             rela_xyz = None
+        self.mpc_buffer.store_effect(self.mpc_ret, coll_flag, off_flag, info['speed'], info['angle'], pos_list[0], rela_xyz, seg)
         this_obs_np = self.obs_buffer.store_frame(obs)
         obs_var = Variable(torch.from_numpy(this_obs_np).unsqueeze(0).float().cuda())
-        self.img_buffer.store_frame(obs)
+        if self.args.normalize:
+            self.img_buffer.store_frame(obs)
         return self.mpc_ret, obs_var
     
-    def store_effect(self, action, reward, done, info, seg):
+    def store_effect(self, action, reward, done):
         self.prev_act = copy.deepcopy(action)
-        self.speed_np, self.pos_np, self.posxyz_np = get_info_np(info, use_pos_class = False)
-        offroad_flag, coll_flag = info['off_flag'], info['coll_flag']
-        speed_list, pos_list = get_info_ls(self.prev_info)
-        if self.args.use_xyz:
-            xyz = np.array(info['pos'])
-            rela_xyz = xyz - self.prev_xyz
-            self.prev_xyz = xyz
-        else:
-            rela_xyz = None
-        self.mpc_buffer.store_effect(self.mpc_ret, action, done, coll_flag, offroad_flag, info['speed'], \
-                    info['angle'], pos_list[0], rela_xyz, seg)
+        self.mpc_buffer.store_action(self.mpc_ret, action, done)
         self.rewards_with += reward['with_pos']
         self.rewards_without += reward['without_pos']
 
-    def store_info(self, info):
-        self.prev_info = info
-
     def update_avg_std_img(self):
-        self.avg_img, self.std_img, self.avg_img_t, self.std_img_t = self.img_buffer.get_avg_std()
+        if self.args.normalize:
+            self.avg_img, self.std_img = self.img_buffer.get_avg_std()
     
-    def reset(self, info, step):
+    def reset(self, info, step, log_name='log_train_torcs.txt'):
         self.obs_buffer.clear()
         self.epi_rewards_with.append(self.rewards_with)
         self.epi_rewards_without.append(self.rewards_without)
         self.rewards_with, self.rewards_without = 0, 0
         self.prev_act = np.array([1.0, 0.0]) if self.args.continuous else 1
         self.speed_np, self.pos_np, self.posxyz_np = get_info_np(info, use_pos_class = False)
+        self.prev_xyz = np.array(info['pos'])
         print('past 100 episode rewards is', \
             "{0:.3f}".format(np.mean(self.epi_rewards_with[-100:])), \
                 ' std is ', "{0:.15f}".format(np.std(self.epi_rewards_with[-100:])))
-        with open(self.args.save_path+'/log_train_torcs.txt', 'a') as fi:
+        with open(self.args.save_path+'/'+log_name, 'a') as fi:
             fi.write('step '+str(step))
             fi.write(' reward_with ' + str(np.mean(self.epi_rewards_with[-10:])))
             fi.write(' std ' + str(np.std(self.epi_rewards_with[-10:])))
@@ -149,13 +137,13 @@ class ActionSampleManager:
         else:
             self.prev_dqn_act = None
 
-    def sample_action(self, net, dqn_net, obs, obs_var, exploration, tt):
+    def sample_action(self, net, dqn_net, obs, obs_var, exploration, tt, avg_img, std_img):
         if tt % self.args.num_same_step != 0:
             return self.process_act(self.prev_act, self.prev_dqn_act)
         else:
             if self.args.continuous:
                 if random.random() <= 1 - exploration.value(tt):
-                    action = sample_cont_action(self.args, net, obs_var, prev_action=self.prev_act)
+                    action = sample_cont_action(self.args, net, obs_var, prev_action=self.prev_act, avg_img=avg_img, std_img=std_img)
                 else:
                     action = np.random.rand(self.args.num_total_act)*2-1
                 action = np.clip(action, -1, 1)
@@ -209,9 +197,13 @@ def train_policy(args, env, num_steps=40000000):
     buffer_manager.step_first(obs, info)
     done_cnt = 0
     for tt in range(num_imgs_start, num_steps):
-        ret, obs_var = buffer_manager.store_frame(obs)
-
-        action, dqn_action = action_manager.sample_action(net, dqn_agent, obs, obs_var, exploration, tt)
+        seg = env.env.get_segmentation().reshape((1, 256, 256)) if args.use_seg else None
+        ret, obs_var = buffer_manager.store_frame(obs, info, seg)
+        if args.normalize:
+            avg_img, std_img = buffer_manager.img_buffer.get_avg_std()
+        else:
+            avg_img, std_img = None, None
+        action, dqn_action = action_manager.sample_action(net, dqn_agent, obs, obs_var, exploration, tt, avg_img, std_img)
         obs, reward, done, info = env.step(action)
         if args.target_speed > 0:
             with open(os.path.join(args.save_path, 'speedlog.txt'), 'a') as f:
@@ -225,32 +217,26 @@ def train_policy(args, env, num_steps=40000000):
         else:
             print('action', '%d' % real_action, ' pos ', "{0:.2f}".format(info['trackPos']), "{0:.2f}".format(info['pos'][0]), "{0:.2f}".format(info['pos'][1]),\
                 ' angle ', "{0:.2f}".format(info['angle']), ' reward ', "{0:.2f}".format(reward['with_pos']), ' explore ', "{0:.2f}".format(exploration.value(tt)))
-        seg = env.env.get_segmentation().reshape((1, 256, 256)) if args.use_seg else None
-        buffer_manager.store_effect(action, reward, done, info, seg)
+        
+        buffer_manager.store_effect(action, reward, done)
 
-        if tt % 100 == 0:
+        if tt % 100 == 0 and args.normalize:
             buffer_manager.update_avg_std_img()
 
         if done:
             done_cnt += 1
-            if done_cnt % 5 == 0:
-                test_reward = test(args, env, net)
-                with open(os.path.join(args.save_path, 'test_log.txt'), 'a') as f:
-                    f.write('step %d reward_with %f reward_without %f\n' % (tt, test_reward['with_pos'], test_reward['without_pos']))
-            obs = env.reset()
-            obs, reward, done, info = env.step(np.array([1.0, 0.0]))
-            buffer_manager.reset(info, tt)
+            obs, prev_info = env.reset()
+            obs, _, _, info = env.step(np.array([1.0, 0.0]))
+            buffer_manager.reset(prev_info, tt)
             action_manager.reset()
-        buffer_manager.store_info(info)
         
         if args.use_dqn:
             dqn_agent.store_effect(dqn_action, reward['with_pos'], done)
         
         if tt % args.learning_freq == 0 and tt > args.learning_starts and buffer_manager.mpc_buffer.can_sample(args.batch_size):
-            for ep in range(50):
+            for ep in range(10):
                 optimizer.zero_grad()
-                
-                loss = train_model(args, train_net, buffer_manager.mpc_buffer, epoch, buffer_manager.avg_img_t, buffer_manager.std_img_t)
+                loss = train_model(args, train_net, buffer_manager.mpc_buffer, epoch, buffer_manager.avg_img, buffer_manager.std_img)
                 print('loss = %0.4f\n' % loss.data.cpu().numpy())
                 loss.backward()
                 optimizer.step()
