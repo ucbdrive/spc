@@ -6,6 +6,13 @@ from utils import *
 from dqn_utils import *
 from dqn_agent import *
 from mpc_utils import *
+from torcs_wrapper import *
+import argparse
+from args import init_parser
+import sys
+sys.path.append('/media/xinleipan/data/git/pyTORCS/py_TORCS')
+sys.path.append('/media/xinleipan/data/git/pyTORCS/')
+from py_TORCS import torcs_envs
 
 def test(args, env, net):
     obs_buffer = ObsBuffer(args.frame_history_len)
@@ -68,4 +75,20 @@ def test(args, env, net):
         if args.use_dqn:
             dqn_agent.store_effect(dqn_action, reward['with_pos'], done)
 
-    return {'with_pos': rewards_with, 'without_pos': rewards_without} 
+    return {'with_pos': rewards_with, 'without_pos': rewards_without}
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    init_parser(parser)
+    args = parser.parse_args()
+    torch.manual_seed(args.seed)
+    np.random.seed(args.seed)
+    random.seed(args.seed)
+    envs = torcs_envs(num = 1, game_config = args.game_config, mkey_start = 817 + args.id, screen_id = 160 + args.id,
+                      isServer = int(args.xvfb), continuous = args.continuous, resize = True)
+    env = envs.get_envs()[0]
+    env = TorcsWrapper(env, random_reset=args.use_random_reset, continuous = args.continuous)
+    net = ConvLSTMMulti(args)
+    net, _ = load_model(args.save_path, net, data_parallel=False, resume=True)
+    net.eval()
+    test(args, env, net) 
