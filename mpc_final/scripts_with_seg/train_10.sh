@@ -4,7 +4,6 @@ python3 train_torcs.py \
     --save-path mpc_10_10_cont \
     --continuous \
     --use-seg \
-    --normalize \
     --num-total-act 2 \
     --pred-step 10 \
     --use-collision \
