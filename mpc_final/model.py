@@ -141,7 +141,7 @@ class ConvLSTMNet(nn.Module):
 
             if with_encode == False:
                 output_dict['seg_current'] = self.up_sampler(x[:, -self.args.classes:, :, :])
-            output_dict['seg_pred'] = self.up_sampler(hidden)
+            output_dict['seg_pred'] = nn.Softmax(dim=1)(self.up_sampler(hidden))
             feature_enc = torch.cat([x[:, self.args.classes:, :, :], hidden], dim = 1)
             nx_feature_enc = feature_enc.detach()
         else:
