@@ -69,13 +69,17 @@ if __name__ == '__main__':
     net = ConvLSTMMulti(args)
     net, _ = load_model(args.save_path, net, data_parallel=False, resume=False)
     net.eval()
-    file_list = os.listdir(os.path.join(args.save_path, 'model'))
-    for fi in sorted(file_list):
-        file_name = os.path.join(args.save_path, 'model', fi)
-        net.load_state_dict(torch.load(file_name), strict=True)
-        print('load model', file_name)
-        if args.use_dqn:
-            dqn_name = 'model_'+str(int(file_name.split('_')[-1].split('.')[0]))+'.pt'
-            if not os.path.exists(os.path.join(args.save_path, 'dqn/model', dqn_name)):
-                continue
-        test(args, env, net, file_name, dqn_name) 
+    tested = []
+    while True:
+        file_list = os.listdir(os.path.join(args.save_path, 'model'))
+        for fi in sorted(file_list):
+            file_name = os.path.join(args.save_path, 'model', fi)
+            net.load_state_dict(torch.load(file_name), strict=True)
+            print('load model', file_name)
+            if args.use_dqn:
+                dqn_name = 'model_'+str(int(file_name.split('_')[-1].split('.')[0]))+'.pt'
+                if not os.path.exists(os.path.join(args.save_path, 'dqn/model', dqn_name)):
+                    continue
+            if file_name not in tested:
+                tested.append(file_name)
+                test(args, env, net, file_name, dqn_name) 
