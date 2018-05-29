@@ -18,7 +18,7 @@ class TorcsWrapper:
         self.imsize = imsize
         self.random_reset = random_reset
         self.continuous = continuous
-        self.doneCond = DoneCondition(30)
+        self.doneCond = DoneCondition(10)
         self.epi_len = 0
         self.coll_cnt = 0
 
@@ -33,7 +33,7 @@ class TorcsWrapper:
         coll_flag = int(abs(info['trackPos']) > 7.0)
         info['off_flag'] = off_flag
         info['coll_flag'] = coll_flag
-        self.doneCond = DoneCondition(30)
+        self.doneCond = DoneCondition(10)
         self.epi_len = 0
         self.coll_cnt = 0
         return cv2.resize(obs, self.imsize), info

@@ -91,4 +91,4 @@ class fcn(nn.Module):
 
     def forward(self, x, action):        
         result = torch.stack([self.single_forward(x[batch_id].unsqueeze(0), action[batch_id]).squeeze(0) for batch_id in range(action.size(0))], dim = 0)
-        return result + x[:, -self.classes_out:, :, :]
+        return nn.Softmax(dim=1)(result)
