@@ -74,7 +74,7 @@ def train_model(args, train_net, mpc_buffer, epoch, avg_img_t, std_img_t):
     if args.use_seg:
         output['seg_pred'] = output['seg_pred'].view(args.batch_size * (args.pred_step + 1), args.classes, 256, 256)
         target['seg_batch'] = target['seg_batch'].view(args.batch_size * (args.pred_step + 1), 256, 256)
-        pred_ls = nn.CrossEntropyLoss()(output['seg_pred'], target['seg_batch'])
+        pred_ls = nn.NLLLoss2d()(output['seg_pred'], target['seg_batch'])
     else:
         pred_ls = nn.L1Loss()(output['seg_pred'], nximg_enc).sum()
     print('pred ls', pred_ls.data.cpu().numpy()) # nan here!
