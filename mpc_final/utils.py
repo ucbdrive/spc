@@ -150,7 +150,7 @@ def visualize(args, target, output):
             f.write('target dist:\n')
             f.write(str(from_variable_to_numpy(target['dist_batch'][batch_id, 1:]))+'\n')
             f.write('output dist:\n')
-            f.write(str(from_variable_to_numpy(output['dist']))+'\n')
+            f.write(str(from_variable_to_numpy(output['dist'][batch_id, :]))+'\n')
         
 class DoneCondition:
     def __init__(self, size):
