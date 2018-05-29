@@ -15,7 +15,7 @@ sys.path.append('/media/xinleipan/data/git/pyTORCS/')
 from py_TORCS import torcs_envs
 from train_cont_policy import *
 
-def test(args, env, net):
+def test(args, env, net, file_name):
     buffer_manager = BufferManager(args)
     action_manager = ActionSampleManager(args)
     done_cnt = 0
@@ -47,11 +47,10 @@ def test(args, env, net):
             done_cnt += 1
             obs, prev_info = env.reset()
             obs, reward, _, info = env.step(np.array([1.0, 0.0]))
-            buffer_manager.reset(prev_info, log_name='log_test_torcs.txt')
+            buffer_manager.reset(prev_info, file_name.split('.')[0], log_name='log_test_torcs.txt')
             action_manager.reset()
         if args.use_dqn:
             dqn_agent.store_effect(dqn_action, reward['with_pos'], done)
-
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -65,6 +64,11 @@ if __name__ == '__main__':
     env = envs.get_envs()[0]
     env = TorcsWrapper(env, random_reset=args.use_random_reset, continuous = args.continuous)
     net = ConvLSTMMulti(args)
-    net, _ = load_model(args.save_path, net, data_parallel=False, resume=True)
+    net, _ = load_model(args.save_path, net, data_parallel=False, resume=False)
     net.eval()
-    test(args, env, net) 
+    file_list = os.listdir(os.path.join(args.save_path, 'model'))
+    for fi in sorted(file_list):
+        file_name = os.path.join(args.save_path, 'model', fi)
+        net.load_state_dict(torch.load(file_name), strict=True)
+        print('load model', file_name)
+        test(args, env, net, file_name) 
