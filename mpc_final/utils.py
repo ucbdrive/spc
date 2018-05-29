@@ -95,7 +95,7 @@ def train_model(args, train_net, mpc_buffer, epoch, avg_img_t, std_img_t):
     loss_value = float(loss.data.cpu().numpy())
     if np.isnan(loss_value):
         pdb.set_trace()
-
+    visualize(args, target, output)
     return loss
 
 def draw_from_pred(pred):
@@ -145,7 +145,13 @@ def visualize(args, target, output):
             f.write(str(from_variable_to_numpy(target['sp_batch'][batch_id, :-1])) + '\n')
             f.write('output speed:\n')
             f.write(str(from_variable_to_numpy(output['speed'][batch_id])) + '\n')
-
+        
+        if args.use_distance:
+            f.write('target dist:\n')
+            f.write(str(from_variable_to_numpy(target['dist_batch'][batch_id, 1:]))+'\n')
+            f.write('output dist:\n')
+            f.write(str(from_variable_to_numpy(output['dist']))+'\n')
+        
 class DoneCondition:
     def __init__(self, size):
         self.size = size
