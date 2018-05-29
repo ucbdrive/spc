@@ -13,69 +13,45 @@ import sys
 sys.path.append('/media/xinleipan/data/git/pyTORCS/py_TORCS')
 sys.path.append('/media/xinleipan/data/git/pyTORCS/')
 from py_TORCS import torcs_envs
+from train_cont_policy import *
 
 def test(args, env, net):
-    obs_buffer = ObsBuffer(args.frame_history_len)
-    _ = env.reset(rand_reset=False) # always start from the same place
-    prev_act = np.array([1.0, 0.0]) if args.continuous else 1
-    obs, reward, done, info = env.step(prev_act)
-    prev_info = copy.deepcopy(info)
-    prev_xyz = np.array(info['pos'])
-    rewards_with, rewards_without = 0, 0
+    buffer_manager = BufferManager(args)
+    action_manager = ActionSampleManager(args)
+    done_cnt = 0
+    _, info = env.reset()
+    obs, reward, done, info = env.step(np.array([1.0, 0.0]))
+    buffer_manager.step_first(obs, info)
     exploration = PiecewiseSchedule([(0, 0.0), (1000, 0.0)], outside_value = 0.0)
-        
     if args.use_dqn:
         dqn_agent = DQNAgent(args, exploration, args.save_path)
-        dqn_agent.load_model() 
+        dqn_agent.load_model()
     else:
         dqn_agent = None
-
-    mpc_buffer = MPCBuffer(args)
-    while not done:
-        if args.use_dqn:
-            dqn_action = dqn_agent.sample_action(obs, 1e8)
-        ret = mpc_buffer.store_frame(obs)
-        this_obs_np = obs_buffer.store_frame(obs)
-        obs_var = Variable(torch.from_numpy(this_obs_np).unsqueeze(0)).float().cuda()
-
-        if args.continuous:
-            action = sample_cont_action(args, net, obs_var, prev_action = prev_act, testing = True)
-            action = np.clip(action, -1, 1)
-            if args.use_dqn:
-                if abs(action[1]) <= dqn_action * 0.1:
-                    action[1] = 0
-            real_action = action
-        else:
-            action = real_action = sample_discrete_action(args, net, obs_var, prev_action = prev_act)
-
-        obs, reward, done, info = env.step(real_action)
-        if args.continuous:
-            print('action', "{0:.2f}".format(action[0]), "{0:.2f}".format(action[1]), ' pos ', "{0:.2f}".format(info['trackPos']), "{0:.2f}".format(info['pos'][0]), "{0:.2f}".format(info['pos'][1]),\
-                ' reward ', "{0:.2f}".format(reward['with_pos']))
-        else:
-            print('action', '%d' % real_action, ' pos ', "{0:.2f}".format(info['trackPos']), "{0:.2f}".format(info['pos'][0]), "{0:.2f}".format(info['pos'][1]),\
-                ' reward ', "{0:.2f}".format(reward['with_pos']))
-        prev_act = action
-
-        speed_np, pos_np, posxyz_np = get_info_np(info, use_pos_class = False)
-        offroad_flag, coll_flag = info['off_flag'], info['coll_flag']
-        speed_list, pos_list = get_info_ls(prev_info)
-        if args.use_xyz:
-            xyz = np.array(info['pos'])
-            rela_xyz = xyz - prev_xyz
-            prev_xyz = xyz
-        else:
-            rela_xyz = None
-
+    while done_cnt < 10:
         seg = env.env.get_segmentation().reshape((1, 256, 256)) if args.use_seg else None
-        mpc_buffer.store_effect(ret, action, done, coll_flag, offroad_flag, info['speed'], info['angle'], pos_list[0], rela_xyz, seg)
-        rewards_with += reward['with_pos']
-        rewards_without += reward['without_pos']
-        prev_info = copy.deepcopy(info) 
+        ret, obs_var = buffer_manager.store_frame(obs, info, seg)
+        avg_img, std_img = buffer_manager.img_buffer.get_avg_std()
+        action, dqn_action = action_manager.sample_action(net, dqn_agent, obs, obs_var, exploration, 1e8, avg_img, std_img)
+        obs, reward, done, info = env.step(action)
+        print('action ', "{0:.2f}".format(action[0]), "{0:.2f}".format(action[1]), \
+            ' pos ', "{0:.2f}".format(info['trackPos']), \
+            "{0:.2f}".format(info['pos'][0]), \
+            "{0:.2f}".format(info['pos'][1]),\
+            ' angle ', "{0:.2f}".format(info['angle']), \
+            ' reward ', "{0:.2f}".format(reward['with_pos']),\
+            ' reward without ', "{0:.2f}}".format(reward['without_pos'])) 
+        buffer_manager.store_effect(action, reward, done)
+        buffer_manager.update_avg_std_img()
+        if done:
+            done_cnt += 1
+            obs, prev_info = env.reset()
+            obs, reward, _, info = env.step(np.array([1.0, 0.0]))
+            buffer_manager.reset(prev_info, log_name='log_test_torcs.txt')
+            action_manager.reset()
         if args.use_dqn:
             dqn_agent.store_effect(dqn_action, reward['with_pos'], done)
 
-    return {'with_pos': rewards_with, 'without_pos': rewards_without}
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()

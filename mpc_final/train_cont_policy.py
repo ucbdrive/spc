@@ -107,7 +107,7 @@ class BufferManager:
     def update_avg_std_img(self):
         self.avg_img, self.std_img = self.img_buffer.get_avg_std()
     
-    def reset(self, info, step):
+    def reset(self, info, step, log_name='log_train_torcs.txt'):
         self.obs_buffer.clear()
         self.epi_rewards_with.append(self.rewards_with)
         self.epi_rewards_without.append(self.rewards_without)
@@ -118,7 +118,7 @@ class BufferManager:
         print('past 100 episode rewards is', \
             "{0:.3f}".format(np.mean(self.epi_rewards_with[-100:])), \
                 ' std is ', "{0:.15f}".format(np.std(self.epi_rewards_with[-100:])))
-        with open(self.args.save_path+'/log_train_torcs.txt', 'a') as fi:
+        with open(self.args.save_path+'/'+log_name, 'a') as fi:
             fi.write('step '+str(step))
             fi.write(' reward_with ' + str(np.mean(self.epi_rewards_with[-10:])))
             fi.write(' std ' + str(np.std(self.epi_rewards_with[-10:])))
