@@ -7,7 +7,6 @@ import drn
 import dla
 import math
 import pdb
-from PRED import PRED
 from end_layer import end_layer
 from conv_lstm import convLSTM
 from fcn import fcn
