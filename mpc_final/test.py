@@ -15,7 +15,7 @@ sys.path.append('/media/xinleipan/data/git/pyTORCS/')
 from py_TORCS import torcs_envs
 from train_cont_policy import *
 
-def test(args, env, net, file_name):
+def test(args, env, net, file_name, dqn_name=None):
     buffer_manager = BufferManager(args)
     action_manager = ActionSampleManager(args)
     done_cnt = 0
@@ -25,7 +25,7 @@ def test(args, env, net, file_name):
     exploration = PiecewiseSchedule([(0, 0.0), (1000, 0.0)], outside_value = 0.0)
     if args.use_dqn:
         dqn_agent = DQNAgent(args, exploration, args.save_path)
-        dqn_agent.load_model()
+        dqn_agent.load_model(dqn_name)
     else:
         dqn_agent = None
     while done_cnt < 10:
@@ -47,7 +47,7 @@ def test(args, env, net, file_name):
             done_cnt += 1
             obs, prev_info = env.reset()
             obs, reward, _, info = env.step(np.array([1.0, 0.0]))
-            buffer_manager.reset(prev_info, file_name.split('.')[0], log_name='log_test_torcs.txt')
+            buffer_manager.reset(prev_info, file_name.split('_')[-1].split('.')[0], log_name='log_test_torcs.txt')
             action_manager.reset()
         if args.use_dqn:
             dqn_agent.store_effect(dqn_action, reward['with_pos'], done)
@@ -71,4 +71,8 @@ if __name__ == '__main__':
         file_name = os.path.join(args.save_path, 'model', fi)
         net.load_state_dict(torch.load(file_name), strict=True)
         print('load model', file_name)
-        test(args, env, net, file_name) 
+        if args.use_dqn:
+            dqn_name = 'model_'+str(int(file_name.split('_')[-1].split('.')[0]))+'.pt'
+            if not os.path.exists(os.path.join(args.save_path, 'dqn/model', dqn_name)):
+                continue
+        test(args, env, net, file_name, dqn_name) 

@@ -33,15 +33,19 @@ class DQNAgent:
         self.model_path = os.path.join(save_path, 'dqn', 'model')
         self.optim_path = os.path.join(save_path, 'dqn', 'optimizer')
 
-    def load_model(self):
+    def load_model(self, model_name=None):
         model_path, optim_path = self.model_path, self.optim_path
         file_list = sorted(os.listdir(model_path))
         if len(file_list) == 0:
             print('no model to resume!')
         else:
             file_name = os.path.join(model_path, file_list[-1])
-            self.dqn_net.load_state_dict(torch.load(os.path.join(file_name)))
-            self.target_q_net.load_state_dict(torch.load(os.path.join(file_name)))
+            if model_name is None:
+                model_name = file_name
+            else:
+                model_name = os.path.join(model_path, model_name)
+            self.dqn_net.load_state_dict(torch.load(os.path.join(model_name)))
+            self.target_q_net.load_state_dict(torch.load(os.path.join(model_name)))
         
         optim_list = sorted(os.listdir(optim_path))
         if len(optim_list) == 0:
