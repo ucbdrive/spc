@@ -43,8 +43,12 @@ def train_model(args, train_net, mpc_buffer, epoch, avg_img_t, std_img_t):
         if torch.cuda.is_available():
             target[key] = target[key].cuda()
 
-    target['obs_batch'] = (target['obs_batch']-avg_img_t) / std_img_t
-    target['nx_obs_batch'] = (target['nx_obs_batch']-avg_img_t) / std_img_t
+    if args.normalize:
+        target['obs_batch'] = (target['obs_batch']-avg_img_t) / std_img_t
+        target['nx_obs_batch'] = (target['nx_obs_batch']-avg_img_t) / std_img_t
+    else:
+        target['obs_batch'] = copy.deepcopy(target['obs_batch'])/255.0
+        target['nx_obs_batch'] = copy.deepcopy(target['nx_obs_batch'])/255.0
     if args.use_seg:
         target['seg_batch'] = target['seg_batch'].long()
     else:
@@ -261,7 +265,11 @@ def Focal_Loss(probs, target, reduce=True):
     return loss
 
 def sample_cont_action(args, net, imgs, prev_action = None, testing = False, avg_img=0, std_img=1.0):
-    imgs = (imgs.contiguous()-avg_img)/(std_img)
+    imgs = copy.deepcopy(imgs)
+    if args.normalize:
+        imgs = (imgs.contiguous()-avg_img)/(std_img)
+    else:
+        imgs = imgs / 255.0
     batch_size, c, w, h = int(imgs.size()[0]), int(imgs.size()[-3]), int(imgs.size()[-2]), int(imgs.size()[-1])
     imgs = imgs.view(batch_size, 1, c, w, h)
     prev_action = prev_action.reshape((1, 1, 2))
@@ -390,7 +398,7 @@ def get_action_loss(args, net, imgs, actions, target = None, hidden = None, cell
             if args.target_dist > 0:
                 target['dist_batch'] = target['dist_batch'].cuda()
 
-    weight = (0.97 ** np.arange(args.pred_step)).reshape((1, args.pred_step, 1))
+    weight = (0.99 ** np.arange(args.pred_step)).reshape((1, args.pred_step, 1))
     weight = Variable(torch.from_numpy(weight).float().cuda()).repeat(batch_size, 1, 1)
     output = net(imgs, actions, hidden = hidden, cell = cell)
 
@@ -440,7 +448,7 @@ def get_action_loss_test(args, net, imgs, actions, target = None, hidden = None,
         if torch.cuda.is_available():
             target['angle_batch'] = target['angle_batch'].cuda()
 
-    weight = (0.97 ** np.arange(args.pred_step)).reshape((1, args.pred_step, 1))
+    weight = (0.99 ** np.arange(args.pred_step)).reshape((1, args.pred_step, 1))
     weight = Variable(torch.from_numpy(weight).float().cuda()).repeat(batch_size, 1, 1)
     output = net(imgs, actions, hidden = hidden, cell = cell)
 

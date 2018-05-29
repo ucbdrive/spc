@@ -76,8 +76,9 @@ class BufferManager:
         self.mpc_ret = 0
         
     def step_first(self, obs, info):
-        self.img_buffer.store_frame(obs)
-        self.avg_img, self.std_img = self.img_buffer.get_avg_std()
+        if self.args.normalize:
+            self.img_buffer.store_frame(obs)
+            self.avg_img, self.std_img = self.img_buffer.get_avg_std()
         self.speed_np, self.pos_np, self.posxyz_np = get_info_np(info, use_pos_class=False)
         self.prev_xyz = np.array(info['pos'])
 
@@ -95,7 +96,8 @@ class BufferManager:
         self.mpc_buffer.store_effect(self.mpc_ret, coll_flag, off_flag, info['speed'], info['angle'], pos_list[0], rela_xyz, seg)
         this_obs_np = self.obs_buffer.store_frame(obs)
         obs_var = Variable(torch.from_numpy(this_obs_np).unsqueeze(0).float().cuda())
-        self.img_buffer.store_frame(obs)
+        if self.args.normalize:
+            self.img_buffer.store_frame(obs)
         return self.mpc_ret, obs_var
     
     def store_effect(self, action, reward, done):
@@ -105,7 +107,8 @@ class BufferManager:
         self.rewards_without += reward['without_pos']
 
     def update_avg_std_img(self):
-        self.avg_img, self.std_img = self.img_buffer.get_avg_std()
+        if self.args.normalize:
+            self.avg_img, self.std_img = self.img_buffer.get_avg_std()
     
     def reset(self, info, step, log_name='log_train_torcs.txt'):
         self.obs_buffer.clear()
@@ -196,7 +199,10 @@ def train_policy(args, env, num_steps=40000000):
     for tt in range(num_imgs_start, num_steps):
         seg = env.env.get_segmentation().reshape((1, 256, 256)) if args.use_seg else None
         ret, obs_var = buffer_manager.store_frame(obs, info, seg)
-        avg_img, std_img = buffer_manager.img_buffer.get_avg_std()
+        if args.normalize:
+            avg_img, std_img = buffer_manager.img_buffer.get_avg_std()
+        else:
+            avg_img, std_img = None, None
         action, dqn_action = action_manager.sample_action(net, dqn_agent, obs, obs_var, exploration, tt, avg_img, std_img)
         obs, reward, done, info = env.step(action)
         if args.target_speed > 0:
@@ -214,7 +220,7 @@ def train_policy(args, env, num_steps=40000000):
         
         buffer_manager.store_effect(action, reward, done)
 
-        if tt % 100 == 0:
+        if tt % 100 == 0 and args.normalize:
             buffer_manager.update_avg_std_img()
 
         if done:
