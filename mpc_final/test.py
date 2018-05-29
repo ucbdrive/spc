@@ -40,7 +40,7 @@ def test(args, env, net):
             "{0:.2f}".format(info['pos'][1]),\
             ' angle ', "{0:.2f}".format(info['angle']), \
             ' reward ', "{0:.2f}".format(reward['with_pos']),\
-            ' reward without ', "{0:.2f}}".format(reward['without_pos'])) 
+            ' reward without ', "{0:.2f}".format(reward['without_pos'])) 
         buffer_manager.store_effect(action, reward, done)
         buffer_manager.update_avg_std_img()
         if done:
