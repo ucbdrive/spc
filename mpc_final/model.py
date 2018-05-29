@@ -122,7 +122,7 @@ class ConvLSTMNet(nn.Module):
         if with_encode == False:
             x = self.get_feature(x)
         if hidden is None or cell is None:
-            if self.args.use_seg:
+            if self.args.use_seg and self.args.use_lstm:
                 shape = [x.size(0), self.args.classes, 32, 32]
                 hidden = x[:, -self.args.classes:, :, :] # Variable(torch.zeros(shape))
                 cell = x[:, -self.args.classes:, :, :] # Variable(torch.zeros(shape))
