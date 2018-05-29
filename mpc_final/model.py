@@ -143,7 +143,7 @@ class ConvLSTMNet(nn.Module):
                 output_dict['seg_current'] = self.up_sampler(x[:, -self.args.classes:, :, :])
             output_dict['seg_pred'] = self.up_sampler(hidden)
             feature_enc = torch.cat([x[:, self.args.classes:, :, :], hidden], dim = 1)
-            nx_feature_enc = feature_enc.detach()
+            nx_feature_enc = feature_enc#.detach()
         else:
             action_enc = F.relu(self.action_encode(action))
             encode = torch.cat([x, action_enc], dim = 1)
@@ -167,8 +167,8 @@ class ConvLSTMNet(nn.Module):
         if self.args.use_xyz:
             output_dict['xyz'] = self.xyz_layer(nx_feature_enc, action_enc)
         
-        if self.args.use_seg:
-            nx_feature_enc = feature_enc
+        # if self.args.use_seg:
+        #     nx_feature_enc = feature_enc
         return output_dict, nx_feature_enc, hidden, cell
      
     def get_feature(self, x):
@@ -176,7 +176,6 @@ class ConvLSTMNet(nn.Module):
         batch_size = x.size(0)
         if self.args.use_seg:
             res = torch.cat([self.drnseg(x[:, i*3 : (i+1)*3, :, :]) for i in range(self.args.frame_history_len)], dim = 1)
-            res = nn.Softmax(dim=1)(res)
         else:
             for i in range(self.args.frame_history_len):
                 out = self.dla(x[:, i*3 : (i+1)*3, :, :])
