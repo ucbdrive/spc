@@ -220,7 +220,7 @@ def train_policy(args, env, num_steps=40000000):
         if done:
             done_cnt += 1
             obs, prev_info = env.reset()
-            obs, reward, _, info = env.step(np.array([1.0, 0.0]))
+            obs, _, _, info = env.step(np.array([1.0, 0.0]))
             buffer_manager.reset(prev_info, tt)
             action_manager.reset()
         
