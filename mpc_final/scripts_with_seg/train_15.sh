@@ -20,4 +20,5 @@ python3 train_torcs.py \
     --sample-with-angle \
     --num-same-step 1 \
     --target-speed 2 \
+    --data-parallel \
     --id 13
