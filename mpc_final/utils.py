@@ -32,7 +32,9 @@ def weights_init(m):
         w_bound = np.sqrt(6. / (fan_in + fan_out))
         m.weight.data.uniform_(-w_bound, w_bound)
         m.bias.data.fill_(0)
-
+    elif classname.find('BatchNorm') != -1:
+        m.weight.data.fill_(1)
+        m.bias.data.fill_(0)
     
 def train_model(args, train_net, mpc_buffer, epoch, avg_img_t, std_img_t):
     if epoch % 20 == 0:
@@ -48,13 +50,13 @@ def train_model(args, train_net, mpc_buffer, epoch, avg_img_t, std_img_t):
         target['obs_batch'] = (target['obs_batch']-avg_img_t) / std_img_t
         target['nx_obs_batch'] = (target['nx_obs_batch']-avg_img_t) / std_img_t
     else:
-        target['obs_batch'] = copy.deepcopy(target['obs_batch'])/255.0
-        target['nx_obs_batch'] = copy.deepcopy(target['nx_obs_batch'])/255.0
+        target['obs_batch'] = copy.deepcopy(target['obs_batch']) / 255.0
+        target['nx_obs_batch'] = copy.deepcopy(target['nx_obs_batch']) / 255.0
     if args.use_seg:
         target['seg_batch'] = target['seg_batch'].long()
     else:
         with torch.no_grad():
-            nximg_enc = train_net(target['nx_obs_batch'], get_feature = True).detach()
+            nximg_enc = train_net(target['nx_obs_batch'], get_feature=True).detach()
     output = train_net(target['obs_batch'], target['act_batch'])
 
     if args.use_collision:
