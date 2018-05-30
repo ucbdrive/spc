@@ -84,12 +84,9 @@ class MPCBuffer(object):
         if self.args.use_angle:
             data_dict['angle_batch'] = np.concatenate([self.angle[idx: idx + self.args.pred_step + 1, :][np.newaxis, :] for idx in idxes], 0)
         
-        data_dict['sp_batch'] /= 20.0
-        
         if self.args.use_distance:
             data_dict['dist_batch'] = data_dict['sp_batch'] * (np.cos(data_dict['angle_batch']) - np.abs(np.sin(data_dict['angle_batch'])))
         
-
         if self.args.use_seg:
             data_dict['seg_batch'] = np.concatenate([self.seg[idx: idx + self.args.pred_step + 1, :][np.newaxis, :] for idx in idxes], 0)
         
