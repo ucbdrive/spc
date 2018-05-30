@@ -111,6 +111,8 @@ def draw_from_pred(pred):
     return illustration
 
 def visualize(args, target, output):
+    if not os.path.isdir('visualize'):
+        os.mkdir('visualize')
     batch_id = np.random.randint(args.batch_size)
     if args.use_seg:
         # observation = (from_variable_to_numpy(target['obs_batch'][batch_id, :, -3:, :, :]) * 56.1524832523 + 112.62289744791671).astype(np.uint8).transpose(0, 2, 3, 1)

@@ -32,6 +32,11 @@ if __name__ == '__main__':
     if os.path.exists('/home/cxy/pyTORCS/game_config/michigan.xml'):
         args.game_config = '/home/cxy/pyTORCS/game_config/michigan.xml'
         args.xvfb = False
+
+    # for 20800
+    if os.path.exists('/home/xiangyu/pyTORCS/game_config/michigan.xml'):
+        args.game_config = '/home/xiangyu/pyTORCS/game_config/michigan.xml'
+        args.xvfb = False
  
     envs = torcs_envs(num = 1, game_config = args.game_config, mkey_start = 817 + args.id, screen_id = 160 + args.id,
                       isServer = int(args.xvfb), continuous = args.continuous, resize = True)
