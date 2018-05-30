@@ -387,9 +387,9 @@ def get_action_loss(args, net, imgs, actions, target = None, hidden = None, cell
         if args.sample_with_angle:
             target['angle_batch'] = Variable(torch.zeros(batch_size, args.pred_step, 1), requires_grad = False)
         if args.target_speed > 0:
-            target['speed_batch'] = Variable(torch.ones(batch_size, args.pred_step, 1) * args.target_speed / 20.0, requires_grad = False)
+            target['speed_batch'] = Variable(torch.ones(batch_size, args.pred_step, 1) * args.target_speed, requires_grad = False)
         if args.target_dist > 0:
-            target['dist_batch'] = Variable(torch.ones(batch_size, args.pred_step, 1) * args.target_dist / 20.0, requires_grad = False)
+            target['dist_batch'] = Variable(torch.ones(batch_size, args.pred_step, 1) * args.target_dist, requires_grad = False)
 
         if torch.cuda.is_available():
             if args.sample_with_collision:
@@ -419,7 +419,7 @@ def get_action_loss(args, net, imgs, actions, target = None, hidden = None, cell
         off_ls = (off_ls.view(-1, args.pred_step, 1) * weight).sum()
         loss += off_ls
     if args.target_dist > 0:
-        dist_loss = torch.sqrt(nn.MSELoss()(output['dist'], target['dist_batch']) / 20.0)
+        dist_loss = torch.sqrt(nn.MSELoss()(output['dist'], target['dist_batch']))
         loss += dist_loss
     elif args.sample_with_distance:
         dist_ls = (output['dist'].view(-1, args.pred_step, 1) * weight).sum()
