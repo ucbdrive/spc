@@ -79,7 +79,6 @@ class MPCBuffer(object):
         
         if self.args.use_pos:
             data_dict['pos_batch'] = np.concatenate([self.pos[idx + 1: idx + self.args.pred_step + 1, :][np.newaxis, :] for idx in idxes], 0)
-            data_dict['pos_batch'] /= -7.0
         
         if self.args.use_angle:
             data_dict['angle_batch'] = np.concatenate([self.angle[idx: idx + self.args.pred_step + 1, :][np.newaxis, :] for idx in idxes], 0)
