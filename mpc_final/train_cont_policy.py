@@ -152,7 +152,8 @@ class ActionSampleManager:
                     dqn_act = None
             else:
                 if random.random() <= 1- exploration.value(tt):
-                    action = sample_discrete_action(self.args, net, obs_var, prev_action=self.prev_act)
+                    with torch.no_grad():
+                        action = sample_discrete_action(self.args, net, obs_var, prev_action=self.prev_act)
                 else:
                     action = np.random.randint(self.args.num_total_act)
                 dqn_act = None
