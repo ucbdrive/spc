@@ -59,18 +59,23 @@ def train_model(args, train_net, mpc_buffer, epoch, avg_img_t, std_img_t):
             nximg_enc = train_net(target['nx_obs_batch'], get_feature=True).detach()
     output = train_net(target['obs_batch'], target['act_batch'])
 
+    loss = 0
+
     if args.use_collision:
         show_accuracy(target['coll_batch'].view(-1), torch.max(output['coll_prob'].view(-1, 2), -1)[1], 'collision')
         coll_ls = Focal_Loss(output['coll_prob'].view(-1, 2), target['coll_batch'].view(-1).long())
+        loss += coll_ls
         print('coll ls', coll_ls.data.cpu().numpy())
 
     if args.use_offroad:
         show_accuracy(target['off_batch'].view(-1), torch.max(output['offroad_prob'].view(-1, 2), -1)[1], 'offroad')
         offroad_ls = Focal_Loss(output['offroad_prob'].view(-1, 2), target['off_batch'].view(-1).long())
+        loss += offroad_ls
         print('offroad ls', offroad_ls.data.cpu().numpy())
 
     if args.use_distance:
         dist_ls = torch.sqrt(nn.MSELoss()(output['dist'].view(-1, args.pred_step), target['dist_batch'][:, 1:].view(-1, args.pred_step))) 
+        loss += dist_ls
         print('dist ls', dist_ls.data.cpu().numpy())
     
     if args.use_seg:
@@ -80,7 +85,7 @@ def train_model(args, train_net, mpc_buffer, epoch, avg_img_t, std_img_t):
     else:
         pred_ls = nn.L1Loss()(output['seg_pred'], nximg_enc).sum()
     print('pred ls', pred_ls.data.cpu().numpy()) # nan here!
-    loss = pred_ls + coll_ls + offroad_ls + dist_ls
+    loss += pred_ls
 
     if args.use_pos:
         pos_loss = torch.sqrt(nn.MSELoss()(output['pos'], target['pos_batch'][:, :, :]))
@@ -383,7 +388,7 @@ def get_action_loss(args, net, imgs, actions, target = None, hidden = None, cell
         if args.sample_with_offroad:
             target['off_batch'] = Variable(torch.zeros(batch_size * args.pred_step), requires_grad = False).type(torch.LongTensor)
         if args.sample_with_pos:
-            target['pos_batch'] = Variable(torch.zeros(batch_size, args.pred_step, 1), requires_grad = False)
+            target['pos_batch'] = Variable(torch.ones(batch_size, args.pred_step, 1) * args.target_pos, requires_grad = False)
         if args.sample_with_angle:
             target['angle_batch'] = Variable(torch.zeros(batch_size, args.pred_step, 1), requires_grad = False)
         if args.target_speed > 0:

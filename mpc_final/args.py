@@ -50,5 +50,6 @@ def init_parser(parser):
     parser.add_argument('--hidden-dim', type = int, default = 1024)
     parser.add_argument('--info-dim', type = int, default = 32)
 
+    parser.add_argument('--target-pos', type = float, default = 0)
     parser.add_argument('--target-speed', type = float, default = -1)
     parser.add_argument('--target-dist', type = float, default = -1)
