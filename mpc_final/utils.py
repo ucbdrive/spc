@@ -357,12 +357,10 @@ def sample_discrete_action(args, net, obs_var, prev_action = None):
             one_hot_actions = generate_one_hot_actions(all_actions, args.num_total_act)
             if torch.cuda.is_available():
                 one_hot_actions = one_hot_actions.cuda()
-            all_losses = np.zeros(6 * args.batch_size)
 
-            for ii in range(6):
-                actions = Variable(one_hot_actions[ii * args.batch_size: (ii + 1) * args.batch_size], requires_grad = False)
-                loss = get_action_loss(args, net, obs, actions) # needs updating
-                all_losses[ii * args.batch_size: (ii + 1) * args.batch_size] = from_variable_to_numpy(loss)
+            actions = Variable(one_hot_actions, requires_grad = False)
+            loss = get_action_loss(args, net, obs, actions) # needs updating
+            all_losses = from_variable_to_numpy(loss)
 
             if i < 5:
                 indices = np.argsort(all_losses)[:args.batch_size]
