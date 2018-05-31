@@ -39,8 +39,11 @@ class TorcsWrapper:
         return cv2.resize(obs, self.imsize), info
          
     def step(self, action):
-        real_action = copy.deepcopy(action)
-        real_action[0] = real_action[0] * 0.5 + 0.5
+        if self.continuous:
+            real_action = copy.deepcopy(action)
+            real_action[0] = real_action[0] * 0.5 + 0.5
+        else:
+            real_action = copy.deepcopy(action)
         self.epi_len += 1
         obs, reward, real_done, info = self.env.step(real_action)
         dist_this = info['speed'] * (np.cos(info['angle']) - np.abs(np.sin(info['angle'])))
