@@ -117,7 +117,7 @@ class ConvLSTMNet(nn.Module):
         if args.use_xyz:
             self.xyz_layer = end_layer(args, 3)
 
-    def forward(self, x, action, with_encode=False, hidden=None, cell=None):
+    def forward(self, x, action, with_encode=False, hidden=None, cell=None, training=True):
         if with_encode == False:
             x = self.get_feature(x)
         if hidden is None or cell is None:
@@ -143,7 +143,7 @@ class ConvLSTMNet(nn.Module):
                 output_dict['seg_current'] = self.up_sampler(x[:, -self.args.classes:, :, :])
             output_dict['seg_pred'] = self.up_sampler(hidden)
             feature_enc = torch.cat([x[:, self.args.classes:, :, :], hidden], dim = 1)
-            nx_feature_enc = feature_enc.detach()
+            nx_feature_enc = feature_enc.detach() if training else feature_enc
         else:
             action_enc = F.relu(self.action_encode(action))
             encode = torch.cat([x, action_enc], dim = 1)
@@ -167,8 +167,8 @@ class ConvLSTMNet(nn.Module):
         if self.args.use_xyz:
             output_dict['xyz'] = self.xyz_layer(nx_feature_enc, action_enc)
         
-        # if self.args.use_seg:
-        #     nx_feature_enc = feature_enc
+        if self.args.use_seg:
+            nx_feature_enc = feature_enc
         return output_dict, nx_feature_enc, hidden, cell
      
     def get_feature(self, x):
@@ -199,12 +199,12 @@ class ConvLSTMMulti(nn.Module):
 
         return torch.stack(feat, dim = 1)
 
-    def forward(self, imgs, actions=None, hidden=None, cell=None, get_feature=False):
+    def forward(self, imgs, actions=None, hidden=None, cell=None, get_feature=False, training=True):
         if get_feature:
             return self.get_feature(imgs)
 
         batch_size, num_step, c, w, h = int(imgs.size()[0]), int(imgs.size()[1]), int(imgs.size()[-3]), int(imgs.size()[-2]), int(imgs.size()[-1])
-        output_dict, pred, hidden, cell = self.conv_lstm(imgs[:,0,:,:,:].squeeze(1), actions[:,0,:].squeeze(1), hidden=hidden, cell=cell)
+        output_dict, pred, hidden, cell = self.conv_lstm(imgs[:,0,:,:,:].squeeze(1), actions[:,0,:].squeeze(1), hidden=hidden, cell=cell, training=training)
         
         # create dictionary to store outputs
         final_dict = dict()
@@ -214,7 +214,7 @@ class ConvLSTMMulti(nn.Module):
             final_dict['seg_pred'] = [output_dict['seg_current'], output_dict['seg_pred']]
 
         for i in range(1, self.args.pred_step):
-            output_dict, pred, hidden, cell = self.conv_lstm(pred, actions[:, i, :], with_encode=True, hidden=hidden, cell=cell)
+            output_dict, pred, hidden, cell = self.conv_lstm(pred, actions[:, i, :], with_encode=True, hidden=hidden, cell=cell, training=training)
             for key in output_dict.keys():
                 final_dict[key].append(output_dict[key])
 

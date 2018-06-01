@@ -412,7 +412,7 @@ def get_action_loss(args, net, imgs, actions, target = None, hidden = None, cell
 
     weight = (0.99 ** np.arange(args.pred_step)).reshape((1, args.pred_step, 1))
     weight = Variable(torch.from_numpy(weight).float().cuda()).repeat(batch_size, 1, 1)
-    output = net(imgs, actions, hidden = hidden, cell = cell)
+    output = net(imgs, actions, hidden = hidden, cell = cell, training=False)
 
     loss = 0
     if args.sample_with_collision:
