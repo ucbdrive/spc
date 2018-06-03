@@ -152,7 +152,8 @@ class ActionSampleManager:
                     dqn_act = None
             else:
                 if random.random() <= 1- exploration.value(tt):
-                    action = sample_discrete_action(self.args, net, obs_var, prev_action=self.prev_act)
+                    with torch.no_grad():
+                        action = sample_discrete_action(self.args, net, obs_var, prev_action=self.prev_act)
                 else:
                     action = np.random.randint(self.args.num_total_act)
                 dqn_act = None
@@ -172,6 +173,9 @@ class ActionSampleManager:
         if self.args.use_dqn and self.args.continuous:
             if abs(act[1]) <= dqn_act * 0.1:
                 act[1] = 0
+        elif self.args.continuous and self.args.use_dqn == False:
+                if abs(act[1]) <= 0.8:
+                    act[1] = 0
         return act, dqn_act        
 
 def train_policy(args, env, num_steps=40000000):
@@ -214,7 +218,7 @@ def train_policy(args, env, num_steps=40000000):
             print('action', "{0:.2f}".format(action[0]), "{0:.2f}".format(action[1]), ' pos ', "{0:.2f}".format(info['trackPos']), "{0:.2f}".format(info['pos'][0]), "{0:.2f}".format(info['pos'][1]),\
                 ' angle ', "{0:.2f}".format(info['angle']), ' reward ', "{0:.2f}".format(reward['with_pos']), ' explore ', "{0:.2f}".format(exploration.value(tt)))
         else:
-            print('action', '%d' % real_action, ' pos ', "{0:.2f}".format(info['trackPos']), "{0:.2f}".format(info['pos'][0]), "{0:.2f}".format(info['pos'][1]),\
+            print('action', '%d' % action, ' pos ', "{0:.2f}".format(info['trackPos']), "{0:.2f}".format(info['pos'][0]), "{0:.2f}".format(info['pos'][1]),\
                 ' angle ', "{0:.2f}".format(info['angle']), ' reward ', "{0:.2f}".format(reward['with_pos']), ' explore ', "{0:.2f}".format(exploration.value(tt)))
         
         buffer_manager.store_effect(action, reward, done)
@@ -225,16 +229,17 @@ def train_policy(args, env, num_steps=40000000):
         if done:
             done_cnt += 1
             obs, prev_info = env.reset()
-            obs, _, _, info = env.step(np.array([1.0, 0.0]))
+            obs, _, _, info = env.step(np.array([1.0, 0.0])) if args.continuous else env.step(1)
             buffer_manager.reset(prev_info, tt)
             action_manager.reset()
-            #args.target_speed = np.random.uniform(1, 60)
+            if args.target_speed >0:
+                args.target_speed = np.random.uniform(20, 30)
         
         if args.use_dqn:
             dqn_agent.store_effect(dqn_action, reward['with_pos'], done)
         
         if tt % args.learning_freq == 0 and tt > args.learning_starts and buffer_manager.mpc_buffer.can_sample(args.batch_size):
-            for ep in range(10):
+            for ep in range(args.num_train_steps):
                 optimizer.zero_grad()
                 loss = train_model(args, train_net, buffer_manager.mpc_buffer, epoch, buffer_manager.avg_img, buffer_manager.std_img)
                 print('loss = %0.4f\n' % loss.data.cpu().numpy())
