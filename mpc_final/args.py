@@ -16,6 +16,7 @@ def init_parser(parser):
     parser.add_argument('--seed', type = int, default=0)
     parser.add_argument('--data-parallel', action='store_true')
     parser.add_argument('--id', type = int, default = 0)
+    parser.add_argument('--nb-train-steps', type=int, default=10)
     # enviroument configurations
     parser.add_argument('--env', type = str, default = 'torcs-v0', metavar = 'ENV', help = 'environment')
     parser.add_argument('--xvfb', type = bool, default = True)
