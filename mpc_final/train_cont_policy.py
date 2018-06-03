@@ -174,8 +174,8 @@ class ActionSampleManager:
             if abs(act[1]) <= dqn_act * 0.1:
                 act[1] = 0
         elif self.args.continuous and self.args.use_dqn == False:
-            if abs(act[1]) <= 0.8:
-                act[1] = 0
+                if abs(act[1]) <= 0.8:
+                    act[1] = 0
         return act, dqn_act        
 
 def train_policy(args, env, num_steps=40000000):
@@ -227,8 +227,8 @@ def train_policy(args, env, num_steps=40000000):
             obs, _, _, info = env.step(np.array([1.0, 0.0])) if args.continuous else env.step(1)
             buffer_manager.reset(prev_info, tt)
             action_manager.reset()
-            if args.target_speed > 0:
-                args.target_speed = np.random.uniform(1, 60)
+            if args.target_speed >0:
+                args.target_speed = np.random.uniform(20, 30)
         
         if args.use_dqn:
             dqn_agent.store_effect(dqn_action, reward['with_pos'], done)
