@@ -182,11 +182,6 @@ def train_policy(args, env, num_steps=40000000):
     ''' basics '''
     env = TorcsWrapper(env, random_reset = args.use_random_reset, continuous = args.continuous)
 
-    if args.target_speed > 0 and os.path.exists(os.path.join(args.save_path, 'speedlog.txt')):
-        os.remove(os.path.join(args.save_path, 'speedlog.txt'))
-    if args.target_dist > 0 and os.path.exists(os.path.join(args.save_path, 'distlog.txt')):
-        os.remove(os.path.join(args.save_path, 'distlog.txt'))
-
     ''' create model '''
     train_net, net, optimizer, epoch, exploration, dqn_agent, num_imgs_start = init_models(args)
     
