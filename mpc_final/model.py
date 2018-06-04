@@ -5,6 +5,9 @@ from torch.autograd import Variable
 import torch.nn.functional as F
 import drn
 import dla
+from dla_up import DLAUp, Identity, fill_up_weights, BatchNorm
+import dla_up
+import numpy as np
 import math
 import pdb
 from end_layer import end_layer
@@ -81,6 +84,57 @@ class DRNSeg(nn.Module):
         feature_map = self.seg(x)
         return feature_map # size: batch_size x classes x 32 x 32
 
+class DLASeg(nn.Module):
+    def __init__(self, args, down_ratio=2):
+        super(DLASeg, self).__init__()
+        assert down_ratio in [2, 4, 8, 16]
+        self.first_level = int(np.log2(down_ratio))
+        self.base = dla.__dict__[args.drn_model](pretrained=args.pretrained,
+                                            return_levels=True)
+        channels = self.base.channels
+        scales = [2 ** i for i in range(len(channels[self.first_level:]))]
+        self.dla_up = DLAUp(channels[self.first_level:], scales=scales)
+        self.fc = nn.Sequential(
+            nn.Conv2d(channels[self.first_level], args.classes, kernel_size=1,
+                      stride=1, padding=0, bias=True)
+        )
+        up_factor = 2 ** self.first_level
+        if up_factor > 1:
+            up = nn.ConvTranspose2d(args.classes, args.classes, up_factor * 2,
+                                    stride=up_factor, padding=up_factor // 2,
+                                    output_padding=0, groups=args.classes,
+                                    bias=False)
+            fill_up_weights(up)
+            up.weight.requires_grad = False
+        else:
+            up = Identity()
+        self.up = up
+        self.softmax = nn.LogSoftmax(dim=1)
+
+        for m in self.fc.modules():
+            if isinstance(m, nn.Conv2d):
+                n = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
+                m.weight.data.normal_(0, math.sqrt(2. / n))
+            elif isinstance(m, BatchNorm):
+                m.weight.data.fill_(1)
+                m.bias.data.zero_()
+
+    def forward(self, x):
+        x = self.base(x)
+        x = self.dla_up(x[self.first_level:])
+        x = self.fc(x)
+        x = self.up(x)
+        # y = self.softmax(x)
+        return x
+
+    def optim_parameters(self, memo=None):
+        for param in self.base.parameters():
+            yield param
+        for param in self.dla_up.parameters():
+            yield param
+        for param in self.fc.parameters():
+            yield param
+
 class ConvLSTMNet(nn.Module):
     def __init__(self, args):
         super(ConvLSTMNet, self).__init__()
@@ -91,9 +145,9 @@ class ConvLSTMNet(nn.Module):
             self.action_encode = nn.Linear(args.num_total_act, 1*32*32) 
             if not args.use_lstm:
                 self.actionEncoder = nn.Linear(args.num_total_act, 32)
-            self.drnseg = DRNSeg(args)
+            self.drnseg = DLASeg(args)
             self.feature_map_predictor = convLSTM(args.classes * args.frame_history_len + 1, args.classes) if args.use_lstm else fcn(args.classes * args.frame_history_len, args.classes)
-            self.up_sampler = lambda x: F.upsample(x, scale_factor = 8, mode = 'bilinear', align_corners = True)
+            #self.up_sampler = lambda x: F.upsample(x, scale_factor = 8, mode = 'bilinear', align_corners = True)
         else:
             self.action_encode = nn.Linear(args.num_total_act, args.info_dim)
             self.info_encode = nn.Linear(args.info_dim + args.hidden_dim, args.hidden_dim)
@@ -140,8 +194,8 @@ class ConvLSTMNet(nn.Module):
                 hidden = self.feature_map_predictor(x, action_encoding)
 
             if with_encode == False:
-                output_dict['seg_current'] = self.up_sampler(x[:, -self.args.classes:, :, :])
-            output_dict['seg_pred'] = self.up_sampler(hidden)
+                output_dict['seg_current'] = x[:, -self.args.classes:, :, :]
+            output_dict['seg_pred'] = hidden
             feature_enc = torch.cat([x[:, self.args.classes:, :, :], hidden], dim = 1)
             nx_feature_enc = feature_enc.detach() if training else feature_enc
         else:
