@@ -25,7 +25,7 @@ def init_parser(parser):
 
     # model configurations
     parser.add_argument('--pretrained', type = bool, default = True)
-    parser.add_argument('--drn-model', type = str, default = 'drn_d_22')
+    parser.add_argument('--drn-model', type = str, default = 'dla46x_c')
     parser.add_argument('--classes', type = int, default = 3)
 
     parser.add_argument('--use-collision', action = 'store_true')

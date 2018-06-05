@@ -1,23 +1,22 @@
 #!/bin/bash
-python3 train_torcs.py \
-    --resume \
-    --save-path mpc_1_10_cont \
+python train_torcs.py \
+    --lr 0.001 \
+    --frame-history-len 3 \
+    --pred-step 1 \
+    --batch-size 32 \
+    --save-path 'cont_pred_1_seg_dqn_10_loss_dist' \
+    --epsilon-frames 40000 \
+    --target-update-freq 100 \
+    --data-parallel \
+    --id 0 \
     --continuous \
-    --use-seg \
-    --num-total-act 2 \
-    --pred-step 15 \
-    --use-collision \
     --use-offroad \
     --use-distance \
-    --use-seg \
     --use-pos \
     --use-angle \
     --use-speed \
     --use-xyz \
     --use-dqn \
     --num-dqn-action 10 \
-    --sample-with-angle \
-    --num-same-step 1 \
-    --target-speed 2 \
-    --data-parallel \
-    --id 14
+    --sample-with-collision \
+    --sample-with-distance
