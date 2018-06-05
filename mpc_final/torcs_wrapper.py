@@ -42,6 +42,8 @@ class TorcsWrapper:
         if self.continuous:
             real_action = copy.deepcopy(action)
             real_action[0] = real_action[0] * 0.5 + 0.5
+            if abs(real_action[1]) < 0.5:
+                real_action[1] = 0.0
         else:
             real_action = copy.deepcopy(action)
         self.epi_len += 1

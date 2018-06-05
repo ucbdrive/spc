@@ -174,8 +174,8 @@ class ActionSampleManager:
             if abs(act[1]) <= dqn_act * 0.1:
                 act[1] = 0
         elif self.args.continuous and self.args.use_dqn == False:
-                if abs(act[1]) <= 0.8:
-                    act[1] = 0
+            if abs(act[1]) <= 0.6:
+                act[1] = 0
         return act, dqn_act        
 
 def train_policy(args, env, num_steps=40000000):
