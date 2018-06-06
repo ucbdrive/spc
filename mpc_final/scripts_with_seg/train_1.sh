@@ -1,6 +1,7 @@
 #!/bin/bash
 python train_torcs.py \
     --lr 0.001 \
+    --use-seg \
     --frame-history-len 3 \
     --pred-step 1 \
     --batch-size 32 \
@@ -16,7 +17,5 @@ python train_torcs.py \
     --use-angle \
     --use-speed \
     --use-xyz \
-    --use-dqn \
     --num-dqn-action 10 \
-    --sample-with-collision \
     --sample-with-distance
