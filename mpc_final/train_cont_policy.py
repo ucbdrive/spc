@@ -13,7 +13,7 @@ from dqn_agent import *
 def init_models(args):
     train_net = ConvLSTMMulti(args)
     net = ConvLSTMMulti(args)
-    optimizer = optim.Adam(train_net.parameters(), lr = args.lr, amsgrad = True)
+    optimizer = optim.Adam(filter(lambda p: p.requires_grad, train_net.parameters()), lr = args.lr, amsgrad = True)
     train_net, epoch, optimizer = load_model(args.save_path, train_net, data_parallel=args.data_parallel, optimizer=optimizer, resume=args.resume)
     if args.data_parallel:
         net.load_state_dict(train_net.module.state_dict())
