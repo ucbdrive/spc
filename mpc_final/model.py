@@ -142,7 +142,7 @@ class ConvLSTMNet(nn.Module):
 
         # feature extraction part
         if args.use_seg:
-            self.action_encode = nn.Linear(args.num_total_act, 1*256*256)
+            self.action_encode = nn.Linear(args.num_total_act, 1*32*32)
             if not args.use_lstm:
                 self.actionEncoder = nn.Linear(args.num_total_act, 32)
             self.drnseg = DLASeg(args)
