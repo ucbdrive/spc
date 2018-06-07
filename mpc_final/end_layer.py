@@ -11,6 +11,7 @@ class end_layer(nn.Module):
         self.args, self.activate = args, activate
 
         if args.use_seg:
+            self.down = nn.AvgPool2d(8)
             self.conv1 = nn.Conv2d(args.classes * args.frame_history_len + 1, 16, 5, stride = 1, padding = 2)
             self.conv2 = nn.Conv2d(16, 32, 3, stride = 1, padding = 1)
             self.conv3 = nn.Conv2d(32, 64, 3, stride = 1, padding = 1)
@@ -30,7 +31,8 @@ class end_layer(nn.Module):
 
     def forward(self, hidden, info):
         if self.args.use_seg:
-            x = torch.cat([hidden, info], dim = 1)
+            x = self.down(hidden)
+            x = torch.cat([x, info], dim = 1)
             x = F.tanh(F.max_pool2d(self.conv1(x), kernel_size = 2, stride = 2))
             x = F.tanh(F.max_pool2d(self.conv2(x), kernel_size = 2, stride = 2))
             x = F.tanh(F.max_pool2d(self.conv3(x), kernel_size = 2, stride = 2)) # 1x64x4x4
