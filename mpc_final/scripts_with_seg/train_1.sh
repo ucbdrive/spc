@@ -1,5 +1,5 @@
 #!/bin/bash
-python train_torcs.py \
+python3 train_torcs.py \
     --lr 0.001 \
     --use-seg \
     --frame-history-len 3 \
@@ -11,11 +11,6 @@ python train_torcs.py \
     --data-parallel \
     --id 0 \
     --continuous \
-    --use-offroad \
     --use-distance \
-    --use-pos \
-    --use-angle \
-    --use-speed \
-    --use-xyz \
     --num-dqn-action 10 \
     --sample-with-distance

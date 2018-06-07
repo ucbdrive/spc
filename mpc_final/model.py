@@ -142,9 +142,9 @@ class ConvLSTMNet(nn.Module):
 
         # feature extraction part
         if args.use_seg:
-            self.action_encode = nn.Linear(args.num_total_act, 1*32*32) 
+            self.action_encode = nn.Linear(args.num_total_act, 1*256*256)
             if not args.use_lstm:
-                self.actionEncoder = nn.Linear(args.num_total_act, 32)
+                self.actionEncoder = nn.Linear(args.num_total_act, 256)
             self.drnseg = DLASeg(args)
             self.feature_map_predictor = convLSTM(args.classes * args.frame_history_len + 1, args.classes) if args.use_lstm else fcn(args.classes * args.frame_history_len, args.classes)
             #self.up_sampler = lambda x: F.upsample(x, scale_factor = 8, mode = 'bilinear', align_corners = True)
@@ -176,7 +176,7 @@ class ConvLSTMNet(nn.Module):
             x = self.get_feature(x)
         if hidden is None or cell is None:
             if self.args.use_seg and self.args.use_lstm:
-                shape = [x.size(0), self.args.classes, 32, 32]
+                shape = [x.size(0), self.args.classes, 256, 256]
                 hidden = x[:, -self.args.classes:, :, :] # Variable(torch.zeros(shape))
                 cell = x[:, -self.args.classes:, :, :] # Variable(torch.zeros(shape))
             else:
@@ -185,7 +185,7 @@ class ConvLSTMNet(nn.Module):
 
         output_dict = dict()
         if self.args.use_seg:
-            action_enc = self.action_encode(action).view(-1, 1, 32, 32)
+            action_enc = self.action_encode(action).view(-1, 1, 256, 256)
             if self.args.use_lstm:
                 combined = torch.cat([action_enc, x], dim = 1)
                 hidden, cell = self.feature_map_predictor(combined, (hidden, cell))
@@ -197,7 +197,7 @@ class ConvLSTMNet(nn.Module):
                 output_dict['seg_current'] = x[:, -self.args.classes:, :, :]
             output_dict['seg_pred'] = hidden
             feature_enc = torch.cat([x[:, self.args.classes:, :, :], hidden], dim = 1)
-            nx_feature_enc = feature_enc.detach() if training else feature_enc
+            nx_feature_enc = feature_enc
         else:
             action_enc = F.relu(self.action_encode(action))
             encode = torch.cat([x, action_enc], dim = 1)
