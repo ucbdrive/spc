@@ -132,15 +132,17 @@ def visualize(args, target, output):
         for i in range(args.pred_step):
             imsave('visualize/%d.png' % i, np.concatenate([observation[i], draw_from_pred(segmentation[i]), draw_from_pred(prediction[i])], 1))
     with open(args.save_path+'/report.txt', 'a') as f:
-        f.write('target collision:\n')
-        f.write(str(from_variable_to_numpy(target['coll_batch'][batch_id])) + '\n')
-        f.write('output collision:\n')
-        f.write(str(from_variable_to_numpy(output['coll_prob'][batch_id])) + '\n')
+        if args.use_collision:
+            f.write('target collision:\n')
+            f.write(str(from_variable_to_numpy(target['coll_batch'][batch_id])) + '\n')
+            f.write('output collision:\n')
+            f.write(str(from_variable_to_numpy(output['coll_prob'][batch_id])) + '\n')
 
-        f.write('target offroad:\n')
-        f.write(str(from_variable_to_numpy(target['off_batch'][batch_id])) + '\n')
-        f.write('output offroad:\n')
-        f.write(str(from_variable_to_numpy(output['offroad_prob'][batch_id])) + '\n')
+        if args.use_offroad:
+            f.write('target offroad:\n')
+            f.write(str(from_variable_to_numpy(target['off_batch'][batch_id])) + '\n')
+            f.write('output offroad:\n')
+            f.write(str(from_variable_to_numpy(output['offroad_prob'][batch_id])) + '\n')
 
         if args.use_pos:
             f.write('target pos:\n')
