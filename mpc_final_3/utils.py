@@ -402,7 +402,8 @@ def get_action_loss(args, net, imgs, actions, target = None, hidden = None, cell
         batch_size = 1
 
     # Testing
-    return torch.sum((output['coll_prob'] + output['offroad_prob'] * 0.5).view(-1) * output['speed'].view(-1))
+    output = net(imgs, actions, hidden = hidden, cell = cell, training=False)
+    return torch.sum((output['coll_prob'][:, :, 0] + output['offroad_prob'][:, :, 0] * 0.5).view(-1) * output['speed'].view(-1))
 
     if target is None:
         target = dict()
