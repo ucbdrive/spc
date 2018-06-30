@@ -7,6 +7,7 @@ python3 train_torcs.py \
     --use-collision \
     --use-offroad \
     --use-distance \
+    --use-speed \
     --sample-with-collision \
     --sample-with-offroad \
     --sample-with-distance \

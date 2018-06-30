@@ -1,6 +1,6 @@
 #!/bin/bash
 python train_torcs.py \
-    --save-path mpc_5_noseg_cont \
+    --save-path mpc_5_seg_cont \
     --continuous \
     --use-seg \
     --num-total-act 2 \
@@ -8,10 +8,11 @@ python train_torcs.py \
     --use-collision \
     --use-offroad \
     --use-distance \
+    --sample-with-offroad \
+    --sample-with-distance \
     --sample-with-distance \
     --num-same-step 1 \
     --data-parallel \
-    --batch-size 16 \
-    --no-supervise \
+    --batch-size 4 \
     --id 5 \
     --resume
