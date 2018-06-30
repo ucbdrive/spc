@@ -124,17 +124,7 @@ def visualize(args, target, output):
         os.mkdir('visualize')
     batch_id = np.random.randint(args.batch_size)
     if args.use_seg:
-        # observation = (from_variable_to_numpy(target['obs_batch'][batch_id, :, -3:, :, :]) * 56.1524832523 + 112.62289744791671).astype(np.uint8).transpose(0, 2, 3, 1)
-        observation = (from_variable_to_numpy(target['obs_batch'][batch_id, :, -3:, :, :]) * 255.0).astype(np.uint8).transpose(0, 2, 3, 1)
-        target['seg_batch'] = target['seg_batch'].view(args.batch_size, args.pred_step + 1, 256, 256)
-        segmentation = from_variable_to_numpy(target['seg_batch'][batch_id])
-        output['seg_pred'] = output['seg_pred'].view(args.batch_size, args.pred_step + 1, args.classes, 256, 256)
-        _, prediction = torch.max(output['seg_pred'][batch_id], 1)
-        prediction = from_variable_to_numpy(prediction)
-        for i in range(args.pred_step):
-            imsave('visualize/%d.png' % i, np.concatenate([observation[i], draw_from_pred(segmentation[i]), draw_from_pred(prediction[i])], 1))
-        
-        pred = np.argmax(from_variable_to_numpy(output['seg_pred']), axis=1)
+        pred = from_variable_to_numpy(torch.max(output['seg_pred'], 1)[1])
         gt = from_variable_to_numpy(target['seg_batch'])
         p_acc, m_acc, m_IU, fw_IU = 0, 0, 0, 0
         for i in range(pred.shape[0]):
@@ -148,6 +138,16 @@ def visualize(args, target, output):
         fw_IU /= pred.shape[0]
         with open(os.path.join(args.save_path, 'seg_log.txt'), 'a') as f:
             f.write('pixel_accuracy %0.4f mean_accuracy %0.4f mean_IU %0.4f frequency_weighted_IU %0.4f\n' % (p_acc, m_acc, m_IU, fw_IU))
+
+        observation = (from_variable_to_numpy(target['obs_batch'][batch_id, :, -3:, :, :]) * 255.0).astype(np.uint8).transpose(0, 2, 3, 1)
+        target['seg_batch'] = target['seg_batch'].view(args.batch_size, args.pred_step + 1, 256, 256)
+        segmentation = from_variable_to_numpy(target['seg_batch'][batch_id])
+        output['seg_pred'] = output['seg_pred'].view(args.batch_size, args.pred_step + 1, args.classes, 256, 256)
+        _, prediction = torch.max(output['seg_pred'][batch_id], 1)
+        prediction = from_variable_to_numpy(prediction)
+        for i in range(args.pred_step):
+            imsave('visualize/%d.png' % i, np.concatenate([observation[i], draw_from_pred(segmentation[i]), draw_from_pred(prediction[i])], 1))
+        
 
     with open(args.save_path+'/report.txt', 'w') as f:
         if args.use_collision:
@@ -436,14 +436,14 @@ def get_action_loss(args, net, imgs, actions, target = None, hidden = None, cell
 
     loss = 0
     if args.sample_with_collision:
-        coll_ls = nn.CrossEntropyLoss(reduce = False)(output['coll_prob'].view(batch_size * args.pred_step, 2), target['coll_batch'])
+        # coll_ls = nn.CrossEntropyLoss(reduce = False)(output['coll_prob'].view(batch_size * args.pred_step, 2), target['coll_batch'])
         # coll_ls = (coll_ls.view(-1, args.pred_step, 1) * output['speed'].view(-1, args.pred_step, 1) * weight).sum()
-        coll_ls = (coll_ls.view(-1, args.pred_step, 1) * weight ).sum()
+        coll_ls = (output['coll_prob'].view(-1)).sum() * 25
         loss += coll_ls
     if args.sample_with_offroad:
-        off_ls = nn.CrossEntropyLoss(reduce = False)(output['offroad_prob'].view(batch_size * args.pred_step, 2), target['off_batch'])
+        # off_ls = nn.CrossEntropyLoss(reduce = False)(output['offroad_prob'].view(batch_size * args.pred_step, 2), target['off_batch'])
         # off_ls = (off_ls.view(-1, args.pred_step, 1) * output['speed'].view(-1, args.pred_step, 1) * weight).sum()
-        off_ls = (off_ls.view(-1, args.pred_step, 1) * weight).sum()
+        off_ls = (output['offroad_prob'].view(-1)).sum() * 25
         loss += off_ls
     if args.target_dist > 0:
         dist_loss = torch.sqrt(nn.MSELoss()(output['dist'], target['dist_batch']))
