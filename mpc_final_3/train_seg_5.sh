@@ -1,5 +1,5 @@
 #!/bin/bash
-python train_torcs.py \
+python3 train_torcs.py \
     --save-path mpc_5_seg_cont \
     --continuous \
     --use-seg \
@@ -13,6 +13,6 @@ python train_torcs.py \
     --sample-with-distance \
     --num-same-step 1 \
     --data-parallel \
-    --batch-size 4 \
+    --batch-size 12 \
     --id 5 \
     --resume

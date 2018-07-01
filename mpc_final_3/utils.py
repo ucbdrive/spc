@@ -139,13 +139,13 @@ def visualize(args, target, output):
             f.write('pixel_accuracy %0.4f mean_accuracy %0.4f mean_IU %0.4f frequency_weighted_IU %0.4f\n' % (p_acc, m_acc, m_IU, fw_IU))
 
         observation = (from_variable_to_numpy(target['obs_batch'][batch_id, :, -3:, :, :]) * 255.0).astype(np.uint8).transpose(0, 2, 3, 1)
-        target['seg_batch'] = target['seg_batch'].view(args.batch_size, args.pred_step + 1, 256, 256)
+        target['seg_batch'] = target['seg_batch'].view(args.batch_size, args.pred_step, 256, 256)
         segmentation = from_variable_to_numpy(target['seg_batch'][batch_id])
-        output['seg_pred'] = output['seg_pred'].view(args.batch_size, args.pred_step + 1, args.classes, 256, 256)
+        output['seg_pred'] = output['seg_pred'].view(args.batch_size, args.pred_step, args.classes, 256, 256)
         _, prediction = torch.max(output['seg_pred'][batch_id], 1)
         prediction = from_variable_to_numpy(prediction)
         for i in range(args.pred_step):
-            imsave('visualize/%d.png' % i, np.concatenate([observation[i], draw_from_pred(segmentation[i]), draw_from_pred(prediction[i])], 1))
+            imsave('visualize/%d.png' % (i + 1), np.concatenate([observation[i], draw_from_pred(segmentation[i]), draw_from_pred(prediction[i])], 1))
         
 
     with open(args.save_path+'/report.txt', 'w') as f:
@@ -403,7 +403,7 @@ def get_action_loss(args, net, imgs, actions, target = None, hidden = None, cell
 
     # Testing
     output = net(imgs, actions, hidden = hidden, cell = cell, training=False)
-    return torch.sum((output['coll_prob'][:, :, 0] + output['offroad_prob'][:, :, 0] * 0.5).view(-1) * output['speed'].view(-1))
+    # return torch.sum((output['coll_prob'][:, :, 0] + output['offroad_prob'][:, :, 0] * 0.5).view(-1) * output['speed'].view(-1))
 
     if target is None:
         target = dict()
@@ -442,12 +442,14 @@ def get_action_loss(args, net, imgs, actions, target = None, hidden = None, cell
     if args.sample_with_collision:
         # coll_ls = nn.CrossEntropyLoss(reduce = False)(output['coll_prob'].view(batch_size * args.pred_step, 2), target['coll_batch'])
         # coll_ls = (coll_ls.view(-1, args.pred_step, 1) * output['speed'].view(-1, args.pred_step, 1) * weight).sum()
-        coll_ls = (coll_ls.view(-1, args.pred_step, 1) * weight ).sum() * 25
+        # coll_ls = (coll_ls.view(-1, args.pred_step, 1) * weight ).sum() * 25
+        coll_ls = (output['coll_prob'].view(-1)).sum() * 25
         loss += coll_ls
     if args.sample_with_offroad:
         # off_ls = nn.CrossEntropyLoss(reduce = False)(output['offroad_prob'].view(batch_size * args.pred_step, 2), target['off_batch'])
         # off_ls = (off_ls.view(-1, args.pred_step, 1) * output['speed'].view(-1, args.pred_step, 1) * weight).sum()
-        off_ls = (off_ls.view(-1, args.pred_step, 1) * weight).sum() * 25
+        # off_ls = (off_ls.view(-1, args.pred_step, 1) * weight).sum() * 25
+        off_ls = (output['offroad_prob'].view(-1)).sum() * 25
         loss += off_ls
     if args.target_dist > 0:
         dist_loss = torch.sqrt(nn.MSELoss()(output['dist'], target['dist_batch']))
