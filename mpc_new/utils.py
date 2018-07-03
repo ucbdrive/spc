@@ -313,6 +313,38 @@ def sample_cont_action(args, net, imgs, prev_action = None, testing = False, avg
         prev_loss = this_loss
     return this_action.data.cpu().numpy()[0,0,:].reshape(-1) 
 
+def sample_cont_action_train(args, net, imgs, prev_action=None, with_coll=False, with_off=False, with_dist=False, \
+                            avg_img=0, std_img=1.0):
+    imgs = copy.deepcopy(imgs)
+    if args.normalize:
+        imgs = (imgs.contiguous() - avg_img)/(std_img)
+    else:
+        imgs = imgs/255.0
+    batch_size, c, w, h = int(imgs.size()[0]), int(imgs.size()[-3]), int(imgs.size()[-2]), int(imgs.size()[-1])
+    imgs = imgs.view(batch_size, 1, c, w, h)
+    prev_action = np.zeros((1,1,2))
+    prev_action = np.repeat(prev_action, args.pred_step, axis=1)
+    this_action = torch.from_numpy(prev_action).float()
+    this_action = Variable(this_action.cuda(), requires_grad=True)
+    this_action.data.clamp(-1,1)
+    prev_loss = 1000
+    sign = True
+    cnt = 0
+    optimizer = optim.Adam([this_action], lr=0.01, amsgrad=True)
+    while sign:
+        loss = get_action_loss_train(args, net, imgs, this_action, with_coll, with_off, with_dist)
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+        if cnt >= 15:
+            sign = False
+        cnt += 1
+        this_action.data.clamp(-1, 1)
+    return this_action.data.cpu().numpy()[0, 0, :].reshape(-1)
+
+def get_action_loss_train(args, net, imgs, this_action, with_coll=False, with_off=False, with_dist=False):
+    return
+
 def from_variable_to_numpy(x):
     x = x.data
     if torch.cuda.is_available():
