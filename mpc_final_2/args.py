@@ -1,8 +1,10 @@
 def init_parser(parser):
     parser.add_argument('--lr', type = float, default = 1e-3, metavar = 'LR', help = 'learning rate')
+
     parser.add_argument('--frame-history-len', type = int, default = 3)
     parser.add_argument('--pred-step', type = int, default = 15)
     parser.add_argument('--batch-size', type = int, default = 32)
+    parser.add_argument('--test-freq', type = int, default = 6)
     parser.add_argument('--save-freq', type = int, default = 100)
     parser.add_argument('--save-path', type = str, default = 'mpc_15_step')
     parser.add_argument('--normalize', action = 'store_true')
@@ -24,6 +26,8 @@ def init_parser(parser):
     parser.add_argument('--continuous', action = 'store_true')
 
     # model configurations
+    parser.add_argument('--imitation', action='store_true')
+
     parser.add_argument('--no-supervise', action = 'store_true')
     parser.add_argument('--pretrained', type = bool, default = True)
     parser.add_argument('--drn-model', type = str, default = 'dla46x_c')

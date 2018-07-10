@@ -15,13 +15,12 @@ sys.path.append('/media/xinleipan/data/git/pyTORCS/')
 from py_TORCS import torcs_envs
 from train_cont_policy import *
 
-def test(args, env, net, file_name, dqn_name=None):
-    buffer_manager = BufferManager(args)
-    action_manager = ActionSampleManager(args)
+def test(args, env, net, tt, buffer_manager, dqn_name=None):
+    action_manager = ActionSampleManager(args, train=False)
     done_cnt = 0
     _, info = env.reset()
     obs, reward, done, info = env.step(np.array([1.0, 0.0]))
-    buffer_manager.step_first(obs, info)
+    buffer_manager.reset(info, tt, train=True)
     exploration = PiecewiseSchedule([(0, 0.0), (1000, 0.0)], outside_value = 0.0)
     if args.use_dqn:
         dqn_agent = DQNAgent(args, exploration, args.save_path)
@@ -29,6 +28,7 @@ def test(args, env, net, file_name, dqn_name=None):
     else:
         dqn_agent = None
     while done_cnt < 1:
+        tt += 1
         seg = env.env.get_segmentation().reshape((1, 256, 256)) if args.use_seg else None
         ret, obs_var = buffer_manager.store_frame(obs, info, seg)
         if args.normalize:
@@ -48,12 +48,11 @@ def test(args, env, net, file_name, dqn_name=None):
         buffer_manager.update_avg_std_img()
         if done:
             done_cnt += 1
-            obs, prev_info = env.reset()
-            obs, _, _, info = env.step(np.array([1.0, 0.0]))
-            buffer_manager.reset(prev_info, file_name.split('_')[-1].split('.')[0], log_name='log_test_torcs.txt')
-            action_manager.reset()
+            buffer_manager.reset(prev_info, tt, log_name='log_test_torcs.txt', train=False)
+            # action_manager.reset()
         if args.use_dqn:
             dqn_agent.store_effect(dqn_action, reward['with_pos'], done)
+    return tt
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()

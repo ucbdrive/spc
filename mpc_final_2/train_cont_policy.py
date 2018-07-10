@@ -9,6 +9,7 @@ import cv2
 from utils import *
 from torcs_wrapper import *
 from dqn_agent import *
+from test import test
 
 def init_models(args):
     train_net = ConvLSTMMulti(args)
@@ -70,6 +71,8 @@ class BufferManager:
         self.prev_xyz = None
         self.epi_rewards_with = []
         self.epi_rewards_without = []
+        self.test_rewards_with = []
+        self.test_rewards_without = []
         self.rewards_with = 0.0
         self.rewards_without = 0.0
         self.mpc_ret = 0
@@ -109,54 +112,82 @@ class BufferManager:
         if self.args.normalize:
             self.avg_img, self.std_img = self.img_buffer.get_avg_std()
     
-    def reset(self, info, step, log_name='log_train_torcs.txt'):
+    def reset(self, info, step, log_name='log_train_torcs.txt', train=True):
         self.obs_buffer.clear()
-        self.epi_rewards_with.append(self.rewards_with)
-        self.epi_rewards_without.append(self.rewards_without)
-        self.rewards_with, self.rewards_without = 0, 0
+
+        if train:
+            self.epi_rewards_with.append(self.rewards_with)
+            self.epi_rewards_without.append(self.rewards_without)
+        else:
+            self.test_rewards_with.append(self.rewards_with)
+            self.test_rewards_without.append(self.rewards_without)
         self.prev_act = np.array([1.0, 0.0]) if self.args.continuous else 1
-        self.speed_np, self.pos_np, self.posxyz_np = get_info_np(info, use_pos_class = False)
+        self.speed_np, self.pos_np, self.posxyz_np = get_info_np(info, use_pos_class=False)
         self.prev_xyz = np.array(info['pos'])
-        print('past 100 episode rewards is', \
-            "{0:.3f}".format(np.mean(self.epi_rewards_with[-100:])), \
-                ' std is ', "{0:.15f}".format(np.std(self.epi_rewards_with[-100:])))
-        with open(self.args.save_path+'/'+log_name, 'a') as fi:
-            fi.write('step '+str(step))
-            fi.write(' reward_with ' + str(np.mean(self.epi_rewards_with[-10:])))
-            fi.write(' std ' + str(np.std(self.epi_rewards_with[-10:])))
-            fi.write(' reward_without ' + str(np.mean(self.epi_rewards_without[-10:])))
-            fi.write(' std ' + str(np.std(self.epi_rewards_without[-10:])) + '\n')      
+
+        if train:
+            print('past 100 episode rewards is', \
+                "{0:.3f}".format(np.mean(self.epi_rewards_with[-100:])), \
+                    ' std is ', "{0:.15f}".format(np.std(self.epi_rewards_with[-100:])))
+            with open(self.args.save_path+'/'+log_name, 'a') as fi:
+                fi.write('step ' + str(step))
+                fi.write(' reward_with ' + str(np.mean(self.epi_rewards_with[-10:])))
+                fi.write(' std ' + str(np.std(self.epi_rewards_with[-10:])))
+                fi.write(' reward_without ' + str(np.mean(self.epi_rewards_without[-10:])))
+                fi.write(' std ' + str(np.std(self.epi_rewards_without[-10:])) + '\n')
+        else:
+            print('past episode reward is', \
+                "{0:.3f}".format(np.mean(self.test_rewards_with[-100:])), \
+                    ' std is ', "{0:.15f}".format(np.std(self.test_rewards_with[-100:])))
+            with open(self.args.save_path+'/'+log_name, 'a') as fi:
+                fi.write('step ' + str(step))
+                fi.write(' reward_with ' + str(np.mean(self.test_rewards_with[-10:])))
+                fi.write(' std ' + str(np.std(self.test_rewards_with[-10:])))
+                fi.write(' reward_without ' + str(np.mean(self.test_rewards_without[-10:])))
+                fi.write(' std ' + str(np.std(self.test_rewards_without[-10:])) + '\n')
+
+        self.rewards_with, self.rewards_without = 0, 0
 
 class ActionSampleManager:
-    def __init__(self, args):
+    def __init__(self, args, train=True):
         self.args = args
+        self.train = train
         self.prev_act = np.array([1.0, 0.0]) if self.args.continuous else 1
         if self.args.use_dqn:
             self.prev_dqn_act = 0
         else:
             self.prev_dqn_act = None
 
-    def sample_action(self, net, dqn_net, obs, obs_var, exploration, tt, avg_img, std_img):
+    def sample_action(self, info, net, dqn_net, obs, obs_var, exploration, tt, avg_img, std_img):
         if tt % self.args.num_same_step != 0:
             return self.process_act(self.prev_act, self.prev_dqn_act)
+
         else:
-            if self.args.continuous:
-                if random.random() <= 1 - exploration.value(tt):
+            if self.train and self.args.imitation:
+                action = naive_driver(info, self.args.continuous)
+                dqn_act = dqn_net.sample_action(obs, tt) if self.args.continuous and self.args.use_dqn else None
+
+            elif self.args.continuous:
+                if not self.train or random.random() <= 1 - exploration.value(tt):
                     action = sample_cont_action(self.args, net, obs_var, prev_action=self.prev_act, avg_img=avg_img, std_img=std_img)
                 else:
-                    action = np.random.rand(self.args.num_total_act)*2-1
+                    action = np.random.rand(self.args.num_total_act) * 2 - 1
                 action = np.clip(action, -1, 1)
+
                 if self.args.use_dqn:
                     dqn_act = dqn_net.sample_action(obs, tt)
                 else:
                     dqn_act = None
+
             else:
-                if random.random() <= 1- exploration.value(tt):
+                if not self.train or random.random() <= 1 - exploration.value(tt):
                     with torch.no_grad():
                         action = sample_discrete_action(self.args, net, obs_var, prev_action=self.prev_act)
+
                 else:
                     action = np.random.randint(self.args.num_total_act)
                 dqn_act = None
+
             action, dqn_act = self.process_act(action, dqn_act)
             self.prev_act = action
             self.prev_dqn_act = dqn_act
@@ -187,7 +218,7 @@ def train_policy(args, env, num_steps=40000000):
     
     ''' load buffers '''
     buffer_manager = BufferManager(args)
-    action_manager = ActionSampleManager(args)
+    action_manager = ActionSampleManager(args, train=True)
 
     done_cnt = 0
     _, info = env.reset()
@@ -201,7 +232,7 @@ def train_policy(args, env, num_steps=40000000):
             avg_img, std_img = buffer_manager.img_buffer.get_avg_std()
         else:
             avg_img, std_img = None, None
-        action, dqn_action = action_manager.sample_action(net, dqn_agent, obs, obs_var, exploration, tt, avg_img, std_img)
+        action, dqn_action = action_manager.sample_action(info, net, dqn_agent, obs, obs_var, exploration, tt, avg_img, std_img)
         obs, reward, done, info = env.step(action)
         if args.target_speed > 0:
             with open(os.path.join(args.save_path, 'speedlog.txt'), 'a') as f:
@@ -223,11 +254,14 @@ def train_policy(args, env, num_steps=40000000):
 
         if done:
             done_cnt += 1
+            print('Done!!!', done_cnt)
+            if done_cnt % args.test_freq == 0:
+                tt = test(args, env, net, tt, buffer_manager, dqn_name=None)
             obs, prev_info = env.reset()
             obs, _, _, info = env.step(np.array([1.0, 0.0])) if args.continuous else env.step(1)
-            buffer_manager.reset(prev_info, tt)
+            buffer_manager.reset(prev_info, tt, train=False)
             action_manager.reset()
-            if args.target_speed >0:
+            if args.target_speed > 0:
                 args.target_speed = np.random.uniform(15, 35)
         
         if args.use_dqn:
@@ -249,6 +283,6 @@ def train_policy(args, env, num_steps=40000000):
                 if args.use_dqn:
                     dqn_agent.train_model(args.batch_size, tt)
                 if epoch % args.save_freq == 0:
-                    torch.save(train_net.module.state_dict(), args.save_path+'/model/pred_model_'+str(tt).zfill(9)+'.pt')
+                    torch.save(train_net.module.state_dict(), args.save_path+'/model/pred_model.pt')
                     torch.save(optimizer.state_dict(), args.save_path+'/optimizer/optimizer.pt')
                     pkl.dump(epoch, open(args.save_path+'/epoch.pkl', 'wb'))
