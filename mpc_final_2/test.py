@@ -15,8 +15,7 @@ sys.path.append('/media/xinleipan/data/git/pyTORCS/')
 from py_TORCS import torcs_envs
 from train_cont_policy import *
 
-def test(args, env, net, tt, buffer_manager, dqn_name=None):
-    action_manager = ActionSampleManager(args, train=False)
+def test(args, env, net, tt, buffer_manager, action_manager, dqn_name=None):
     done_cnt = 0
     _, info = env.reset()
     obs, reward, done, info = env.step(np.array([1.0, 0.0]))

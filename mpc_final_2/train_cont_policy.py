@@ -9,7 +9,6 @@ import cv2
 from utils import *
 from torcs_wrapper import *
 from dqn_agent import *
-from test import test
 
 def init_models(args):
     train_net = ConvLSTMMulti(args)
@@ -254,12 +253,10 @@ def train_policy(args, env, num_steps=40000000):
 
         if done:
             done_cnt += 1
-            print('Done!!!', done_cnt)
-            if done_cnt % args.test_freq == 0:
-                tt = test(args, env, net, tt, buffer_manager, dqn_name=None)
             obs, prev_info = env.reset()
             obs, _, _, info = env.step(np.array([1.0, 0.0])) if args.continuous else env.step(1)
-            buffer_manager.reset(prev_info, tt, train=False)
+            buffer_manager.reset(prev_info, tt, train=(done_cnt % args.test_freq != 0))
+            action_manager.train = (done_cnt + 1) % args.test_freq != 0
             action_manager.reset()
             if args.target_speed > 0:
                 args.target_speed = np.random.uniform(15, 35)
@@ -283,6 +280,9 @@ def train_policy(args, env, num_steps=40000000):
                 if args.use_dqn:
                     dqn_agent.train_model(args.batch_size, tt)
                 if epoch % args.save_freq == 0:
-                    torch.save(train_net.module.state_dict(), args.save_path+'/model/pred_model.pt')
+                    if args.data_parallel:
+                        torch.save(train_net.module.state_dict(), args.save_path+'/model/pred_model.pt')
+                    else:
+                        torch.save(train_net.state_dict(), args.save_path+'/model/pred_model.pt')
                     torch.save(optimizer.state_dict(), args.save_path+'/optimizer/optimizer.pt')
                     pkl.dump(epoch, open(args.save_path+'/epoch.pkl', 'wb'))

@@ -13,7 +13,7 @@ python3 train_torcs.py \
     --sample-with-offroad \
     --sample-with-distance \
     --num-same-step 1 \
-    --data-parallel \
-    --batch-size 12 \
+    --batch-size 8 \
+    --save-freq 2 \
     --id 25 \
     --resume
