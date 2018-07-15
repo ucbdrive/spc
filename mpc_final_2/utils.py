@@ -16,6 +16,7 @@ import pdb
 from scipy.misc import imsave
 import copy
 from eval_segm import pixel_accuracy, mean_accuracy, mean_IU, frequency_weighted_IU
+from sklearn.preprocessing import OneHotEncoder
 
 def weights_init(m):
     classname = m.__class__.__name__
@@ -37,7 +38,7 @@ def weights_init(m):
         m.weight.data.fill_(1)
         m.bias.data.fill_(0)
     
-def train_model(args, train_net, mpc_buffer, epoch, avg_img_t, std_img_t):
+def train_model(args, train_net, planner, mpc_buffer, epoch, avg_img_t, std_img_t):
     if epoch % 20 == 0:
         target, idxes = mpc_buffer.sample(args.batch_size, sample_early = True)
     else:
@@ -110,6 +111,18 @@ def train_model(args, train_net, mpc_buffer, epoch, avg_img_t, std_img_t):
     if np.isnan(loss_value):
         pdb.set_trace()
     visualize(args, target, output)
+
+    seg_np = target['seg_batch'].data.cpu().numpy()
+    x1 = Variable(torch.from_numpy(OneHotEncoder(n_values=args.classes, sparse=False).fit_transform(seg_np[:, :-1, :, :].reshape(-1, 1)).reshape(args.batch_size * args.pred_step, 256, 256, 3).transpose(0, 3, 1, 2), requires_grad=False))
+    x2 = Variable(torch.from_numpy(OneHotEncoder(n_values=args.classes, sparse=False).fit_transform(seg_np[:, 1:, :, :].reshape(-1, 1)).reshape(args.batch_size * args.pred_step, 256, 256, 3).transpose(0, 3, 1, 2), requires_grad=False))
+
+    if args.planner:
+        estimated_action = planner(x1, x2)
+        real_action = target['act_batch'].view(-1, 2)
+        planner_loss = nn.MSELoss(estimated_action, real_action)
+        loss += planner_loss
+        print('planner ls', planner_loss.data.cpu().numpy())
+
     return loss
 
 def draw_from_pred(pred):
@@ -149,7 +162,7 @@ def visualize(args, target, output):
             imsave('visualize/%d.png' % i, np.concatenate([observation[i], draw_from_pred(segmentation[i]), draw_from_pred(prediction[i])], 1))
         
 
-    with open(args.save_path+'/report.txt', 'w') as f:
+    with open(args.save_path + '/report.txt', 'w') as f:
         if args.use_collision:
             f.write('target collision:\n')
             f.write(str(from_variable_to_numpy(target['coll_batch'][batch_id])) + '\n')
@@ -182,9 +195,9 @@ def visualize(args, target, output):
         
         if args.use_distance:
             f.write('target dist:\n')
-            f.write(str(from_variable_to_numpy(target['dist_batch'][batch_id, 1:]))+'\n')
+            f.write(str(from_variable_to_numpy(target['dist_batch'][batch_id, 1:])) + '\n')
             f.write('output dist:\n')
-            f.write(str(from_variable_to_numpy(output['dist'][batch_id, :]))+'\n')
+            f.write(str(from_variable_to_numpy(output['dist'][batch_id, :])) + '\n')
         
 class DoneCondition:
     def __init__(self, size):
@@ -207,7 +220,7 @@ class DoneCondition:
             return True
         self.pos.append(list(posxyz))
         real_pos = np.concatenate(self.pos[-100:])
-        real_pos = real_pos.reshape(-1,3)
+        real_pos = real_pos.reshape(-1, 3)
         std = np.sum(np.std(real_pos, 0))
         if std < 2.0 and len(self.pos) > 100:
             self.pos = []
@@ -221,7 +234,7 @@ class ObsBuffer:
         self.last_obs_all = []
 
     def store_frame(self, frame):
-        obs_np = frame.transpose(2,0,1)
+        obs_np = frame.transpose(2, 0, 1)
         if len(self.last_obs_all) < self.frame_history_len:
             self.last_obs_all = []
             for ii in range(self.frame_history_len):
@@ -242,15 +255,15 @@ def make_dir(path):
     if not os.path.isdir(path):
         os.mkdir(path)
 
-def load_model(path, net, data_parallel = True, optimizer = None, resume=True):
+def load_model(path, net, data_parallel=True, optimizer=None, resume=True):
     if resume:
-        file_list = sorted(os.listdir(path+'/model')) 
+        file_list = sorted(os.listdir(path + '/model')) 
         if len(file_list) == 0:
             print('no model to resume!')
             epoch = 0
         else:
             model_path = file_list[-1]
-            epoch = pkl.load(open(path+'/epoch.pkl', 'rb'))
+            epoch = pkl.load(open(path + '/epoch.pkl', 'rb'))
             state_dict = torch.load(os.path.join(path, 'model', model_path))
             net.load_state_dict(state_dict)
             print('load success')
@@ -294,7 +307,7 @@ def Focal_Loss(probs, target, reduce=True):
         loss = loss.sum()/(batch_size*1.0)
     return loss
 
-def sample_cont_action(args, net, imgs, prev_action = None, testing = False, avg_img=0, std_img=1.0):
+def sample_cont_action(args, net, planner, imgs, prev_action=None, testing=False, avg_img=0, std_img=1.0):
     imgs = copy.deepcopy(imgs)
     if args.normalize:
         imgs = (imgs.contiguous()-avg_img)/(std_img)
@@ -302,34 +315,57 @@ def sample_cont_action(args, net, imgs, prev_action = None, testing = False, avg
         imgs = imgs / 255.0
     batch_size, c, w, h = int(imgs.size()[0]), int(imgs.size()[-3]), int(imgs.size()[-2]), int(imgs.size()[-1])
     imgs = imgs.view(batch_size, 1, c, w, h)
-    prev_action = prev_action.reshape((1, 1, 2))
+    prev_action = prev_action.reshape((1, 1, args.num_total_act))
     prev_action = np.repeat(prev_action, args.pred_step, axis=1) 
     this_action = torch.from_numpy(prev_action).float()
     this_action = Variable(this_action.cuda(), requires_grad=True)
-    this_action.data.clamp(-1,1)
+    this_action.data.clamp(-1, 1)
     prev_loss = 1000
     sign = True
     cnt = 0
-    optimizer = optim.Adam([this_action], lr = 0.01, amsgrad=True)
-    while sign:
-        if testing:
-            loss = get_action_loss_test(args, net, imgs, this_action, None, None, None)
-        else:
-            loss = get_action_loss(args, net, imgs, this_action, None, None, None)
-        optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
 
-        this_loss = float(loss.data.cpu().numpy())
-        if cnt >= 10 and (np.abs(prev_loss-this_loss)/prev_loss <= 0.0005 or this_loss > prev_loss):
-            sign = False
-            return this_action.data.cpu().numpy()[0,0,:].reshape(-1)
-        if cnt >= 15:
-            sign = False
-        cnt += 1 
-        this_action.data.clamp(-1, 1)# = torch.clamp(this_action, -1, 1)
-        prev_loss = this_loss
-    return this_action.data.cpu().numpy()[0,0,:].reshape(-1) 
+    if args.planner:
+        for param in planner.parameters():
+            param.requires_grad = False
+        planner.eval()
+
+        for i in range(10):
+            loss, feature = get_action_loss(args, net, imgs, this_action, requires_feature=True)
+            optimizer = optim.Adam([feature], lr=0.01, amsgrad=True)
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+
+            x1 = feature[:, :-1, :, :].contiguous().view(args.batch_size * args.pred_step, args.classes, 256, 256)
+            x2 = feature[:, 1:, :, :].contiguous().view(args.batch_size * args.pred_step, args.classes, 256, 256)
+            this_action = planner(x1, x2).view(args.batch_size, args.pred_step, args.num_total_act)
+
+        for param in planner.parameters():
+            param.requires_grad = True
+        planner.train()
+
+    else:
+        optimizer = optim.Adam([this_action], lr=0.01, amsgrad=True)
+        while sign:
+            if testing:
+                loss = get_action_loss_test(args, net, imgs, this_action, None, None, None)
+            else:
+                loss = get_action_loss(args, net, imgs, this_action, None, None, None)
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+
+            this_loss = float(loss.data.cpu().numpy())
+            if cnt >= 10 and (np.abs(prev_loss - this_loss) / prev_loss <= 0.0005 or this_loss > prev_loss):
+                sign = False
+                return this_action.data.cpu().numpy()[0, 0, :].reshape(-1)
+            if cnt >= 15:
+                sign = False
+            cnt += 1 
+            this_action.data.clamp(-1, 1)# = torch.clamp(this_action, -1, 1)
+            prev_loss = this_loss
+
+    return this_action.data.cpu().numpy()[0, 0, :].reshape(-1) 
 
 def from_variable_to_numpy(x):
     x = x.data
@@ -397,7 +433,7 @@ def sample_discrete_action(args, net, obs_var, prev_action = None):
     print('Sampling takes %0.2f seconds, selected action: %d.' % (time.time() - start_time, which_action))
     return which_action
 
-def get_action_loss(args, net, imgs, actions, target = None, hidden = None, cell = None, gpu = 0):
+def get_action_loss(args, net, imgs, actions, target=None, hidden=None, cell=None, gpu=0, requires_feature=False):
     batch_size = int(imgs.size()[0])
     if args.continuous:
         batch_size = 1
@@ -408,7 +444,7 @@ def get_action_loss(args, net, imgs, actions, target = None, hidden = None, cell
         if args.sample_with_offroad:
             target['off_batch'] = Variable(torch.zeros(batch_size * args.pred_step), requires_grad = False).type(torch.LongTensor)
         if args.sample_with_pos:
-            target['pos_batch'] = Variable(torch.ones(batch_size, args.pred_step, 1) * args.target_pos, requires_grad = False)
+            target['pos_batch'] = Variable(torch.ones(batch_size, args.pred_step, 1) * 0, requires_grad = False)
         if args.sample_with_angle:
             target['angle_batch'] = Variable(torch.zeros(batch_size, args.pred_step, 1), requires_grad = False)
         if args.target_speed > 0:
@@ -466,7 +502,10 @@ def get_action_loss(args, net, imgs, actions, target = None, hidden = None, cell
         xyz_loss = torch.sqrt(nn.MSELoss()(output['xyz'], target['xyz_batch'])) / 100.0
         loss += xyz_loss
 
-    return loss
+    if requires_feature:
+        return loss, output['seg_pred'].contiguous().view(args.batch_size * (args.pred_step + 1), args.classes, 256, 256)
+    else:
+        return loss
 
 def show_accuracy(output, target, label):
     tn, fp, fn, tp = confusion_matrix(output, target, labels = [0, 1]).ravel()
@@ -506,4 +545,3 @@ if __name__ == '__main__':
     print(all_actions.size())
     print(one_hot_actions)
     print(one_hot_actions.size())
-

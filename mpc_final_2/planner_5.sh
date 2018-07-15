@@ -1,8 +1,8 @@
 #!/bin/bash
 python3 train_torcs.py \
-    --save-path imitation_5_seg_cont \
+    --save-path planner_5_seg_cont \
     --continuous \
-    --imitation \
+    --planner \
     --use-seg \
     --num-total-act 2 \
     --pred-step 5 \

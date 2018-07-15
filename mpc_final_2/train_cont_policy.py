@@ -148,9 +148,11 @@ class BufferManager:
         self.rewards_with, self.rewards_without = 0, 0
 
 class ActionSampleManager:
-    def __init__(self, args, train=True):
+    def __init__(self, args, train=True, planner=None):
         self.args = args
         self.train = train
+        self.planner = planner
+
         self.prev_act = np.array([1.0, 0.0]) if self.args.continuous else 1
         if self.args.use_dqn:
             self.prev_dqn_act = 0
@@ -168,7 +170,7 @@ class ActionSampleManager:
 
             elif self.args.continuous:
                 if not self.train or random.random() <= 1 - exploration.value(tt):
-                    action = sample_cont_action(self.args, net, obs_var, prev_action=self.prev_act, avg_img=avg_img, std_img=std_img)
+                    action = sample_cont_action(self.args, net, self.planner, obs_var, prev_action=self.prev_act, avg_img=avg_img, std_img=std_img)
                 else:
                     action = np.random.rand(self.args.num_total_act) * 2 - 1
                 action = np.clip(action, -1, 1)
@@ -203,9 +205,9 @@ class ActionSampleManager:
         if self.args.use_dqn and self.args.continuous:
             if abs(act[1]) <= dqn_act * 0.1:
                 act[1] = 0
-        elif self.args.continuous and self.args.use_dqn == False:
-            if abs(act[1]) <= 0.8:
-                act[1] = 0
+        # elif self.args.continuous and self.args.use_dqn == False:
+        #     if abs(act[1]) <= 0.8:
+        #         act[1] = 0
         return act, dqn_act        
 
 def train_policy(args, env, num_steps=40000000):
@@ -215,9 +217,11 @@ def train_policy(args, env, num_steps=40000000):
     ''' create model '''
     train_net, net, optimizer, epoch, exploration, dqn_agent, num_imgs_start = init_models(args)
     
+    planner = Planner() if args.planner else None
+    
     ''' load buffers '''
     buffer_manager = BufferManager(args)
-    action_manager = ActionSampleManager(args, train=True)
+    action_manager = ActionSampleManager(args, train=True, planner=planner)
 
     done_cnt = 0
     _, info = env.reset()
@@ -267,7 +271,7 @@ def train_policy(args, env, num_steps=40000000):
         if tt % args.learning_freq == 0 and tt > args.learning_starts and buffer_manager.mpc_buffer.can_sample(args.batch_size):
             for ep in range(args.num_train_steps):
                 optimizer.zero_grad()
-                loss = train_model(args, train_net, buffer_manager.mpc_buffer, epoch, buffer_manager.avg_img, buffer_manager.std_img)
+                loss = train_model(args, train_net, planner, buffer_manager.mpc_buffer, epoch, buffer_manager.avg_img, buffer_manager.std_img)
                 print('loss = %0.4f\n' % loss.data.cpu().numpy())
                 loss.backward()
                 optimizer.step()

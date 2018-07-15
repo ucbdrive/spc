@@ -27,6 +27,7 @@ def init_parser(parser):
 
     # model configurations
     parser.add_argument('--imitation', action='store_true')
+    parser.add_argument('--planner', action='store_true')
 
     parser.add_argument('--no-supervise', action = 'store_true')
     parser.add_argument('--pretrained', type = bool, default = True)

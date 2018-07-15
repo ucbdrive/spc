@@ -236,7 +236,7 @@ class ConvLSTMNet(nn.Module):
                 out = self.dla(x[:, i*3 : (i+1)*3, :, :])
                 out = out.squeeze().view(batch_size, -1)
                 res.append(out)
-            res = torch.cat(res, dim = 1)
+            res = torch.cat(res, dim=1)
             res = self.feature_encode(res)
         return res 
 
@@ -252,7 +252,7 @@ class ConvLSTMMulti(nn.Module):
 
         feat = [self.conv_lstm.get_feature(x[:, i, :, :, :].squeeze(1)) for i in range(num_time)]
 
-        return torch.stack(feat, dim = 1)
+        return torch.stack(feat, dim=1)
 
     def forward(self, imgs, actions=None, hidden=None, cell=None, get_feature=False, training=True):
         if get_feature:
@@ -274,15 +274,51 @@ class ConvLSTMMulti(nn.Module):
                 final_dict[key].append(output_dict[key])
 
         for key in final_dict.keys():
-            final_dict[key] = torch.stack(final_dict[key], dim = 1)
+            final_dict[key] = torch.stack(final_dict[key], dim=1)
 
         return final_dict
+
+class Planner(nn.Module):
+    def __init__(self, args):
+        super(Planner, self).__init__()
+        self.args = args
+
+        self.conv1 = nn.Conv2d(args.classes * args.frame_history_len, 16, 5, stride=2, padding=1)
+        self.conv2 = nn.Conv2d(16, 32, 3, stride=2, padding=1)
+        self.conv3 = nn.Conv2d(32, 64, 3, stride=2, padding=1)
+        self.conv4 = nn.Conv2d(64, 32, 1, stride=1, padding=0)
+
+        self.fc1 = nn.Linear(512, 128)
+        self.fc2 = nn.Linear(128, 32)
+
+        self.fc3 = nn.Linear(64, 16)
+        self.fc4 = nn.Linear(16, 16)
+        self.fc3 = nn.Linear(16, 2)
+        self.apply(weights_init)
+
+    def extract_feature(self, x):
+        x = F.tanh(F.max_pool2d(self.conv1(x), kernel_size=2, stride=2))
+        x = F.tanh(F.max_pool2d(self.conv2(x), kernel_size=2, stride=2))
+        x = F.tanh(F.max_pool2d(self.conv3(x), kernel_size=2, stride=2)) # 1x64x4x4
+        x = F.tanh(self.conv4(x))
+        x = x.view(x.size(0), -1)
+
+        x = F.tanh(self.fc1(x))
+        return F.tanh(self.fc2(x))
+
+    def forward(self, x1, x2):
+        x1 = self.extract_feature(x1)
+        x2 = self.extract_feature(x2)
+        x = torch.cat([x1, x2], dim=1)
+        x = F.tanh(self.fc3(x))
+        x = F.tanh(self.fc4(x))
+        return F.tanh(self.fc5(x))
 
 if __name__ == '__main__':
     net = ConvLSTMMulti(num_actions=2, pretrained=True, frame_history_len=4, use_seg=True,
                       use_xyz=True, model_name='drn_d_22', num_classes=4, hidden_dim=512, info_dim=16)
-    action = Variable(torch.zeros(16, 2, 2), requires_grad = False)
-    img = Variable(torch.zeros(16, 2, 12, 256, 256), requires_grad = False)
+    action = Variable(torch.zeros(16, 2, 2), requires_grad=False)
+    img = Variable(torch.zeros(16, 2, 12, 256, 256), requires_grad=False)
     result = net(img, action)
     for i in result:
         print(i.size())
