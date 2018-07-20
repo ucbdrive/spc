@@ -309,7 +309,7 @@ def sample_cont_action(args, net, imgs, info=None, prev_action = None, testing=F
         if not os.path.isdir('actions'):
             os.mkdir('actions')
         plt.savefig('actions/step_%07d.png' % tt, dpi=100)
-
+        plt.close()
         idx = np.argmin(loss)
         return np.array([0.5, idx / 50 - 1])
 
