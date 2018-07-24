@@ -177,10 +177,10 @@ class MPCBuffer(object):
 
         if done:
             if self.last_done_idx > idx:
-                self.reward[self.last_done_idx:] = reward
+                self.reward[self.last_done_idx+1:] = reward
                 self.reward[:idx+1] = reward
             else:
-                self.reward[self.last_done_idx:idx+1] = reward
+                self.reward[self.last_done_idx+1:idx+1] = reward
         self.last_done_idx = idx
         
     def store_effect(self, idx, coll, off, speed, angle, pos, xyz, seg):
