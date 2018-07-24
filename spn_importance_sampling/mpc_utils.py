@@ -99,7 +99,7 @@ class MPCBuffer(object):
     def sample(self, batch_size, sample_early=False):
         assert self.can_sample(batch_size)
         if sample_early == False:
-            idxes = self.sample_n_unique(lambda: np.random.choice(self.num_in_buffer, p=self.reward[:self.num_in_buffer]/self.reward[:self.num_in_buffer][:self.num_in_buffer].sum()), batch_size)
+            idxes = self.sample_n_unique(lambda: np.random.choice(self.num_in_buffer, p=self.reward[:self.num_in_buffer]/self.reward[:self.num_in_buffer].sum()), batch_size)
         else:
             idxes = self.sample_n_unique(lambda: random.randint(0, int(self.num_in_buffer / 3) - 2), batch_size)
         return self._encode_sample(idxes), idxes
