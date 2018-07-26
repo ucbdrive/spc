@@ -277,7 +277,7 @@ class ConvLSTMMulti(nn.Module):
         hidden = x
         cell = Variable(torch.zeros(batch_size, self.args.classes, 256, 256), requires_grad=False)
         result = []
-        for step in pred_steps:
+        for step in range(pred_steps):
             action_enc = self.conv_lstm.encode_action(action[:, step, :])
             hx, cell = self.conv_lstm.feature_map_predictor(action_enc, (hidden, cell))
             result.append(hx)

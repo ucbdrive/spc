@@ -48,7 +48,8 @@ def train_model_new(args, train_net, mpc_buffer, optimizer, tt):
         loss.backward()
         optimizer.step()
         with open(os.path.join(args.save_path, 'seg_ls.txt'), 'a') as f:
-            f.write('step %d loss %0.4f\n' % (tt, loss.data.cpu().numpy()))
+            f.write('seg step %d loss %0.4f\n' % (tt, loss.data.cpu().numpy()))
+        print(('step %d loss %0.4f' % (i, loss.data.cpu().numpy())))
 
     cnt = 0
     while True:
@@ -62,6 +63,7 @@ def train_model_new(args, train_net, mpc_buffer, optimizer, tt):
         accuracy = (tn + tp) / (tn + fp + fn + tp) * 100.0
         with open(os.path.join(args.save_path, 'coll_acc.txt'), 'a') as f:
             f.write('step %d accuracy %0.4f loss %0.4f\n' % (tt, accuracy, loss.data.cpu().numpy()))
+        print(('collision accuracy %0.2f loss %0.4f' % (accuracy, loss.data.cpu().numpy())))
         cnt = cnt + 1 if accuracy > 80 else 0
         if cnt >= 3:
             break
@@ -78,9 +80,21 @@ def train_model_new(args, train_net, mpc_buffer, optimizer, tt):
         accuracy = (tn + tp) / (tn + fp + fn + tp) * 100.0
         with open(os.path.join(args.save_path, 'off_acc.txt'), 'a') as f:
             f.write('step %d accuracy %0.4f loss %0.4f\n' % (tt, accuracy, loss.data.cpu().numpy()))
+        print(('offroad accuracy %0.2f loss %0.4f' % (accuracy, loss.data.cpu().numpy())))
         cnt = cnt + 1 if accuracy > 80 else 0
         if cnt >= 3:
             break
+
+    for i in range(100):
+        feature, target = mpc_buffer.sample_distance(args.batch_size)
+        distance = train_net.predict_distance(feature)
+        optimizer.zero_grad()
+        loss = nn.CrossEntropyLoss()(distance, target)
+        loss.backward()
+        optimizer.step()
+        with open(os.path.join(args.save_path, 'pred_ls.txt'), 'a') as f:
+            f.write('step %d loss %0.4f\n' % (tt, loss.data.cpu().numpy()))
+        print(('distance step %d loss %0.4f' % (i, loss.data.cpu().numpy())))
 
     for i in range(100):
         feature, action, target = mpc_buffer.sample_seq()
@@ -91,6 +105,7 @@ def train_model_new(args, train_net, mpc_buffer, optimizer, tt):
         optimizer.step()
         with open(os.path.join(args.save_path, 'pred_ls.txt'), 'a') as f:
             f.write('step %d loss %0.4f\n' % (tt, loss.data.cpu().numpy()))
+        print(('seq step %d loss %0.4f' % (i, loss.data.cpu().numpy())))
 
     
 def train_model(args, train_net, mpc_buffer, epoch, avg_img_t, std_img_t):
