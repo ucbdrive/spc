@@ -253,22 +253,22 @@ def train_policy(args, env, num_steps=40000000):
             dqn_agent.store_effect(dqn_action, reward['with_pos'], done)
         
         if tt % args.learning_freq == 0 and tt > args.learning_starts and buffer_manager.mpc_buffer.can_sample(args.batch_size):
-            for ep in range(args.num_train_steps):
-                train_model_new(args, train_net, buffer_manager.mpc_buffer, optimizer, tt)
+            train_model_new(args, train_net, buffer_manager.mpc_buffer, optimizer, tt)
+            # for ep in range(args.num_train_steps):
                 # optimizer.zero_grad()
                 # loss = train_model(args, train_net, buffer_manager.mpc_buffer, epoch, buffer_manager.avg_img, buffer_manager.std_img)
                 # print('loss = %0.4f\n' % loss.data.cpu().numpy())
                 # loss.backward()
                 # optimizer.step()
-                if args.data_parallel:
-                    net.load_state_dict(train_net.module.state_dict())
-                else:
-                    net.load_state_dict(train_net.state_dict())
-                epoch += 1
+                # epoch += 1
+            if args.data_parallel:
+                net.load_state_dict(train_net.module.state_dict())
+            else:
+                net.load_state_dict(train_net.state_dict())
 
-                if args.use_dqn:
-                    dqn_agent.train_model(args.batch_size, tt)
-                if epoch % args.save_freq == 0:
-                    torch.save(train_net.module.state_dict(), args.save_path+'/model/pred_model_'+str(tt).zfill(9)+'.pt')
-                    torch.save(optimizer.state_dict(), args.save_path+'/optimizer/optimizer.pt')
-                    pkl.dump(epoch, open(args.save_path+'/epoch.pkl', 'wb'))
+            if args.use_dqn:
+                dqn_agent.train_model(args.batch_size, tt)
+            if True:#epoch % args.save_freq == 0:
+                torch.save(train_net.module.state_dict(), args.save_path+'/model/pred_model_'+str(tt).zfill(9)+'.pt')
+                torch.save(optimizer.state_dict(), args.save_path+'/optimizer/optimizer.pt')
+                pkl.dump(epoch, open(args.save_path+'/epoch.pkl', 'wb'))

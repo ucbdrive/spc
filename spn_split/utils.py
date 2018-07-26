@@ -38,6 +38,8 @@ def weights_init(m):
         m.bias.data.fill_(0)
 
 def train_model_new(args, train_net, mpc_buffer, optimizer, tt):
+    if args.data_parallel:
+        train_net = train_net.module
     for i in range(100):
         obs, target = mpc_buffer.sample_seg(args.batch_size)
         seg = train_net.predict_seg(obs)

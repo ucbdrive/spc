@@ -47,14 +47,20 @@ class MPCBuffer(object):
         idxes = random.sample(range(self.num_in_buffer), batch_size)
         obs = Variable(torch.from_numpy(np.concatenate([self.obs[idx][np.newaxis,:] for idx in idxes], 0)).float() / 255.0, requires_grad=False)
         seg = Variable(torch.from_numpy(np.concatenate([self.seg[idx] for idx in idxes], 0)).long(), requires_grad=False)
+        if torch.cuda.is_available():
+            obs = obs.cuda()
+            seg = seg.cuda()
         return obs, seg
 
     def sample_collision(self, batch_size):
         idxes_1, _ = np.where(self.coll > 0)
         idxes_2, _ = np.where(self.coll == 0)
         idxes = random.sample(list(idxes_1), int(batch_size/2)) + random.sample(list(idxes_2), int(batch_size/2))
-        feature = Variable(torch.from_numpy(np.concatenate([OneHotEncoder(n_values=self.args.classes, sparse=False).fit_transform(self.seg[idx, 0]).reshape(256, 256, 1, 3).transpose(2, 3, 0, 1) for idx in idxes], 0)).float(), requires_grad=False)
-        collision = Variable(torch.cat([torch.ones(int(batch_size/2)), torch.zeros(int(batch_size/2))], dim=-1), requires_grad=False)
+        feature = Variable(torch.from_numpy(np.concatenate([OneHotEncoder(n_values=self.args.classes, sparse=False).fit_transform(self.seg[idx, 0]).reshape(256, 256, 1, self.args.classes).transpose(2, 3, 0, 1) for idx in idxes], 0)).float(), requires_grad=False)
+        collision = Variable(torch.cat([torch.ones(int(batch_size/2)), torch.zeros(int(batch_size/2))], dim=-1).long(), requires_grad=False)
+        if torch.cuda.is_available():
+            feature = feature.cuda()
+            collision = collision.cuda()
         return feature, collision
 
     def sample_offroad(self, batch_size):
@@ -62,7 +68,10 @@ class MPCBuffer(object):
         idxes_2, _ = np.where(self.offroad == 0)
         idxes = random.sample(list(idxes_1), int(batch_size/2)) + random.sample(list(idxes_2), int(batch_size/2))
         feature = Variable(torch.from_numpy(np.concatenate([OneHotEncoder(n_values=self.args.classes, sparse=False).fit_transform(self.seg[idx, 0]).reshape(256, 256, 1, self.args.classes).transpose(2, 3, 0, 1) for idx in idxes], 0)).float(), requires_grad=False)
-        offroad = Variable(torch.cat([torch.ones(int(batch_size/2)), torch.zeros(int(batch_size/2))], dim=-1), requires_grad=False)
+        offroad = Variable(torch.cat([torch.ones(int(batch_size/2)), torch.zeros(int(batch_size/2))], dim=-1).long(), requires_grad=False)
+        if torch.cuda.is_available():
+            feature = feature.cuda()
+            offroad = offroad.cuda()
         return feature, offroad
 
     def sample_distance(self, batch_size):
@@ -74,6 +83,9 @@ class MPCBuffer(object):
         feature = Variable(torch.from_numpy(np.concatenate([OneHotEncoder(n_values=self.args.classes, sparse=False).fit_transform(self.seg[idx+i, 0]).reshape(256, 256, 1, self.args.classes).transpose(2, 3, 0, 1) for idx in idxes for i in range(1-self.args.frame_history_len, 1)], 0).reshape(batch_size, self.args.frame_history_len*self.args.classes, 256, 256)).float(), requires_grad=False)
         idx = np.array(idx)
         distance = Variable(torch.from_numpy(self.speed[idx] * (np.cos(self.angle[idx]) - np.abs(np.sin(self.angle[idx])))).float(), requires_grad=False)
+        if torch.cuda.is_available():
+            feature = feature.cuda()
+            distance = distance.cuda()
         return feature, distance
 
     def sample_seq(self):
@@ -83,6 +95,10 @@ class MPCBuffer(object):
         feature = Variable(torch.from_numpy(np.concatenate([OneHotEncoder(n_values=self.args.classes, sparse=False).fit_transform(self.seg[idx+i, 0]).reshape(256, 256, 1, self.args.classes).transpose(2, 3, 0, 1) for i in range(1-self.args.frame_history_len, 1)], 0).reshape(1, self.args.frame_history_len*self.args.classes, 256, 256)).float(), requires_grad=False)
         action = Variable(torch.from_numpy(self.action[idx: idx+20]), requires_grad=False)
         seg = Variable(torch.from_numpy(np.concatenate([self.seg[idx+i] for i in range(1, 21)], 0)).long(), requires_grad=False)
+        if torch.cuda.is_available():
+            feature = feature.cuda()
+            action = action.cuda()
+            seg = seg.cuda()
         return feature, action, seg
 
     def sample_n_unique(self, sampling_f, n):
