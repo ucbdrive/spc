@@ -16,6 +16,7 @@ import pdb
 from scipy.misc import imsave
 import copy
 import matplotlib.pyplot as plt
+from sklearn.preprocessing import OneHotEncoder
 
 def weights_init(m):
     classname = m.__class__.__name__
@@ -40,19 +41,19 @@ def weights_init(m):
 def train_model_new(args, train_net, mpc_buffer, optimizer, tt):
     if args.data_parallel:
         train_net = train_net.module
-    for i in range(100):
+
+    for i in range(args.num_train_steps):
         obs, target = mpc_buffer.sample_seg(args.batch_size)
         seg = train_net.predict_seg(obs)
         optimizer.zero_grad()
-        loss = nn.CrossEntropyLoss()(seg, target)
+        loss = nn.NLLLoss()(seg, target)
         loss.backward()
         optimizer.step()
         with open(os.path.join(args.save_path, 'seg_ls.txt'), 'a') as f:
             f.write('seg step %d loss %0.4f\n' % (tt, loss.data.cpu().numpy()))
         print(('step %d loss %0.4f' % (i, loss.data.cpu().numpy())))
 
-    cnt = 0
-    while True:
+    for i in range(args.num_train_steps):
         feature, target = mpc_buffer.sample_collision(args.batch_size)
         collision = train_net.predict_collision(feature)
         optimizer.zero_grad()
@@ -61,15 +62,12 @@ def train_model_new(args, train_net, mpc_buffer, optimizer, tt):
         optimizer.step()
         tn, fp, fn, tp = confusion_matrix(target, torch.max(collision, -1)[1], labels = [0, 1]).ravel()
         accuracy = (tn + tp) / (tn + fp + fn + tp) * 100.0
+        # pdb.set_trace()
         with open(os.path.join(args.save_path, 'coll_acc.txt'), 'a') as f:
             f.write('step %d accuracy %0.4f loss %0.4f\n' % (tt, accuracy, loss.data.cpu().numpy()))
         print(('collision accuracy %0.2f loss %0.4f' % (accuracy, loss.data.cpu().numpy())))
-        cnt = cnt + 1 if accuracy > 80 else 0
-        if cnt >= 3:
-            break
 
-    cnt = 0
-    while True:
+    for i in range(args.num_train_steps):
         feature, target = mpc_buffer.sample_offroad(args.batch_size)
         offroad = train_net.predict_offroad(feature)
         optimizer.zero_grad()
@@ -78,14 +76,12 @@ def train_model_new(args, train_net, mpc_buffer, optimizer, tt):
         optimizer.step()
         tn, fp, fn, tp = confusion_matrix(target, torch.max(offroad, -1)[1], labels = [0, 1]).ravel()
         accuracy = (tn + tp) / (tn + fp + fn + tp) * 100.0
+        # pdb.set_trace()
         with open(os.path.join(args.save_path, 'off_acc.txt'), 'a') as f:
             f.write('step %d accuracy %0.4f loss %0.4f\n' % (tt, accuracy, loss.data.cpu().numpy()))
         print(('offroad accuracy %0.2f loss %0.4f' % (accuracy, loss.data.cpu().numpy())))
-        cnt = cnt + 1 if accuracy > 80 else 0
-        if cnt >= 3:
-            break
 
-    for i in range(100):
+    for i in range(args.num_train_steps):
         feature, target = mpc_buffer.sample_distance(args.batch_size)
         distance = train_net.predict_distance(feature)
         optimizer.zero_grad()
@@ -96,11 +92,11 @@ def train_model_new(args, train_net, mpc_buffer, optimizer, tt):
             f.write('step %d loss %0.4f\n' % (tt, loss.data.cpu().numpy()))
         print(('distance step %d loss %0.4f' % (i, loss.data.cpu().numpy())))
 
-    for i in range(100):
+    for i in range(args.num_train_steps):
         feature, action, target = mpc_buffer.sample_seq()
         seg = train_net.predict_feature(feature, action)
         optimizer.zero_grad()
-        loss = nn.CrossEntropyLoss()(seg, target)
+        loss = nn.NLLLoss()(seg, target)
         loss.backward()
         optimizer.step()
         with open(os.path.join(args.save_path, 'pred_ls.txt'), 'a') as f:

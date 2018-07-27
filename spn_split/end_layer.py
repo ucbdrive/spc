@@ -11,16 +11,13 @@ class end_layer(nn.Module):
         self.args, self.activate = args, activate
 
         if args.use_seg:
-            self.conv1 = nn.Conv2d(in_channels, 32, 5, stride = 2, padding = 2)
-            self.conv2 = nn.Conv2d(32, 64, 5, stride = 1, padding = 2)
-            self.conv3 = nn.Conv2d(64, 96, 3, stride = 1, padding = 1)
-            self.conv4 = nn.Conv2d(96, 192, 1, stride = 1, padding = 0)
-            self.conv5 = nn.Conv2d(192, 32, 1, stride = 1, padding = 0)
-
-            self.fc1 = nn.Linear(8192, 512)
-            self.fc2 = nn.Linear(512, 128)
-            self.fc3 = nn.Linear(128, 32)
-            self.fc4 = nn.Linear(32, out_dim)
+            self.conv1 = nn.Conv2d(in_channels, 16, 5, stride=2, padding=1)
+            self.conv2 = nn.Conv2d(16, 32, 3, stride=2, padding=1)
+            self.conv3 = nn.Conv2d(32, 64, 3, stride=2, padding=1)
+            self.conv4 = nn.Conv2d(64, 32, 1, stride=1, padding=0)
+            self.fc1 = nn.Linear(128, 128)
+            self.fc2 = nn.Linear(128, 32)
+            self.fc3 = nn.Linear(32, out_dim)
         else:
             self.fc1 = nn.Linear(args.hidden_dim + args.info_dim, 512)
             #self.fc2 = nn.Linear(512 + args.info_dim, 128)
@@ -32,17 +29,14 @@ class end_layer(nn.Module):
 
     def forward(self, x):
         if self.args.use_seg:
-            x = F.sigmoid(F.avg_pool2d(self.conv1(x), kernel_size = 2, stride = 2))
-            x = F.sigmoid(F.avg_pool2d(self.conv2(x), kernel_size = 2, stride = 2))
-            x = F.sigmoid(F.max_pool2d(self.conv3(x), kernel_size = 2, stride = 2)) # 1x64x4x4
-            x = F.sigmoid(self.conv4(x))
-            x = F.sigmoid(self.conv5(x))
+            x = F.relu(F.max_pool2d(self.conv1(x), kernel_size=2, stride=2))
+            x = F.relu(F.max_pool2d(self.conv2(x), kernel_size=2, stride=2))
+            x = F.relu(F.max_pool2d(self.conv3(x), kernel_size=2, stride=2))
+            x = F.relu(F.max_pool2d(self.conv4(x), kernel_size=2, stride=2))
             x = x.view(x.size(0), -1)
-
-            x = F.sigmoid(self.fc1(x))
-            x = F.sigmoid(self.fc2(x))
-            x = F.sigmoid(self.fc3(x))
-            x = self.fc4(x)
+            x = F.relu(self.fc1(x.view(x.size(0), -1)))
+            x = F.relu(self.fc2(x))
+            x = self.fc3(x)
         else:
             x = torch.cat([hidden, info], dim = 1)
             x = F.sigmoid(self.fc1(x))

@@ -16,7 +16,7 @@ def init_parser(parser):
     parser.add_argument('--seed', type = int, default=0)
     parser.add_argument('--data-parallel', action='store_true')
     parser.add_argument('--id', type = int, default = 0)
-    parser.add_argument('--num-train-steps', type=int, default=20)
+    parser.add_argument('--num-train-steps', type=int, default=100)
     # enviroument configurations
     parser.add_argument('--env', type = str, default = 'torcs-v0', metavar = 'ENV', help = 'environment')
     parser.add_argument('--xvfb', type = bool, default = True)
@@ -28,6 +28,7 @@ def init_parser(parser):
     parser.add_argument('--pretrained', type = bool, default = True)
     parser.add_argument('--drn-model', type = str, default = 'dla46x_c')
     parser.add_argument('--classes', type = int, default = 4)
+    parser.add_argument('--one-hot', action = 'store_true')
 
     parser.add_argument('--use-collision', action = 'store_true')
     parser.add_argument('--use-offroad', action = 'store_true')

@@ -13,8 +13,11 @@ import pdb
 
 def init_models(args):
     train_net = ConvLSTMMulti(args)
+    for param in train_net.parameters():
+        param.requires_grad = True
+    train_net.train()
     net = ConvLSTMMulti(args)
-    optimizer = optim.Adam(filter(lambda p: p.requires_grad, train_net.parameters()), lr=args.lr, amsgrad=True)
+    optimizer = optim.Adam(train_net.parameters(), lr=args.lr, amsgrad=True)
     train_net, epoch, optimizer = load_model(args.save_path, train_net, data_parallel=args.data_parallel, optimizer=optimizer, resume=args.resume)
     if args.data_parallel:
         net.load_state_dict(train_net.module.state_dict())
@@ -24,6 +27,8 @@ def init_models(args):
     if torch.cuda.is_available():
         train_net = train_net.cuda()
         net = net.cuda()
+    for param in train_net.parameters():
+        param.requires_grad = True
     train_net.train()
     for param in net.parameters():
         param.requires_grad = False
@@ -232,6 +237,7 @@ def train_policy(args, env, num_steps=40000000):
             buffer_manager.update_avg_std_img()
 
         if done:
+            train_model_new(args, train_net, buffer_manager.mpc_buffer, optimizer, tt)
             num_episode += 1
             print('finished episode ', num_episode)
             if no_explore:
@@ -253,7 +259,7 @@ def train_policy(args, env, num_steps=40000000):
             dqn_agent.store_effect(dqn_action, reward['with_pos'], done)
         
         if tt % args.learning_freq == 0 and tt > args.learning_starts and buffer_manager.mpc_buffer.can_sample(args.batch_size):
-            train_model_new(args, train_net, buffer_manager.mpc_buffer, optimizer, tt)
+            # train_model_new(args, train_net, buffer_manager.mpc_buffer, optimizer, tt)
             # for ep in range(args.num_train_steps):
                 # optimizer.zero_grad()
                 # loss = train_model(args, train_net, buffer_manager.mpc_buffer, epoch, buffer_manager.avg_img, buffer_manager.std_img)

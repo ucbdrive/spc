@@ -44,7 +44,7 @@ class MPCBuffer(object):
         self.xyz      = None
 
     def sample_seg(self, batch_size):
-        idxes = random.sample(range(self.num_in_buffer), batch_size)
+        idxes = np.random.choice(range(self.num_in_buffer), batch_size)
         obs = Variable(torch.from_numpy(np.concatenate([self.obs[idx][np.newaxis,:] for idx in idxes], 0)).float() / 255.0, requires_grad=False)
         seg = Variable(torch.from_numpy(np.concatenate([self.seg[idx] for idx in idxes], 0)).long(), requires_grad=False)
         if torch.cuda.is_available():
@@ -53,10 +53,13 @@ class MPCBuffer(object):
         return obs, seg
 
     def sample_collision(self, batch_size):
-        idxes_1, _ = np.where(self.coll > 0)
-        idxes_2, _ = np.where(self.coll == 0)
-        idxes = random.sample(list(idxes_1), int(batch_size/2)) + random.sample(list(idxes_2), int(batch_size/2))
-        feature = Variable(torch.from_numpy(np.concatenate([OneHotEncoder(n_values=self.args.classes, sparse=False).fit_transform(self.seg[idx, 0]).reshape(256, 256, 1, self.args.classes).transpose(2, 3, 0, 1) for idx in idxes], 0)).float(), requires_grad=False)
+        idxes_1, _ = np.where(self.coll[:self.num_in_buffer] > 0)
+        idxes_2, _ = np.where(self.coll[:self.num_in_buffer] == 0)
+        idxes = list(np.random.choice(list(idxes_1), int(batch_size/2))) + list(np.random.choice(list(idxes_2), int(batch_size/2)))
+        if self.args.one_hot:
+            feature = Variable(torch.from_numpy(np.concatenate([OneHotEncoder(n_values=self.args.classes, sparse=False).fit_transform(self.seg[idx, 0]).reshape(256, 256, 1, self.args.classes).transpose(2, 3, 0, 1) for idx in idxes], 0)).float(), requires_grad=False)
+        else:
+            feature = Variable(torch.from_numpy(np.concatenate([self.seg[idx] for idx in idxes], 0)).float(), requires_grad=False)
         collision = Variable(torch.cat([torch.ones(int(batch_size/2)), torch.zeros(int(batch_size/2))], dim=-1).long(), requires_grad=False)
         if torch.cuda.is_available():
             feature = feature.cuda()
@@ -64,10 +67,13 @@ class MPCBuffer(object):
         return feature, collision
 
     def sample_offroad(self, batch_size):
-        idxes_1, _ = np.where(self.offroad > 0)
-        idxes_2, _ = np.where(self.offroad == 0)
-        idxes = random.sample(list(idxes_1), int(batch_size/2)) + random.sample(list(idxes_2), int(batch_size/2))
-        feature = Variable(torch.from_numpy(np.concatenate([OneHotEncoder(n_values=self.args.classes, sparse=False).fit_transform(self.seg[idx, 0]).reshape(256, 256, 1, self.args.classes).transpose(2, 3, 0, 1) for idx in idxes], 0)).float(), requires_grad=False)
+        idxes_1, _ = np.where(self.offroad[:self.num_in_buffer] > 0)
+        idxes_2, _ = np.where(self.offroad[:self.num_in_buffer] == 0)
+        idxes = list(np.random.choice(list(idxes_1), int(batch_size/2))) + list(np.random.choice(list(idxes_2), int(batch_size/2)))
+        if self.args.one_hot:
+            feature = Variable(torch.from_numpy(np.concatenate([OneHotEncoder(n_values=self.args.classes, sparse=False).fit_transform(self.seg[idx, 0]).reshape(256, 256, 1, self.args.classes).transpose(2, 3, 0, 1) for idx in idxes], 0)).float(), requires_grad=False)
+        else:
+            feature = Variable(torch.from_numpy(np.concatenate([self.seg[idx] for idx in idxes], 0)).float(), requires_grad=False)
         offroad = Variable(torch.cat([torch.ones(int(batch_size/2)), torch.zeros(int(batch_size/2))], dim=-1).long(), requires_grad=False)
         if torch.cuda.is_available():
             feature = feature.cuda()
@@ -77,12 +83,15 @@ class MPCBuffer(object):
     def sample_distance(self, batch_size):
         idxes = []
         while len(idxes) < batch_size:
-            idx = random.randint(0, self.num_in_buffer - 2)
+            idx = random.randint(self.args.frame_history_len, self.num_in_buffer - self.args.pred_step)
             if idx not in idxes and np.sum(self.done[idx-self.args.frame_history_len+1:idx+1]) == 0:
                 idxes.append(idx)
-        feature = Variable(torch.from_numpy(np.concatenate([OneHotEncoder(n_values=self.args.classes, sparse=False).fit_transform(self.seg[idx+i, 0]).reshape(256, 256, 1, self.args.classes).transpose(2, 3, 0, 1) for idx in idxes for i in range(1-self.args.frame_history_len, 1)], 0).reshape(batch_size, self.args.frame_history_len*self.args.classes, 256, 256)).float(), requires_grad=False)
-        idx = np.array(idx)
-        distance = Variable(torch.from_numpy(self.speed[idx] * (np.cos(self.angle[idx]) - np.abs(np.sin(self.angle[idx])))).float(), requires_grad=False)
+        if self.args.one_hot:
+            feature = Variable(torch.from_numpy(np.concatenate([OneHotEncoder(n_values=self.args.classes, sparse=False).fit_transform(self.seg[(idx-self.args.frame_history_len+1):(idx+1), 0].reshape(256*self.args.frame_history_len, 256)).reshape(256, 256, 1, self.args.frame_history_len*self.args.classes).transpose(2, 3, 0, 1) for idx in idxes], 0)).float(), requires_grad=False)
+        else:
+            feature = Variable(torch.from_numpy(np.concatenate([self.seg[(idx-self.args.frame_history_len+1):(idx+1)].reshape(1, self.args.frame_history_len, 256, 256) for idx in idxes], 0)).float(), requires_grad=False)
+        idxes = np.array(idxes)
+        distance = Variable(torch.from_numpy(self.speed[idxes] * (np.cos(self.angle[idxes]) - np.abs(np.sin(self.angle[idxes])))).float(), requires_grad=False)
         if torch.cuda.is_available():
             feature = feature.cuda()
             distance = distance.cuda()
@@ -93,7 +102,7 @@ class MPCBuffer(object):
         while np.sum(self.done[idx-self.args.frame_history_len+1:idx+21]) > 0:
             idx = random.randint(0, self.num_in_buffer - 2)
         feature = Variable(torch.from_numpy(np.concatenate([OneHotEncoder(n_values=self.args.classes, sparse=False).fit_transform(self.seg[idx+i, 0]).reshape(256, 256, 1, self.args.classes).transpose(2, 3, 0, 1) for i in range(1-self.args.frame_history_len, 1)], 0).reshape(1, self.args.frame_history_len*self.args.classes, 256, 256)).float(), requires_grad=False)
-        action = Variable(torch.from_numpy(self.action[idx: idx+20]), requires_grad=False)
+        action = Variable(torch.from_numpy(self.action[idx: idx+20][np.newaxis, :]), requires_grad=False)
         seg = Variable(torch.from_numpy(np.concatenate([self.seg[idx+i] for i in range(1, 21)], 0)).long(), requires_grad=False)
         if torch.cuda.is_available():
             feature = feature.cuda()

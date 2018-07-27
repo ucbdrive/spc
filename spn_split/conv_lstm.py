@@ -35,6 +35,8 @@ class convLSTM(nn.Module):
         # self.cell_4 = convLSTMCell(in_channels, feature_channels, 3, stride = 1, padding = 1)
         # self.cell_5 = convLSTMCell(in_channels, feature_channels, 5, stride = 1, padding = 4, dilation = 2)
         # self.cell_6 = convLSTMCell(in_channels, feature_channels, 5, stride = 1, padding = 2)
+        self.softmax = nn.LogSoftmax(dim=1)
+        self.logsoftmax = nn.LogSoftmax(dim=1)
         self.apply(weights_init)
 
     def forward(self, x, hidden_states):
@@ -42,6 +44,8 @@ class convLSTM(nn.Module):
         hx, cx = self.cell_1(x, (hx, cx))
         hx, cx = self.cell_2(x, (hx, cx))
         hx, cx = self.cell_3(x, (hx, cx))
+        x = self.softmax(hx)
+        y = self.logsoftmax(hx)
 
         # _x = F.avg_pool2d(x, kernel_size = 2, stride = 2)
         # hx = F.avg_pool2d(hx, kernel_size = 2, stride = 2)
@@ -55,7 +59,7 @@ class convLSTM(nn.Module):
 
         # hx, cx = self.cell_5(x, (hx, cx))
         # hx, cx = self.cell_6(x, (hx, cx))
-        return hx, cx
+        return x, cx, y
 
 if __name__ == '__main__':
     net = convLSTM(3, 1)

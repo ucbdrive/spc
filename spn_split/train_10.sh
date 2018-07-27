@@ -2,7 +2,9 @@
 python3 train_torcs.py \
     --save-path mpc_10_cont_nopretrain \
     --continuous \
+    --one-hot \
     --use-seg \
+    --use-lstm \
     --num-total-act 2 \
     --pred-step 10 \
     --buffer-size 50000 \

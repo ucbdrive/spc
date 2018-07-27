@@ -109,7 +109,8 @@ class DLASeg(nn.Module):
         else:
             up = Identity()
         self.up = up
-        self.softmax = nn.LogSoftmax(dim=1)
+        self.softmax = nn.Softmax(dim=1)
+        self.logsoftmax = nn.LogSoftmax(dim=1)
 
         for m in self.fc.modules():
             if isinstance(m, nn.Conv2d):
@@ -124,8 +125,9 @@ class DLASeg(nn.Module):
         x = self.dla_up(x[self.first_level:])
         x = self.fc(x)
         x = self.up(x)
-        # y = self.softmax(x)
-        return x
+        y = self.logsoftmax(x)
+        x = self.softmax(x)
+        return x, y
 
     def optim_parameters(self, memo=None):
         for param in self.base.parameters():
@@ -148,7 +150,7 @@ class ConvLSTMNet(nn.Module):
             if not args.use_lstm:
                 self.actionEncoder = nn.Linear(args.num_total_act, 32)
             self.drnseg = DLASeg(args)
-            self.feature_map_predictor = convLSTM(1, args.classes * args.frame_history_len, args.classes) if args.use_lstm else fcn(args.classes * args.frame_history_len, args.classes)
+            self.feature_map_predictor = convLSTM(3, args.classes * args.frame_history_len, args.classes) if args.use_lstm else fcn(args.classes * args.frame_history_len, args.classes)
             #self.up_sampler = lambda x: F.upsample(x, scale_factor = 8, mode = 'bilinear', align_corners = True)
         else:
             self.action_encode = nn.Linear(args.num_total_act, args.info_dim)
@@ -161,9 +163,14 @@ class ConvLSTMNet(nn.Module):
             self.cell_encode = nn.Linear(args.hidden_dim+args.hidden_dim, args.hidden_dim)
     
         # output layers
-        self.coll_layer = end_layer(args, args.classes, 2, nn.Softmax(dim = -1))
-        self.off_layer = end_layer(args, args.classes, 2, nn.Softmax(dim = -1))
-        self.dist_layer = end_layer(args, args.classes * args.frame_history_len, 1)
+        if args.one_hot:
+            self.coll_layer = end_layer(args, args.classes, 2)
+            self.off_layer = end_layer(args, args.classes, 2)
+            self.dist_layer = end_layer(args, args.classes * args.frame_history_len, 1)
+        else:
+            self.coll_layer = end_layer(args, 1, 2)
+            self.off_layer = end_layer(args, 1, 2)
+            self.dist_layer = end_layer(args, args.frame_history_len, 1)
 
         # optional layers
         if args.use_pos:
@@ -181,6 +188,7 @@ class ConvLSTMNet(nn.Module):
             action_enc = self.action_up2(F.sigmoid(self.action_up1(action_enc)))
         else:
             action_enc = F.relu(self.action_encode(action))
+        return action_enc
 
     def forward(self, x, action, with_encode=False, hidden=None, cell=None, training=True):
         if with_encode == False:
@@ -189,22 +197,26 @@ class ConvLSTMNet(nn.Module):
         #    x = x.detach()
         if hidden is None or cell is None:
             hidden = x # Variable(torch.zeros(shape))
-            cell = Variable(torch.zeros(self.args.batch_size, self.args.classes, 256, 256), requires_grad=False) # Variable(torch.zeros(shape))
-        if self.args.use_seg and self.args.use_lstm:
-            pass
+            cell = Variable(torch.zeros(x.size(0), self.args.classes, 256, 256), requires_grad=False) # Variable(torch.zeros(shape))
+            if torch.cuda.is_available():
+                cell = cell.cuda()
 
         output_dict = dict()
         action_enc = self.encode_action(action)
         if self.args.use_seg:
             if self.args.use_lstm:
-                hidden, cell = self.feature_map_predictor(action_enc, (hidden, cell))
+                try:
+                    hx, cell, y = self.feature_map_predictor(action_enc, (hidden, cell))
+                    hidden = torch.cat([hidden[:, self.args.classes:, :, :], hx], dim=1).detach()
+                except:
+                    pdb.set_trace()
             else:
                 action_encoding = self.actionEncoder(action)
                 hidden = self.feature_map_predictor(x, action_encoding)
             if with_encode == False:
                 output_dict['seg_current'] = x[:, -self.args.classes:, :, :]
-            output_dict['seg_pred'] = hidden
-            nx_feature_enc = torch.cat([x[:, self.args.classes:, :, :], hidden], dim = 1).detach()
+            output_dict['seg_pred'] = y
+            nx_feature_enc = hidden.detach()
         else:
             encode = torch.cat([x, action_enc], dim = 1)
             encode = F.relu(self.info_encode(encode))
@@ -213,9 +225,12 @@ class ConvLSTMNet(nn.Module):
             output_dict['seg_pred'] = self.outfeature_encode(F.relu(torch.cat([nx_feature_enc, action_enc], dim = 1)))
 
         # major outputs
-        output_dict['coll_prob'] = self.coll_layer(hidden)
-        output_dict['offroad_prob'] = self.off_layer(hidden)
-        output_dict['dist'] = self.dist_layer(nx_feature_enc)
+        if not self.args.one_hot:
+            hidden = torch.argmax(hidden, 1)
+            nx_feature_enc = torch.argmax(nx_feature_enc, 1)
+        output_dict['coll_prob'] = self.coll_layer(hx)
+        output_dict['offroad_prob'] = self.off_layer(hx)
+        output_dict['dist'] = self.dist_layer(hidden)
 
         # optional outputs
         if self.args.use_pos:
@@ -235,7 +250,7 @@ class ConvLSTMNet(nn.Module):
         res = []
         batch_size = x.size(0)
         if self.args.use_seg:
-            res = torch.cat([self.drnseg(x[:, i*3 : (i+1)*3, :, :]) for i in range(self.args.frame_history_len)], dim = 1)
+            res = torch.cat([self.drnseg(x[:, i*3 : (i+1)*3, :, :])[0] for i in range(self.args.frame_history_len)], dim = 1)
         else:
             for i in range(self.args.frame_history_len):
                 out = self.dla(x[:, i*3 : (i+1)*3, :, :])
@@ -260,7 +275,8 @@ class ConvLSTMMulti(nn.Module):
         return torch.stack(feat, dim = 1)
 
     def predict_seg(self, x):
-        return self.conv_lstm.drnseg(x)
+        _, seg = self.conv_lstm.drnseg(x)
+        return seg
 
     def predict_collision(self, x):
         return self.conv_lstm.coll_layer(x)
@@ -273,16 +289,18 @@ class ConvLSTMMulti(nn.Module):
 
     def predict_feature(self, x, action):
         batch_size = x.size(0)
-        pred_steps = action.size(0)
+        pred_steps = action.size(1)
         hidden = x
         cell = Variable(torch.zeros(batch_size, self.args.classes, 256, 256), requires_grad=False)
+        if torch.cuda.is_available():
+            cell = cell.cuda()
         result = []
         for step in range(pred_steps):
-            action_enc = self.conv_lstm.encode_action(action[:, step, :])
-            hx, cell = self.conv_lstm.feature_map_predictor(action_enc, (hidden, cell))
-            result.append(hx)
-            hidden = torch.cat([hidden[:, self.args.classes:, :, :], hidden], dim=1)
-        return torch.stack(result, dim=1)
+            action_enc = self.conv_lstm.encode_action(action[:, step, :].view(batch_size, self.args.num_total_act))
+            hx, cell, y = self.conv_lstm.feature_map_predictor(action_enc, (hidden, cell))
+            result.append(y)
+            hidden = torch.cat([hidden[:, self.args.classes:, :, :], hx], dim=1)
+        return torch.cat(result, dim=0)
 
     def forward(self, imgs, actions=None, hidden=None, cell=None, get_feature=False, training=True):
         if get_feature:
