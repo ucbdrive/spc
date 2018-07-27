@@ -89,7 +89,7 @@ def train_model_new(args, train_net, mpc_buffer, optimizer, tt):
         feature, target = mpc_buffer.sample_distance(args.batch_size)
         distance = train_net.predict_distance(feature)
         optimizer.zero_grad()
-        loss = nn.CrossEntropyLoss()(distance, target)
+        loss = nn.MSELoss()(distance, target)
         loss.backward()
         optimizer.step()
         with open(os.path.join(args.save_path, 'pred_ls.txt'), 'a') as f:
