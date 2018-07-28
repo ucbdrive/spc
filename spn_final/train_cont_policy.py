@@ -210,13 +210,7 @@ def train_policy(args, env, num_steps=40000000):
             avg_img, std_img = buffer_manager.img_buffer.get_avg_std()
         else:
             avg_img, std_img = None, None
-        # if info['trackPos'] < -7.0:
-        #     must_explore = True
-        # else:
-        #     must_explore = False
         action, dqn_action = action_manager.sample_action(net, dqn_agent, obs, obs_var, exploration, tt, avg_img, std_img, info, no_explore=no_explore, must_explore=must_explore)
-        #if num_episode % 3 == 0:
-        #    action[1] = action[1]*-1.0
         obs, reward, done, info = env.step(action)
         if args.target_speed > 0:
             with open(os.path.join(args.save_path, 'speedlog.txt'), 'a') as f:
