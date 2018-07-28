@@ -224,7 +224,7 @@ class ConvLSTMNet(nn.Module):
             if with_encode == False:
                 output_dict['seg_current'] = x[:, -self.args.classes:, :, :]
             output_dict['seg_pred'] = y
-            nx_feature_enc = hidden.detach()
+            nx_feature_enc = hidden
         else:
             encode = torch.cat([x, action_enc], dim = 1)
             encode = F.relu(self.info_encode(encode))
@@ -236,9 +236,9 @@ class ConvLSTMNet(nn.Module):
         if self.args.use_seg and not self.args.one_hot:
             hidden = torch.argmax(hidden, 1)
             nx_feature_enc = torch.argmax(nx_feature_enc, 1)
-        output_dict['coll_prob'] = self.coll_layer(hx)
-        output_dict['offroad_prob'] = self.off_layer(hx)
-        output_dict['dist'] = self.dist_layer(hidden)
+        output_dict['coll_prob'] = self.coll_layer(hx.detach())
+        output_dict['offroad_prob'] = self.off_layer(hx.detach())
+        output_dict['dist'] = self.dist_layer(hidden.detach())
 
         # optional outputs
         if self.args.use_pos:
@@ -249,9 +249,6 @@ class ConvLSTMNet(nn.Module):
             output_dict['speed'] = self.speed_layer(nx_feature_enc)
         if self.args.use_xyz:
             output_dict['xyz'] = self.xyz_layer(nx_feature_enc)
-        
-        if self.args.use_seg:
-            hidden = nx_feature_enc
         return output_dict, nx_feature_enc, hidden, cell
      
     def get_feature(self, x):
