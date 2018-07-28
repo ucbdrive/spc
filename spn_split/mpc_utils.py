@@ -87,7 +87,7 @@ class MPCBuffer(object):
             if idx not in idxes and np.sum(self.done[idx-self.args.frame_history_len+1:idx+1]) == 0:
                 idxes.append(idx)
         if self.args.one_hot:
-            feature = Variable(torch.from_numpy(np.concatenate([OneHotEncoder(n_values=self.args.classes, sparse=False).fit_transform(self.seg[(idx-self.args.frame_history_len+1):(idx+1), 0].reshape(256*self.args.frame_history_len, 256)).reshape(256, 256, 1, self.args.frame_history_len*self.args.classes).transpose(2, 3, 0, 1) for idx in idxes], 0)).float(), requires_grad=False)
+            feature = Variable(torch.from_numpy(np.concatenate([OneHotEncoder(n_values=self.args.classes, sparse=False).fit_transform(self.seg[(idx-self.args.frame_history_len+1):(idx+1), 0].reshape(self.args.frame_history_len, 256*256)).reshape(self.args.frame_history_len, 256, 256, 1, self.args.classes).transpose(3, 0, 4, 1, 2).reshape(1, self.args.frame_history_len*self.args.classes, 256, 256) for idx in idxes], 0)).float(), requires_grad=False)
         else:
             feature = Variable(torch.from_numpy(np.concatenate([self.seg[(idx-self.args.frame_history_len+1):(idx+1)].reshape(1, self.args.frame_history_len, 256, 256) for idx in idxes], 0)).float(), requires_grad=False)
         idxes = np.array(idxes)
@@ -121,7 +121,7 @@ class MPCBuffer(object):
             if idx not in idxes and np.sum(self.done[idx-self.args.frame_history_len+1:idx+1]) == 0:
                 idxes.append(idx)
         if self.args.one_hot:
-            feature = Variable(torch.from_numpy(np.concatenate([OneHotEncoder(n_values=self.args.classes, sparse=False).fit_transform(self.seg[(idx-self.args.frame_history_len+1):(idx+1), 0].reshape(256*self.args.frame_history_len, 256)).reshape(256, 256, 1, self.args.frame_history_len*self.args.classes).transpose(2, 3, 0, 1) for idx in idxes], 0)).float(), requires_grad=False)
+            feature = Variable(torch.from_numpy(np.concatenate([OneHotEncoder(n_values=self.args.classes, sparse=False).fit_transform(self.seg[(idx-self.args.frame_history_len+1):(idx+1), 0].reshape(256*self.args.frame_history_len, 256)).reshape(self.args.frame_history_len, 256, 256, 1, self.args.classes).transpose(3, 0, 4, 1, 2).reshape(1, self.args.frame_history_len*self.args.classes, 256, 256) for idx in idxes], 0)).float(), requires_grad=False)
         else:
             feature = Variable(torch.from_numpy(np.concatenate([self.seg[(idx-self.args.frame_history_len+1):(idx+1)].reshape(1, self.args.frame_history_len, 256, 256) for idx in idxes], 0)).float(), requires_grad=False)
         action = Variable(torch.from_numpy(np.concatenate([self.action[idx].reshape(1, 2) for idx in idxes], 0)), requires_grad=False)

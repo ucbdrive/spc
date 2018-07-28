@@ -61,8 +61,10 @@ class TorcsWrapper:
         reward_with_pos = info['speed'] * (np.cos(info['angle']) - np.abs(np.sin(info['angle'])) - np.abs(info['trackPos']) / 9.0) / 40.0
         reward_without_pos = info['speed'] * (np.cos(info['angle']) - np.abs(np.sin(info['angle']))) / 40.0
         done = self.doneCond.isdone(info['trackPos'], dist_this, info['pos'], info['angle']) or self.epi_len > 1000 or self.done_cnt > 30 
-        off_flag = int(info['trackPos'] >= 7 or info['trackPos'] <= -4)
-        coll_flag = int(info['trackPos'] >= 20 or info['trackPos'] <= -6.5)
+        # off_flag = int(info['trackPos'] >= 7 or info['trackPos'] <= -4)
+        # coll_flag = int(info['trackPos'] >= 20 or info['trackPos'] <= -6.5)
+        off_flag = int(info['trackPos'] >=3 or info['trackPos'] <= -1)
+        coll_flag = int(abs(info['trackPos']) > 7.0)
         if coll_flag:
             self.coll_cnt += 1
         else:
