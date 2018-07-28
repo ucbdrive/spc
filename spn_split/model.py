@@ -140,7 +140,7 @@ class DLASeg(nn.Module):
 class ConvLSTMNet(nn.Module):
     def __init__(self, args):
         super(ConvLSTMNet, self).__init__()
-        if args.one_hot:
+        if not args.one_hot:
             args.classes = 1
         self.args = args
 
