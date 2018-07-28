@@ -38,7 +38,7 @@ if __name__ == '__main__':
         args.xvfb = False
     try:
         env = gym.make('TORCS-v0')
-        env.init(isServer=1, continuous=True, resize=True, ID=6)
+        env.init(isServer=1, continuous=True, resize=True, ID=args.id)
     except:
         from py_TORCS import torcs_envs
         envs = torcs_envs(num = 1, game_config = args.game_config, mkey_start = 817 + args.id, screen_id = 160 + args.id,
@@ -49,6 +49,7 @@ if __name__ == '__main__':
     obs1 = env.reset()
     obs, reward, done, info = env.step(np.array([1.0, 0.0]) if args.continuous else 1) # Action space is (-1,1)^2
     print(obs.shape, reward, done, info)
+    pdb.set_trace()
     seg = env.get_segmentation()
     train_policy(args, env, num_steps = 40000000)
     env.close()
