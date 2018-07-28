@@ -38,27 +38,23 @@ def weights_init(m):
         m.weight.data.fill_(1)
         m.bias.data.fill_(0)
 
-def train_model_new(args, train_net, mpc_buffer, optimizer, tt):
-    if args.data_parallel:
-        train_net = train_net.module
-
+def train_model_new(args, train_net, mpc_buffer, tt):
+    optimizer = optim.Adam(train_net.module.conv_lstm.drnseg.parameters(), lr=args.lr, amsgrad=True)
     for i in range(args.num_train_steps):
         obs, target = mpc_buffer.sample_seg(args.batch_size)
-        seg = train_net.predict_seg(obs)
+        seg = train_net(obs, function='predict_seg')
         optimizer.zero_grad()
         loss = nn.NLLLoss()(seg, target)
-        try:
-            loss.backward()
-        except:
-            pdb.set_trace()
+        loss.backward()
         optimizer.step()
         with open(os.path.join(args.save_path, 'seg_ls.txt'), 'a') as f:
             f.write('seg step %d loss %0.4f\n' % (tt, loss.data.cpu().numpy()))
         print(('step %d loss %0.4f' % (i, loss.data.cpu().numpy())))
 
+    optimizer = optim.Adam(train_net.module.conv_lstm.coll_layer.parameters(), lr=args.lr, amsgrad=True)
     for i in range(args.num_train_steps):
         feature, target = mpc_buffer.sample_collision(args.batch_size)
-        collision = train_net.predict_collision(feature)
+        collision = train_net(feature, function='predict_collision')
         optimizer.zero_grad()
         loss = nn.CrossEntropyLoss()(collision, target)
         loss.backward()
@@ -70,9 +66,10 @@ def train_model_new(args, train_net, mpc_buffer, optimizer, tt):
             f.write('step %d accuracy %0.4f loss %0.4f\n' % (tt, accuracy, loss.data.cpu().numpy()))
         print(('collision accuracy %0.2f loss %0.4f' % (accuracy, loss.data.cpu().numpy())))
 
+    optimizer = optim.Adam(train_net.module.conv_lstm.off_layer.parameters(), lr=args.lr, amsgrad=True)
     for i in range(args.num_train_steps):
         feature, target = mpc_buffer.sample_offroad(args.batch_size)
-        offroad = train_net.predict_offroad(feature)
+        offroad = train_net(feature, function='predict_offroad')
         optimizer.zero_grad()
         loss = nn.CrossEntropyLoss()(offroad, target)
         loss.backward()
@@ -84,9 +81,10 @@ def train_model_new(args, train_net, mpc_buffer, optimizer, tt):
             f.write('step %d accuracy %0.4f loss %0.4f\n' % (tt, accuracy, loss.data.cpu().numpy()))
         print(('offroad accuracy %0.2f loss %0.4f' % (accuracy, loss.data.cpu().numpy())))
 
+    optimizer = optim.Adam(train_net.module.conv_lstm.dist_layer.parameters(), lr=args.lr, amsgrad=True)
     for i in range(args.num_train_steps):
         feature, target = mpc_buffer.sample_distance(args.batch_size)
-        distance = train_net.predict_distance(feature)
+        distance = train_net(feature, function='predict_distance')
         optimizer.zero_grad()
         loss = nn.MSELoss()(distance, target)
         loss.backward()
@@ -98,9 +96,10 @@ def train_model_new(args, train_net, mpc_buffer, optimizer, tt):
     if args.use_lstm:
         coll_acc = 0
         off_acc = 0
+        optimizer = optim.Adam([param for param in train_net.module.conv_lstm.encode_action.parameters()] + [param for param in train_net.module.conv_lstm.feature_map_predictor.parameters()] + [param for param in train_net.module.conv_lstm.action_up1.parameters()] + [param for param in train_net.module.conv_lstm.action_up2.parameters()], lr=args.lr, amsgrad=True)
         for i in range(args.num_train_steps):
             feature, action, target, signals = mpc_buffer.sample_seq()
-            seg = train_net.predict_feature(feature, action)
+            seg = train_net(feature, action, function='predict_feature')
             optimizer.zero_grad()
             loss = nn.NLLLoss()(seg, target)
             loss.backward()
@@ -121,9 +120,10 @@ def train_model_new(args, train_net, mpc_buffer, optimizer, tt):
             for i in range(20):
                 f.write('step %d coll_acc %0.2f off_acc %0.2f\n' % (i+1, float(coll_acc[i])*100/args.num_train_steps, float(off_acc[i])*100/args.num_train_steps))
     else:
+        optimizer = optim.Adam([param for param in train_net.module.conv_lstm.actionEncoder.parameters()] + [param for param in train_net.module.conv_lstm.feature_map_predictor.parameters()], lr=args.lr, amsgrad=True)
         for i in range(args.num_train_steps):
             feature, action, target = mpc_buffer.sample_fcn(args.batch_size)
-            _, seg = train_net.predict_fcn(feature, action)
+            _, seg = train_net(feature, action, function='predict_fcn')
             optimizer.zero_grad()
             if args.one_hot:
                 loss = nn.NLLLoss()(seg, target)

@@ -45,7 +45,7 @@ if __name__ == '__main__':
                           isServer = int(args.xvfb), continuous = args.continuous, resize = True)
         env = envs.get_envs()[0]
         
-        obs1 = env.reset()
+    obs1 = env.reset()
     print(obs1.shape)
     obs, reward, done, info = env.step(np.array([1.0, 0.0]) if args.continuous else 1) # Action space is (-1,1)^2
     print(obs.shape, reward, done, info)

@@ -316,7 +316,20 @@ class ConvLSTMMulti(nn.Module):
         x, y = self.conv_lstm.feature_map_predictor(x, action_encoding)
         return x, y
 
-    def forward(self, imgs, actions=None, hidden=None, cell=None, get_feature=False, training=True):
+    def forward(self, imgs, actions=None, hidden=None, cell=None, get_feature=False, training=True, function=''):
+        if function == 'predict_seg':
+            return self.predict_seg(imgs)
+        elif function == 'predict_collision':
+            return self.predict_collision(imgs)
+        elif function == 'predict_offroad':
+            return self.predict_offroad(imgs)
+        elif function == 'predict_distance':
+            return self.predict_distance(imgs)
+        elif function == 'predict_feature':
+            return self.predict_feature(imgs, actions)
+        elif function == 'predict_fcn':
+            return self.predict_fcn(imgs, actions)
+
         if get_feature:
             return self.get_feature(imgs)
         batch_size, num_step, c, w, h = int(imgs.size()[0]), int(imgs.size()[1]), int(imgs.size()[-3]), int(imgs.size()[-2]), int(imgs.size()[-1])
