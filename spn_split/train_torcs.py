@@ -38,7 +38,7 @@ if __name__ == '__main__':
         args.xvfb = False
     try:
         env = gym.make('TORCS-v0')
-        env.init(isServer=0, continuous=True, resize=True, ID=args.id)
+        env.init(isServer=0, continuous=True, resize=True, ID=6)
     except:
         from py_TORCS import torcs_envs
         envs = torcs_envs(num = 1, game_config = args.game_config, mkey_start = 817 + args.id, screen_id = 160 + args.id,
