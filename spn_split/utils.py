@@ -92,18 +92,53 @@ def train_model_new(args, train_net, mpc_buffer, optimizer, tt):
             f.write('step %d loss %0.4f\n' % (tt, loss.data.cpu().numpy()))
         print(('distance step %d loss %0.4f' % (i, loss.data.cpu().numpy())))
 
-    for i in range(args.num_train_steps):
-        feature, action, target = mpc_buffer.sample_seq()
-        seg = train_net.predict_feature(feature, action)
-        optimizer.zero_grad()
-        loss = nn.NLLLoss()(seg, target)
-        loss.backward()
-        optimizer.step()
-        with open(os.path.join(args.save_path, 'pred_ls.txt'), 'a') as f:
-            f.write('step %d loss %0.4f\n' % (tt, loss.data.cpu().numpy()))
-        print(('seq step %d loss %0.4f' % (i, loss.data.cpu().numpy())))
+    if args.use_lstm:
+        coll_acc = 0
+        off_acc = 0
+        for i in range(args.num_train_steps):
+            feature, action, target, signals = mpc_buffer.sample_seq()
+            seg = train_net.predict_feature(feature, action)
+            optimizer.zero_grad()
+            loss = nn.NLLLoss()(seg, target)
+            loss.backward()
+            optimizer.step()
 
-    
+            seg = seg.detach()
+            with torch.no_grad():
+                collision = torch.argmax(train_net.predict_collision(seg), -1).cpu()
+                offroad = torch.argmax(train_net.predict_offroad(seg), -1).cpu()
+            coll_acc += collision == signals['collision']
+            off_acc += offroad == signals['offroad']
+
+            with open(os.path.join(args.save_path, 'pred_ls.txt'), 'a') as f:
+                f.write('step %d loss %0.4f\n' % (tt, loss.data.cpu().numpy()))
+            print(('seq step %d loss %0.4f' % (i, loss.data.cpu().numpy())))
+        with open(os.path.join(args.save_path, 'signal_acc.txt'), 'a') as f:
+            f.write('train step %d\n' % tt)
+            for i in range(20):
+                f.write('step %d coll_acc %0.2f off_acc %0.2f\n' % (i+1, float(coll_acc[i])*100/args.num_train_steps, float(off_acc[i])*100/args.num_train_steps))
+    else:
+        for i in range(args.num_train_steps):
+            feature, action, target = mpc_buffer.sample_fcn(args.batch_size)
+            _, seg = train_net.predict_fcn(feature, action)
+            optimizer.zero_grad()
+            if args.one_hot:
+                loss = nn.NLLLoss()(seg, target)
+            else:
+                loss = nn.MSELoss()(seg, target)
+            loss.backward()
+            optimizer.step()
+            with open(os.path.join(args.save_path, 'pred_ls.txt'), 'a') as f:
+                f.write('step %d loss %0.4f\n' % (tt, loss.data.cpu().numpy()))
+            print(('fcn step %d loss %0.4f' % (i, loss.data.cpu().numpy())))
+    visualize2(torch.argmax(seg, 1).cpu().numpy(), target.cpu().numpy())
+
+def visualize2(seg, gt):
+    if not os.path.isdir('visualize'):
+        os.mkdir('visualize')
+    for i in range(seg.shape[0]):
+        imsave(os.path.join('visualize', 'step%d.png' % (i+1)), np.concatenate([draw_from_pred(seg[i]), draw_from_pred(gt[i])], 1))
+        
 def train_model(args, train_net, mpc_buffer, epoch, avg_img_t, std_img_t):
     if epoch % 20 == 0:
         target, idxes = mpc_buffer.sample(args.batch_size, sample_early = True)
@@ -184,8 +219,9 @@ def train_model(args, train_net, mpc_buffer, epoch, avg_img_t, std_img_t):
 def draw_from_pred(pred):
     illustration = np.zeros((256, 256, 3)).astype(np.uint8)
     illustration[:, :, 0] = 255
-    illustration[pred == 1] = np.array([0, 0, 0])
-    illustration[pred == 2] = np.array([0, 0, 255])
+    illustration[pred == 1] = np.array([0, 255, 0])
+    illustration[pred == 2] = np.array([0, 0, 0])
+    illustration[pred == 3] = np.array([0, 0, 255])
     return illustration
 
 def visualize(args, target, output):
@@ -364,22 +400,37 @@ def sample_cont_action(args, net, imgs, info=None, prev_action = None, testing=F
 
     if args.sample_based_planning:
         imgs = imgs.repeat(100, 1, 1, 1, 1)
-        this_action = torch.stack([torch.ones(100) * 0.5, torch.arange(100) / 50 - 1], dim=1).view(100, 1, 2).repeat(1, args.pred_step, 1)
-        this_action = Variable(this_action.cuda(), requires_grad=False)
+        # this_action = torch.stack([torch.ones(100) * 0.5, torch.arange(100) / 50 - 1], dim=1).view(100, 1, 2).repeat(1, args.pred_step, 1)
+        # this_action = Variable(this_action.cuda(), requires_grad=False)
+        this_action0 = np.arange(20)/10 - 1.0
+        this_action0 = np.meshgrid(this_action0, this_action0)
+        this_action0[0] = this_action0[0].reshape(-1, 1)
+        this_action0[1] = this_action0[1].reshape(-1, 1)
+        this_action0 = np.concatenate(this_action0, axis=-1)
+        this_action = torch.from_numpy(this_action0).view(400, 1, 2).repeat(1, args.pred_step, 1)
+        this_action = Variable(this_action.cuda().float(), requires_grad=False)
+        loss = np.zeros(400)
         with torch.no_grad():
-            loss = get_action_loss(args, net, imgs, this_action, None, None, None).data.cpu().numpy()
+            for i in range(4):
+                loss[100*i: 100*(i+1)] = get_action_loss(args, net, imgs, this_action[100*i: 100*(i+1)], None, None, None).data.cpu().numpy()
 
         plt.figure()
         plt.title('pos [%0.2f, %0.2f], trackPos %0.2f, angle %0.2f' % (info['pos'][0], info['pos'][1], info['trackPos'], info['angle']))
-        plt.plot(np.arange(100) / 50.0 - 1, loss)
+        loss2 = loss.reshape((20, 20))
+        plt.imshow(loss2)
+        plt.colorbar()
+        plt.xlabel('acceleration')
+        plt.ylabel('steering angle')
+        # plt.plot(np.arange(100) / 50.0 - 1, loss)
         plt.tight_layout()
-        if not os.path.isdir('actions'):
-            os.mkdir('actions')
-        plt.savefig('actions/step_%07d.png' % tt, dpi=100)
+        if not os.path.isdir(os.path.join(args.save_path, 'actions')):
+            os.mkdir(os.path.join(args.save_path, 'actions'))
+        plt.savefig(os.path.join(args.save_path, 'actions/step_%07d.png' % tt), dpi=100)
         plt.close()
         idx = np.argmin(loss)
-        return np.array([0.5, idx / 50 - 1])
-
+        res = this_action0.reshape((400, 2))[idx, :]
+        # return np.array([0.5, idx / 50 - 1])
+        return res
 
     else:
         optimizer = optim.Adam([this_action], lr = 0.01)
@@ -507,8 +558,18 @@ def get_action_loss(args, net, imgs, actions, target = None, hidden = None, cell
     output = net(imgs, actions, hidden = hidden, cell = cell, training=False)
 
     loss = 0
+    # if args.target_dist > 0:
+    #     dist_loss = torch.sqrt(nn.MSELoss()(output['dist'], target['dist_batch']))
+    #     loss += dist_loss
+    # elif args.sample_with_distance:
+    #     if args.sample_based_planning:
+    #         dist_ls = (output['dist'].view(-1, args.pred_step, 1) * weight).sum(-1).sum(-1)
+    #     else:
+    #         dist_ls = (output['dist'].view(-1, args.pred_step, 1) * weight).sum()
+    #     loss -= dist_ls
     if args.sample_with_collision:
-        coll_ls = nn.CrossEntropyLoss(reduce = False)(output['coll_prob'].view(batch_size * args.pred_step, 2), target['coll_batch'])
+        coll_ls = -torch.round(output['coll_prob'][:, :, 0]) * output['dist'].view(-1, args.pred_step) + torch.round(output['coll_prob'][:, :, 1]) * 20.0
+        # coll_ls = nn.CrossEntropyLoss(reduce = False)(output['coll_prob'].view(batch_size * args.pred_step, 2), target['coll_batch'])
         # coll_ls = (coll_ls.view(-1, args.pred_step, 1) * output['speed'].view(-1, args.pred_step, 1) * weight).sum()
         if args.sample_based_planning:
             coll_ls = (coll_ls.view(-1, args.pred_step, 1) * weight).sum(-1).sum(-1)
@@ -516,22 +577,14 @@ def get_action_loss(args, net, imgs, actions, target = None, hidden = None, cell
             coll_ls = (coll_ls.view(-1, args.pred_step, 1) * weight ).sum() * 50
         loss += coll_ls
     if args.sample_with_offroad:
-        off_ls = nn.CrossEntropyLoss(reduce = False)(output['offroad_prob'].view(batch_size * args.pred_step, 2), target['off_batch'])
+        off_ls = -torch.round(output['offroad_prob'][:, :, 0]) * output['dist'].view(-1, args.pred_step) + torch.round(output['offroad_prob'][:, :, 1]) * 20.0
+        # off_ls = nn.CrossEntropyLoss(reduce = False)(output['offroad_prob'].view(batch_size * args.pred_step, 2), target['off_batch'])
         # off_ls = (off_ls.view(-1, args.pred_step, 1) * output['speed'].view(-1, args.pred_step, 1) * weight).sum()
         if args.sample_based_planning:
             off_ls = (off_ls.view(-1, args.pred_step, 1) * weight).sum(-1).sum(-1)
         else:
             off_ls = (off_ls.view(-1, args.pred_step, 1) * weight).sum() * 50
         loss += off_ls
-    if args.target_dist > 0:
-        dist_loss = torch.sqrt(nn.MSELoss()(output['dist'], target['dist_batch']))
-        loss += dist_loss
-    elif args.sample_with_distance:
-        if args.sample_based_planning:
-            dist_ls = (output['dist'].view(-1, args.pred_step, 1) * weight).sum(-1).sum(-1)
-        else:
-            dist_ls = (output['dist'].view(-1, args.pred_step, 1) * weight).sum()
-        loss -= 0.01 * dist_ls
 
     if args.sample_with_pos:
         if args.sample_based_planning:

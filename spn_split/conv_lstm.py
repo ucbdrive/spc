@@ -35,7 +35,7 @@ class convLSTM(nn.Module):
         # self.cell_4 = convLSTMCell(in_channels, feature_channels, 3, stride = 1, padding = 1)
         # self.cell_5 = convLSTMCell(in_channels, feature_channels, 5, stride = 1, padding = 4, dilation = 2)
         # self.cell_6 = convLSTMCell(in_channels, feature_channels, 5, stride = 1, padding = 2)
-        self.softmax = nn.LogSoftmax(dim=1)
+        self.softmax = nn.Softmax(dim=1)
         self.logsoftmax = nn.LogSoftmax(dim=1)
         self.apply(weights_init)
 

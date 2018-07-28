@@ -103,7 +103,29 @@ class MPCBuffer(object):
             idx = random.randint(0, self.num_in_buffer - 2)
         feature = Variable(torch.from_numpy(np.concatenate([OneHotEncoder(n_values=self.args.classes, sparse=False).fit_transform(self.seg[idx+i, 0]).reshape(256, 256, 1, self.args.classes).transpose(2, 3, 0, 1) for i in range(1-self.args.frame_history_len, 1)], 0).reshape(1, self.args.frame_history_len*self.args.classes, 256, 256)).float(), requires_grad=False)
         action = Variable(torch.from_numpy(self.action[idx: idx+20][np.newaxis, :]), requires_grad=False)
-        seg = Variable(torch.from_numpy(np.concatenate([self.seg[idx+i] for i in range(1, 21)], 0)).long(), requires_grad=False)
+        seg = Variable(torch.from_numpy(self.seg[idx+1: idx+21].reshape(20, 256, 256)).long(), requires_grad=False)
+        signals = dict()
+        signals['collision'] = torch.from_numpy(self.coll[idx+1: idx+21].reshape(20)).long()
+        signals['offroad'] = torch.from_numpy(self.offroad[idx+1: idx+21].reshape(20)).long()
+        
+        if torch.cuda.is_available():
+            feature = feature.cuda()
+            action = action.cuda()
+            seg = seg.cuda()
+        return feature, action, seg, signals
+
+    def sample_fcn(self, batch_size):
+        idxes = []
+        while len(idxes) < batch_size:
+            idx = random.randint(self.args.frame_history_len, self.num_in_buffer - self.args.pred_step)
+            if idx not in idxes and np.sum(self.done[idx-self.args.frame_history_len+1:idx+1]) == 0:
+                idxes.append(idx)
+        if self.args.one_hot:
+            feature = Variable(torch.from_numpy(np.concatenate([OneHotEncoder(n_values=self.args.classes, sparse=False).fit_transform(self.seg[(idx-self.args.frame_history_len+1):(idx+1), 0].reshape(256*self.args.frame_history_len, 256)).reshape(256, 256, 1, self.args.frame_history_len*self.args.classes).transpose(2, 3, 0, 1) for idx in idxes], 0)).float(), requires_grad=False)
+        else:
+            feature = Variable(torch.from_numpy(np.concatenate([self.seg[(idx-self.args.frame_history_len+1):(idx+1)].reshape(1, self.args.frame_history_len, 256, 256) for idx in idxes], 0)).float(), requires_grad=False)
+        action = Variable(torch.from_numpy(np.concatenate([self.action[idx].reshape(1, 2) for idx in idxes], 0)), requires_grad=False)
+        seg = Variable(torch.from_numpy(np.concatenate([self.seg[idx+1] for idx in idxes], 0)).long(), requires_grad=False)
         if torch.cuda.is_available():
             feature = feature.cuda()
             action = action.cuda()

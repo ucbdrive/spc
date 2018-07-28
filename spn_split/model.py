@@ -140,17 +140,21 @@ class DLASeg(nn.Module):
 class ConvLSTMNet(nn.Module):
     def __init__(self, args):
         super(ConvLSTMNet, self).__init__()
+        if args.one_hot:
+            args.classes = 1
         self.args = args
 
         # feature extraction part
         if args.use_seg:
-            self.action_encode = nn.Linear(args.num_total_act, 1*32*32) 
-            self.action_up1 = nn.ConvTranspose2d(1, 2, 4, stride=4) 
-            self.action_up2 = nn.ConvTranspose2d(2, 3, 2, stride=2)
-            if not args.use_lstm:
-                self.actionEncoder = nn.Linear(args.num_total_act, 32)
             self.drnseg = DLASeg(args)
-            self.feature_map_predictor = convLSTM(3, args.classes * args.frame_history_len, args.classes) if args.use_lstm else fcn(args.classes * args.frame_history_len, args.classes)
+            if args.use_lstm:
+                self.action_encode = nn.Linear(args.num_total_act, 1*32*32) 
+                self.action_up1 = nn.ConvTranspose2d(1, 2, 4, stride=4) 
+                self.action_up2 = nn.ConvTranspose2d(2, 3, 2, stride=2)
+                self.feature_map_predictor = convLSTM(3, args.classes * args.frame_history_len, args.classes)
+            else:
+                self.actionEncoder = nn.Linear(args.num_total_act, 32)
+                self.feature_map_predictor = fcn(args.classes * args.frame_history_len, args.classes)
             #self.up_sampler = lambda x: F.upsample(x, scale_factor = 8, mode = 'bilinear', align_corners = True)
         else:
             self.action_encode = nn.Linear(args.num_total_act, args.info_dim)
@@ -184,8 +188,11 @@ class ConvLSTMNet(nn.Module):
 
     def encode_action(self, action):
         if self.args.use_seg:
-            action_enc = F.sigmoid(self.action_encode(action).view(-1, 1, 32, 32))
-            action_enc = self.action_up2(F.sigmoid(self.action_up1(action_enc)))
+            if self.argg.use_lstm:
+                action_enc = F.sigmoid(self.action_encode(action).view(-1, 1, 32, 32))
+                action_enc = self.action_up2(F.sigmoid(self.action_up1(action_enc)))
+            else:
+                action_enc = F.sigmoid(self.actionEncoder(action))
         else:
             action_enc = F.relu(self.action_encode(action))
         return action_enc
@@ -202,9 +209,9 @@ class ConvLSTMNet(nn.Module):
                 cell = cell.cuda()
 
         output_dict = dict()
-        action_enc = self.encode_action(action)
         if self.args.use_seg:
             if self.args.use_lstm:
+                action_enc = self.encode_action(action)
                 try:
                     hx, cell, y = self.feature_map_predictor(action_enc, (hidden, cell))
                     hidden = torch.cat([hidden[:, self.args.classes:, :, :], hx], dim=1).detach()
@@ -212,7 +219,8 @@ class ConvLSTMNet(nn.Module):
                     pdb.set_trace()
             else:
                 action_encoding = self.actionEncoder(action)
-                hidden = self.feature_map_predictor(x, action_encoding)
+                hx, y = self.feature_map_predictor(x, action_encoding)
+                hidden = torch.cat([hidden[:, self.args.classes:, :, :], hx], dim=1).detach()
             if with_encode == False:
                 output_dict['seg_current'] = x[:, -self.args.classes:, :, :]
             output_dict['seg_pred'] = y
@@ -225,7 +233,7 @@ class ConvLSTMNet(nn.Module):
             output_dict['seg_pred'] = self.outfeature_encode(F.relu(torch.cat([nx_feature_enc, action_enc], dim = 1)))
 
         # major outputs
-        if not self.args.one_hot:
+        if self.args.use_seg and not self.args.one_hot:
             hidden = torch.argmax(hidden, 1)
             nx_feature_enc = torch.argmax(nx_feature_enc, 1)
         output_dict['coll_prob'] = self.coll_layer(hx)
@@ -301,6 +309,12 @@ class ConvLSTMMulti(nn.Module):
             result.append(y)
             hidden = torch.cat([hidden[:, self.args.classes:, :, :], hx], dim=1)
         return torch.cat(result, dim=0)
+
+    def predict_fcn(self, x, action):
+        batch_size = x.size(0)
+        action_encoding = self.conv_lstm.actionEncoder(action)
+        x, y = self.conv_lstm.feature_map_predictor(x, action_encoding)
+        return x, y
 
     def forward(self, imgs, actions=None, hidden=None, cell=None, get_feature=False, training=True):
         if get_feature:
