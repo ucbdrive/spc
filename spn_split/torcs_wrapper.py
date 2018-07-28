@@ -69,7 +69,7 @@ class TorcsWrapper:
             self.coll_cnt += 1
         else:
             self.coll_cnt = 0
-        if info['trackPos'] <= -7.0 or info['trackPos'] >= 15.0:
+        if info['trackPos'] <= -4.0 or info['trackPos'] >= 5.0:
             self.done_cnt += 1
         else:
             self.done_cnt = 0

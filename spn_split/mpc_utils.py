@@ -230,7 +230,7 @@ class MPCBuffer(object):
 
         if self.obs is None:
             self.obs      = np.empty([self.args.buffer_size] + list(frame.shape),         dtype = np.uint8)
-            self.action   = np.zeros([self.args.buffer_size] + [self.args.num_total_act], dtype = np.float32)
+            self.action   = np.empty([self.args.buffer_size] + [self.args.num_total_act], dtype = np.float32)
             self.done     = np.empty([self.args.buffer_size],                             dtype = np.int32)
 
             if self.args.use_collision:

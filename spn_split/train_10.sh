@@ -1,5 +1,5 @@
 #!/bin/bash
-python train_torcs.py \
+python3 train_torcs.py \
     --save-path mpc_10_cont_nopretrain \
     --continuous \
     --one-hot \

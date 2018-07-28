@@ -47,7 +47,10 @@ def train_model_new(args, train_net, mpc_buffer, optimizer, tt):
         seg = train_net.predict_seg(obs)
         optimizer.zero_grad()
         loss = nn.NLLLoss()(seg, target)
-        loss.backward()
+        try:
+            loss.backward()
+        except:
+            pdb.set_trace()
         optimizer.step()
         with open(os.path.join(args.save_path, 'seg_ls.txt'), 'a') as f:
             f.write('seg step %d loss %0.4f\n' % (tt, loss.data.cpu().numpy()))
@@ -425,7 +428,7 @@ def sample_cont_action(args, net, imgs, info=None, prev_action = None, testing=F
         plt.tight_layout()
         if not os.path.isdir(os.path.join(args.save_path, 'actions')):
             os.mkdir(os.path.join(args.save_path, 'actions'))
-        plt.savefig(os.path.join(args.save_path, 'actions/step_%07d.png' % tt), dpi=100)
+        plt.savefig(os.path.join(args.save_path, 'actions/step_%04d.png' % (tt % 10000)), dpi=100)
         plt.close()
         idx = np.argmin(loss)
         res = this_action0.reshape((400, 2))[idx, :]

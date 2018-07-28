@@ -237,7 +237,7 @@ def train_policy(args, env, num_steps=40000000):
             buffer_manager.update_avg_std_img()
 
         if done:
-            train_model_new(args, train_net, buffer_manager.mpc_buffer, optimizer, tt)
+            # train_model_new(args, train_net, buffer_manager.mpc_buffer, optimizer, tt)
             num_episode += 1
             print('finished episode ', num_episode)
             if no_explore:
@@ -259,7 +259,7 @@ def train_policy(args, env, num_steps=40000000):
             dqn_agent.store_effect(dqn_action, reward['with_pos'], done)
         
         if tt % args.learning_freq == 0 and tt > args.learning_starts and buffer_manager.mpc_buffer.can_sample(args.batch_size):
-            # train_model_new(args, train_net, buffer_manager.mpc_buffer, optimizer, tt)
+            train_model_new(args, train_net, buffer_manager.mpc_buffer, optimizer, tt)
             # for ep in range(args.num_train_steps):
                 # optimizer.zero_grad()
                 # loss = train_model(args, train_net, buffer_manager.mpc_buffer, epoch, buffer_manager.avg_img, buffer_manager.std_img)
