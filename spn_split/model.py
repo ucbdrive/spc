@@ -140,13 +140,11 @@ class DLASeg(nn.Module):
 class ConvLSTMNet(nn.Module):
     def __init__(self, args):
         super(ConvLSTMNet, self).__init__()
-        if not args.one_hot:
-            args.classes = 1
-        self.args = args
-
         # feature extraction part
         if args.use_seg:
             self.drnseg = DLASeg(args)
+            if not args.one_hot:
+                args.classes = 1
             if args.use_lstm:
                 self.action_encode = nn.Linear(args.num_total_act, 1*32*32) 
                 self.action_up1 = nn.ConvTranspose2d(1, 2, 4, stride=4) 
@@ -186,9 +184,11 @@ class ConvLSTMNet(nn.Module):
         if args.use_xyz:
             self.xyz_layer = end_layer(args, 3)
 
+        self.args = args
+
     def encode_action(self, action):
         if self.args.use_seg:
-            if self.argg.use_lstm:
+            if self.args.use_lstm:
                 action_enc = F.sigmoid(self.action_encode(action).view(-1, 1, 32, 32))
                 action_enc = self.action_up2(F.sigmoid(self.action_up1(action_enc)))
             else:
@@ -214,13 +214,13 @@ class ConvLSTMNet(nn.Module):
                 action_enc = self.encode_action(action)
                 try:
                     hx, cell, y = self.feature_map_predictor(action_enc, (hidden, cell))
-                    hidden = torch.cat([hidden[:, self.args.classes:, :, :], hx], dim=1).detach()
+                    hidden = torch.cat([hidden[:, self.args.classes:, :, :], hx], dim=1)
                 except:
                     pdb.set_trace()
             else:
                 action_encoding = self.actionEncoder(action)
                 hx, y = self.feature_map_predictor(x, action_encoding)
-                hidden = torch.cat([hidden[:, self.args.classes:, :, :], hx], dim=1).detach()
+                hidden = torch.cat([hidden[:, self.args.classes:, :, :], hx], dim=1)
             if with_encode == False:
                 output_dict['seg_current'] = x[:, -self.args.classes:, :, :]
             output_dict['seg_pred'] = y
@@ -316,7 +316,20 @@ class ConvLSTMMulti(nn.Module):
         x, y = self.conv_lstm.feature_map_predictor(x, action_encoding)
         return x, y
 
-    def forward(self, imgs, actions=None, hidden=None, cell=None, get_feature=False, training=True):
+    def forward(self, imgs, actions=None, hidden=None, cell=None, get_feature=False, training=True, function=''):
+        if function == 'predict_seg':
+            return self.predict_seg(imgs)
+        elif function == 'predict_collision':
+            return self.predict_collision(imgs)
+        elif function == 'predict_offroad':
+            return self.predict_offroad(imgs)
+        elif function == 'predict_distance':
+            return self.predict_distance(imgs)
+        elif function == 'predict_feature':
+            return self.predict_feature(imgs, actions)
+        elif function == 'predict_fcn':
+            return self.predict_fcn(imgs, actions)
+
         if get_feature:
             return self.get_feature(imgs)
         batch_size, num_step, c, w, h = int(imgs.size()[0]), int(imgs.size()[1]), int(imgs.size()[-3]), int(imgs.size()[-2]), int(imgs.size()[-1])
