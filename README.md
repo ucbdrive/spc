@@ -2,7 +2,7 @@
 
 ### Environments
 - [Flappy Bird](https://github.com/cxy1997/Flappy-Bird-with-Segmentation)
-- [TORCS](https://github.com/cxy1997/pyTORCS)
+- [TORCS](https://github.com/ucbdrive/pyTORCS)
 - [GTA](https://github.com/aitorzip/DeepGTAV)
 
 ### Training
