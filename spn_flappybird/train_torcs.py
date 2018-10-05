@@ -23,5 +23,7 @@ if __name__ == '__main__':
     random.seed(args.seed)
 
     env = flappy_bird_wrapper()
-    evaluate_policy(args, env)
-    # train_policy(args, env, num_steps=400000000)
+    if args.eval:
+        evaluate_policy(args, env)
+    else:
+        train_policy(args, env, num_steps=400000000)
