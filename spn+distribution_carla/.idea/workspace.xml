@@ -1,0 +1,394 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="ChangeListManager">
+    <list default="true" id="2347f6a6-4c4f-456a-bb28-cf9554ea2f8c" name="Default Changelist" comment="">
+      <change beforePath="$PROJECT_DIR$/../pyTORCS" beforeDir="false" afterPath="$PROJECT_DIR$/../pyTORCS" afterDir="false" />
+    </list>
+    <option name="EXCLUDED_CONVERTED_TO_IGNORED" value="true" />
+    <option name="SHOW_DIALOG" value="false" />
+    <option name="HIGHLIGHT_CONFLICTS" value="true" />
+    <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
+    <option name="LAST_RESOLUTION" value="IGNORE" />
+  </component>
+  <component name="FUSProjectUsageTrigger">
+    <session id="-2086542023">
+      <usages-collector id="statistics.lifecycle.project">
+        <counts>
+          <entry key="project.closed" value="1" />
+          <entry key="project.open.time.0" value="2" />
+          <entry key="project.opened" value="2" />
+        </counts>
+      </usages-collector>
+      <usages-collector id="statistics.file.extensions.open">
+        <counts>
+          <entry key="py" value="9" />
+        </counts>
+      </usages-collector>
+      <usages-collector id="statistics.file.types.open">
+        <counts>
+          <entry key="Python" value="9" />
+        </counts>
+      </usages-collector>
+      <usages-collector id="statistics.file.extensions.edit">
+        <counts>
+          <entry key="py" value="1502" />
+        </counts>
+      </usages-collector>
+      <usages-collector id="statistics.file.types.edit">
+        <counts>
+          <entry key="Python" value="1502" />
+        </counts>
+      </usages-collector>
+      <usages-collector id="statistics.js.language.service.starts" />
+      <usages-collector id="statistics.vcs.git.usages" />
+    </session>
+  </component>
+  <component name="FileEditorManager">
+    <leaf SIDE_TABS_SIZE_LIMIT_KEY="300">
+      <file pinned="false" current-in-tab="false">
+        <entry file="file://$PROJECT_DIR$/utils.py">
+          <provider selected="true" editor-type-id="text-editor">
+            <state relative-caret-position="485">
+              <caret line="155" column="4" lean-forward="true" selection-start-line="155" selection-start-column="4" selection-end-line="155" selection-end-column="22" />
+              <folding>
+                <element signature="e#0#47#0" expanded="true" />
+                <element signature="e#647#695#0" />
+                <element signature="e#723#1473#0" />
+                <element signature="e#1534#7130#0" />
+                <element signature="e#7162#7392#0" />
+                <element signature="e#19013#19835#0" />
+                <element signature="e#21143#21187#0" />
+                <element signature="e#21214#21264#0" />
+                <element signature="e#22101#22444#0" />
+                <element signature="e#22474#22583#0" />
+                <element signature="e#22634#22924#0" />
+                <element signature="e#25242#25930#0" />
+                <element signature="e#27840#28140#0" />
+                <element signature="e#28201#28693#0" />
+                <element signature="e#28766#30095#0" />
+                <element signature="e#30135#30211#0" />
+                <element signature="e#30283#30519#0" />
+                <element signature="e#36642#36834#0" />
+                <element signature="e#36937#37739#0" />
+                <element signature="e#37773#38131#0" />
+                <marker date="1538894765883" expanded="true" signature="7447:7788" ph="..." />
+              </folding>
+            </state>
+          </provider>
+        </entry>
+      </file>
+      <file pinned="false" current-in-tab="false">
+        <entry file="file://$PROJECT_DIR$/args.py">
+          <provider selected="true" editor-type-id="text-editor">
+            <state relative-caret-position="406">
+              <caret line="15" column="27" lean-forward="true" selection-start-line="15" selection-start-column="27" selection-end-line="15" selection-end-column="38" />
+            </state>
+          </provider>
+        </entry>
+      </file>
+      <file pinned="false" current-in-tab="false">
+        <entry file="file://$PROJECT_DIR$/train_cont_policy.py">
+          <provider selected="true" editor-type-id="text-editor">
+            <state relative-caret-position="290">
+              <caret line="319" column="154" selection-start-line="319" selection-start-column="136" selection-end-line="319" selection-end-column="154" />
+              <folding>
+                <element signature="e#0#19#0" expanded="true" />
+                <marker date="1538893836830" expanded="true" signature="7852:7857" ph="..." />
+              </folding>
+            </state>
+          </provider>
+        </entry>
+      </file>
+      <file pinned="false" current-in-tab="true">
+        <entry file="file://$PROJECT_DIR$/mpc_utils.py">
+          <provider selected="true" editor-type-id="text-editor">
+            <state relative-caret-position="647">
+              <caret line="85" column="53" selection-start-line="85" selection-start-column="53" selection-end-line="85" selection-end-column="53" />
+              <folding>
+                <element signature="e#0#47#0" expanded="true" />
+                <element signature="e#254#657#0" />
+                <element signature="e#2695#3682#0" />
+                <element signature="e#3735#5080#0" />
+                <element signature="e#5116#6286#0" />
+                <element signature="e#6334#7774#0" />
+                <element signature="e#7830#8053#0" />
+                <element signature="e#8095#8448#0" />
+                <element signature="e#8496#8561#0" />
+                <element signature="e#8608#10981#0" />
+                <element signature="e#11045#11392#0" />
+                <element signature="e#11443#11557#0" />
+                <element signature="e#11607#12954#0" />
+                <marker date="1538896356241" expanded="true" signature="2748:2824" ph="..." />
+              </folding>
+            </state>
+          </provider>
+        </entry>
+      </file>
+      <file pinned="false" current-in-tab="false">
+        <entry file="file://$PROJECT_DIR$/model.py">
+          <provider selected="true" editor-type-id="text-editor">
+            <state relative-caret-position="1034">
+              <caret line="367" column="20" lean-forward="true" selection-start-line="367" selection-start-column="20" selection-end-line="367" selection-end-column="20" />
+              <folding>
+                <element signature="e#2848#3381#0" />
+              </folding>
+            </state>
+          </provider>
+        </entry>
+      </file>
+      <file pinned="false" current-in-tab="false">
+        <entry file="file://$PROJECT_DIR$/action_guide.py">
+          <provider selected="true" editor-type-id="text-editor">
+            <state relative-caret-position="493">
+              <caret line="17" column="33" lean-forward="true" selection-start-line="17" selection-start-column="33" selection-end-line="17" selection-end-column="33" />
+              <folding>
+                <element signature="e#0#12#0" expanded="true" />
+              </folding>
+            </state>
+          </provider>
+        </entry>
+      </file>
+    </leaf>
+  </component>
+  <component name="FindInProjectRecents">
+    <findStrings>
+      <find>no_explore</find>
+      <find>guide_act</find>
+      <find>safe_buffer</find>
+      <find>'guide_action'</find>
+      <find>sample_cont</find>
+      <find>store</find>
+      <find>sample_co</find>
+      <find>train_</find>
+      <find>train_guide_action</find>
+    </findStrings>
+  </component>
+  <component name="Git.Settings">
+    <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$/.." />
+  </component>
+  <component name="IdeDocumentHistory">
+    <option name="CHANGED_PATHS">
+      <list>
+        <option value="$PROJECT_DIR$/action_guide.py" />
+        <option value="$PROJECT_DIR$/model.py" />
+        <option value="$PROJECT_DIR$/args.py" />
+        <option value="$PROJECT_DIR$/train_cont_policy.py" />
+        <option value="$PROJECT_DIR$/utils.py" />
+        <option value="$PROJECT_DIR$/mpc_utils.py" />
+      </list>
+    </option>
+  </component>
+  <component name="JsBuildToolGruntFileManager" detection-done="true" sorting="DEFINITION_ORDER" />
+  <component name="JsBuildToolPackageJson" detection-done="true" sorting="DEFINITION_ORDER" />
+  <component name="JsGulpfileManager">
+    <detection-done>true</detection-done>
+    <sorting>DEFINITION_ORDER</sorting>
+  </component>
+  <component name="ProjectFrameBounds" fullScreen="true">
+    <option name="width" value="1680" />
+    <option name="height" value="1050" />
+  </component>
+  <component name="ProjectInspectionProfilesVisibleTreeState">
+    <entry key="Project Default">
+      <profile-state>
+        <expanded-state>
+          <State />
+          <State>
+            <id>Python</id>
+          </State>
+        </expanded-state>
+        <selected-state>
+          <State>
+            <id>PyCompatibilityInspection</id>
+          </State>
+        </selected-state>
+      </profile-state>
+    </entry>
+  </component>
+  <component name="ProjectLevelVcsManager" settingsEditedManually="true" />
+  <component name="ProjectView">
+    <navigator proportions="" version="1">
+      <foldersAlwaysOnTop value="true" />
+    </navigator>
+    <panes>
+      <pane id="ProjectPane">
+        <subPane>
+          <expand>
+            <path>
+              <item name="spn+distribution_carla" type="b2602c69:ProjectViewProjectNode" />
+              <item name="spn+distribution_carla" type="462c0819:PsiDirectoryNode" />
+            </path>
+          </expand>
+          <select />
+        </subPane>
+      </pane>
+      <pane id="Scope" />
+    </panes>
+  </component>
+  <component name="PropertiesComponent">
+    <property name="WebServerToolWindowFactoryState" value="true" />
+    <property name="last_opened_file_path" value="$PROJECT_DIR$" />
+    <property name="nodejs_interpreter_path.stuck_in_default_project" value="undefined stuck path" />
+    <property name="nodejs_npm_path_reset_for_default_project" value="true" />
+    <property name="settings.editor.selected.configurable" value="web.server" />
+  </component>
+  <component name="RunDashboard">
+    <option name="ruleStates">
+      <list>
+        <RuleState>
+          <option name="name" value="ConfigurationTypeDashboardGroupingRule" />
+        </RuleState>
+        <RuleState>
+          <option name="name" value="StatusDashboardGroupingRule" />
+        </RuleState>
+      </list>
+    </option>
+  </component>
+  <component name="SvnConfiguration">
+    <configuration />
+  </component>
+  <component name="TaskManager">
+    <task active="true" id="Default" summary="Default task">
+      <changelist id="2347f6a6-4c4f-456a-bb28-cf9554ea2f8c" name="Default Changelist" comment="" />
+      <created>1538784042166</created>
+      <option name="number" value="Default" />
+      <option name="presentableId" value="Default" />
+      <updated>1538784042166</updated>
+    </task>
+    <servers />
+  </component>
+  <component name="ToolWindowManager">
+    <frame x="0" y="0" width="1680" height="1050" extended-state="0" />
+    <editor active="true" />
+    <layout>
+      <window_info content_ui="combo" id="Project" order="0" weight="0.24969475" />
+      <window_info id="Structure" order="1" side_tool="true" weight="0.25" />
+      <window_info id="Favorites" order="2" side_tool="true" />
+      <window_info anchor="bottom" id="Message" order="0" />
+      <window_info anchor="bottom" id="Find" order="1" />
+      <window_info anchor="bottom" id="Run" order="2" />
+      <window_info anchor="bottom" id="Debug" order="3" weight="0.4" />
+      <window_info anchor="bottom" id="Cvs" order="4" weight="0.25" />
+      <window_info anchor="bottom" id="Inspection" order="5" weight="0.4" />
+      <window_info anchor="bottom" id="TODO" order="6" />
+      <window_info anchor="bottom" id="Docker" order="7" show_stripe_button="false" />
+      <window_info anchor="bottom" id="Version Control" order="8" show_stripe_button="false" />
+      <window_info anchor="bottom" id="Database Changes" order="9" show_stripe_button="false" />
+      <window_info anchor="bottom" id="Event Log" order="10" side_tool="true" />
+      <window_info anchor="bottom" id="Terminal" order="11" />
+      <window_info anchor="bottom" id="Python Console" order="12" />
+      <window_info anchor="right" id="Commander" internal_type="SLIDING" order="0" type="SLIDING" weight="0.4" />
+      <window_info anchor="right" id="Ant Build" order="1" weight="0.25" />
+      <window_info anchor="right" content_ui="combo" id="Hierarchy" order="2" weight="0.25" />
+      <window_info anchor="right" id="Remote Host" order="3" />
+      <window_info anchor="right" id="SciView" order="4" />
+      <window_info anchor="right" id="Database" order="5" />
+    </layout>
+  </component>
+  <component name="TypeScriptGeneratedFilesManager">
+    <option name="version" value="1" />
+  </component>
+  <component name="VcsContentAnnotationSettings">
+    <option name="myLimit" value="2678400000" />
+  </component>
+  <component name="editorHistoryManager">
+    <entry file="file://$USER_HOME$/anaconda3/lib/python3.6/site-packages/torch/nn/modules/module.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="327">
+          <caret line="71" column="8" selection-start-line="71" selection-start-column="8" selection-end-line="71" selection-end-column="8" />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/action_guide.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="493">
+          <caret line="17" column="33" lean-forward="true" selection-start-line="17" selection-start-column="33" selection-end-line="17" selection-end-column="33" />
+          <folding>
+            <element signature="e#0#12#0" expanded="true" />
+          </folding>
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/model.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="1034">
+          <caret line="367" column="20" lean-forward="true" selection-start-line="367" selection-start-column="20" selection-end-line="367" selection-end-column="20" />
+          <folding>
+            <element signature="e#2848#3381#0" />
+          </folding>
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/args.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="406">
+          <caret line="15" column="27" lean-forward="true" selection-start-line="15" selection-start-column="27" selection-end-line="15" selection-end-column="38" />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/utils.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="485">
+          <caret line="155" column="4" lean-forward="true" selection-start-line="155" selection-start-column="4" selection-end-line="155" selection-end-column="22" />
+          <folding>
+            <element signature="e#0#47#0" expanded="true" />
+            <element signature="e#647#695#0" />
+            <element signature="e#723#1473#0" />
+            <element signature="e#1534#7130#0" />
+            <element signature="e#7162#7392#0" />
+            <element signature="e#19013#19835#0" />
+            <element signature="e#21143#21187#0" />
+            <element signature="e#21214#21264#0" />
+            <element signature="e#22101#22444#0" />
+            <element signature="e#22474#22583#0" />
+            <element signature="e#22634#22924#0" />
+            <element signature="e#25242#25930#0" />
+            <element signature="e#27840#28140#0" />
+            <element signature="e#28201#28693#0" />
+            <element signature="e#28766#30095#0" />
+            <element signature="e#30135#30211#0" />
+            <element signature="e#30283#30519#0" />
+            <element signature="e#36642#36834#0" />
+            <element signature="e#36937#37739#0" />
+            <element signature="e#37773#38131#0" />
+            <marker date="1538894765883" expanded="true" signature="7447:7788" ph="..." />
+          </folding>
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/train_cont_policy.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="290">
+          <caret line="319" column="154" selection-start-line="319" selection-start-column="136" selection-end-line="319" selection-end-column="154" />
+          <folding>
+            <element signature="e#0#19#0" expanded="true" />
+            <marker date="1538893836830" expanded="true" signature="7852:7857" ph="..." />
+          </folding>
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/mpc_utils.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="647">
+          <caret line="85" column="53" selection-start-line="85" selection-start-column="53" selection-end-line="85" selection-end-column="53" />
+          <folding>
+            <element signature="e#0#47#0" expanded="true" />
+            <element signature="e#254#657#0" />
+            <element signature="e#2695#3682#0" />
+            <element signature="e#3735#5080#0" />
+            <element signature="e#5116#6286#0" />
+            <element signature="e#6334#7774#0" />
+            <element signature="e#7830#8053#0" />
+            <element signature="e#8095#8448#0" />
+            <element signature="e#8496#8561#0" />
+            <element signature="e#8608#10981#0" />
+            <element signature="e#11045#11392#0" />
+            <element signature="e#11443#11557#0" />
+            <element signature="e#11607#12954#0" />
+            <marker date="1538896356241" expanded="true" signature="2748:2824" ph="..." />
+          </folding>
+        </state>
+      </provider>
+    </entry>
+  </component>
+</project>
