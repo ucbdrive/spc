@@ -208,7 +208,7 @@ class ActionSampleManager:
             if torch.cuda.is_available():
                 obs = obs.cuda()
             with torch.no_grad():
-                obs = torch.cat([obs, obs], dim=0)
+                obs = torch.cat([obs, obs, obs, obs, obs, obs], dim=0)
                 guide_act = int(torch.argmax(net(obs, function='guide_action'), dim=1)[0])
             if (random.random() <= 1 - exploration.value(tt) or no_explore) and not must_explore:
                 action = sample_cont_action(self.args, guide_act, net, obs_var, info=info, prev_action=np.array([0.5, 0.01]), avg_img=avg_img, std_img=std_img, tt=tt, action_var=action_var)

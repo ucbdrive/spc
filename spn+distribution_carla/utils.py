@@ -22,6 +22,14 @@ from sklearn.preprocessing import OneHotEncoder
 from eval_segm import mean_IU, mean_accuracy, pixel_accuracy, frequency_weighted_IU
 
 
+guides = [[1 / 2, -2 / 3],
+          [1 / 2, 0],
+          [1 / 2, 2 / 3],
+          [-1 / 2, -2 / 3],
+          [-1 / 2, 0],
+          [-1 / 2, 2 / 3]]
+
+
 def get_from_dict(info, key):
     return info[key] if key in info.keys() else None
 
@@ -153,10 +161,41 @@ def visualize2(seg, gt):
         imsave(os.path.join('visualize', 'step%d.png' % (i+1)), np.concatenate([draw_from_pred(seg[i]), draw_from_pred(gt[i])], 1))
 
 
+def draw_action(fig, x, y, l, w, action):
+    fig[x-l:x+l, y-w:y+w] = 0
+    fig[x-w:x+w, y-l:y+l] = 0
+    t = int(abs(action[0]) * l)
+    if action[0] > 0:
+        fig[x-t:x, y-3*w:y+3*w] = np.array([36, 28, 237])
+    else:
+        fig[x:x+t, y-3*w:y+3*w] = np.array([36, 28, 237])
+    t = int(abs(action[1]) * l)
+    if action[1] > 0:
+        fig[x-3*w:x+3*w, y:y+t] = np.array([14, 201, 255])
+    else:
+        fig[x-3*w:x+3*w, y-t:y] = np.array([14, 201, 255])
+    return fig
+
+
+def visualize_guide_action(data, outputs, label):
+    if not os.path.isdir('visualize/affordance'):
+        os.makedirs('visualize/affordance')
+    outputs = torch.argmax(outputs, dim=1)
+    label = label.data.cpu().numpy()
+    for i in range(data.shape[0]):
+        obs = data[i].data.cpu().numpy().transpose(1, 2, 0)
+        action = guides[int(outputs[i])]
+        obs = draw_action(obs, 150, 66, 45, 1, np.array(action))
+        gt_action = guides[int(label[i])]
+        obs = draw_action(obs, 150, 190, 45, 1, np.array(gt_action))
+        cv2.imwrite(os.path.join('visualize', 'affordance', 'affordance_%d.png' % i), cv2.cvtColor(obs, cv2.COLOR_BGR2GRAY))
+
+
 def train_guide_action(args, train_net, mpc_buffer):
     if mpc_buffer.can_sample_guide(args.batch_size):
         data, label = mpc_buffer.sample_guide(args.batch_size)
         outputs = train_net(data, function='guide_action')
+        visualize_guide_action(data*255.0, outputs, label)
         return nn.CrossEntropyLoss()(outputs, label)
     else:
         print('\033[1;31mInsufficient expert data for imitation learning.\033[0m')
@@ -547,14 +586,6 @@ def Focal_Loss(probs, target, reduce=True):
     if reduce:
         loss = loss.sum() / (batch_size * 1.0)
     return loss
-
-
-guides = [[1 / 2, -2 / 3],
-          [1 / 2, 0],
-          [1 / 2, 2 / 3],
-          [-1 / 2, -2 / 3],
-          [-1 / 2, 0],
-          [-1 / 2, 2 / 3]]
 
 
 def sample_cont_action(args, guide_act, net, imgs, info=None, prev_action=None, testing=False, avg_img=0, std_img=1.0, tt=0, action_var=None):
