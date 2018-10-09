@@ -188,7 +188,7 @@ def visualize_guide_action(data, outputs, label):
         obs = draw_action(obs, 150, 66, 45, 1, np.array(action))
         gt_action = guides[int(label[i])]
         obs = draw_action(obs, 150, 190, 45, 1, np.array(gt_action))
-        cv2.imwrite(os.path.join('visualize', 'affordance', 'affordance_%d.png' % i), cv2.cvtColor(obs, cv2.COLOR_BGR2GRAY))
+        cv2.imwrite(os.path.join('visualize', 'affordance', 'affordance_%d.png' % i), obs)
 
 
 def train_guide_action(args, train_net, mpc_buffer):
@@ -349,7 +349,7 @@ def train_model(args, train_net, mpc_buffer, epoch, avg_img_t, std_img_t):
     loss_value = float(loss.data.cpu().numpy())
     if np.isnan(loss_value):
         pdb.set_trace()
-    # visualize(args, target, output)
+    visualize(args, target, output)
     return loss
 
 
@@ -400,8 +400,8 @@ def draw_from_pred_carla_simple(array):
 
 
 def visualize(args, target, output):
-    if not os.path.isdir('visualize'):
-        os.mkdir('visualize')
+    if not os.path.isdir('visualize/segmentation'):
+        os.mkdir('visualize/segmentation')
     batch_id = np.random.randint(args.batch_size)
     if 'torcs' in args.env or 'gta' in args.env:
         draw_from_pred = draw_from_pred_torcs
@@ -417,7 +417,7 @@ def visualize(args, target, output):
         _, prediction = torch.max(output['seg_pred'][batch_id], 1)
         prediction = from_variable_to_numpy(prediction)
         for i in range(args.pred_step):
-            imsave('visualize/%d.png' % i, np.concatenate([cv2.cvtColor(observation[i], cv2.COLOR_BGR2GRAY), draw_from_pred(segmentation[i]), draw_from_pred(prediction[i])], 1))
+            imsave('visualize/segmentation/%d.png' % i, np.concatenate([observation[i], draw_from_pred(segmentation[i]), draw_from_pred(prediction[i])], 1))
 
     with open(args.save_path+'/report.txt', 'a') as f:
         f.write('target collision:\n')
@@ -588,7 +588,27 @@ def Focal_Loss(probs, target, reduce=True):
     return loss
 
 
-def sample_cont_action(args, guide_act, net, imgs, info=None, prev_action=None, testing=False, avg_img=0, std_img=1.0, tt=0, action_var=None):
+def generate_action(p, size):
+    res = []
+    for _ in range(size):
+        c = np.random.choice(range(len(p)), p=p)
+        action = np.array(guides[c]) + np.array([np.random.uniform(low=-0.5, high=0.5), np.random.uniform(-1/3, 1/3)])
+        res.append(action.reshape(1, 2))
+    return np.concatenate(res, axis=0)
+
+
+def get_guide_action(action):
+    result = 0
+    if action[0] < 0:
+        result += 3
+    if action[1] > -1/3:
+        result += 1
+    if action[1] > 1/3:
+        result += 1
+    return result
+
+
+def sample_cont_action(args, p, net, imgs, info=None, prev_action=None, testing=False, avg_img=0, std_img=1.0, tt=0, action_var=None):
     imgs = copy.deepcopy(imgs)
     if args.normalize:
         imgs = (imgs.contiguous() - avg_img) / (std_img)
@@ -611,7 +631,7 @@ def sample_cont_action(args, guide_act, net, imgs, info=None, prev_action=None, 
         # this_action = torch.stack([torch.ones(100) * 0.5, torch.arange(100) / 50 - 1], dim=1).view(100, 1, 2).repeat(1, args.pred_step, 1)
         # this_action = Variable(this_action.cuda(), requires_grad=False)
 
-        action = np.tile(np.array(guides[guide_act]), (30, 10, 1)) + np.concatenate([np.random.uniform(low=-0.5, high=0.5, size=(30, 10, 1)), np.random.uniform(-1/3, 1/3, size=(30, 10, 1))], axis=2)
+        action = generate_action(p, size=300).reshape(30, 10, 2)
         this_action0 = action[:, 0, :]
         this_action = Variable(torch.from_numpy(action).cuda().float(), requires_grad=False)
         # this_action0 = np.arange(6) / 2.5 - 1.0

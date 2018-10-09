@@ -180,9 +180,12 @@ class BufferManager:
             fi.write(' std ' + str(np.std(self.epi_rewards_without[-1:])) + '\n')
 
         idx_buffer = np.array(self.idx_buffer)
-        safe_buffer = np.array(self.safe_buffer)
-        safe_buffer = np.array([np.sum(safe_buffer[i:i+self.args.safe_length]) == 0 for i in range(safe_buffer.shape[0])])
-        self.mpc_buffer.expert[idx_buffer] = safe_buffer
+        if len(idx_buffer) < 300:
+            self.mpc_buffer.expert[idx_buffer] = 0
+        else:
+            safe_buffer = np.array(self.safe_buffer)
+            safe_buffer = np.array([np.sum(safe_buffer[i:i+self.args.safe_length]) == 0 for i in range(safe_buffer.shape[0])])
+            self.mpc_buffer.expert[idx_buffer] = safe_buffer
 
         self.idx_buffer = []
         self.safe_buffer = []
@@ -209,12 +212,13 @@ class ActionSampleManager:
                 obs = obs.cuda()
             with torch.no_grad():
                 obs = torch.cat([obs, obs, obs, obs, obs, obs], dim=0)
-                guide_act = int(torch.argmax(net(obs, function='guide_action'), dim=1)[0])
+                p = F.softmax(net(obs, function='guide_action'), dim=1)[0].data.cpu().numpy()
             if (random.random() <= 1 - exploration.value(tt) or no_explore) and not must_explore:
-                action = sample_cont_action(self.args, guide_act, net, obs_var, info=info, prev_action=np.array([0.5, 0.01]), avg_img=avg_img, std_img=std_img, tt=tt, action_var=action_var)
+                action = sample_cont_action(self.args, p, net, obs_var, info=info, prev_action=np.array([0.5, 0.01]), avg_img=avg_img, std_img=std_img, tt=tt, action_var=action_var)
             else:
-                action = np.array(guides[guide_act]) + np.array([np.random.uniform(low=-0.5, high=0.5), np.random.uniform(-1/3, 1/3)])
+                action = generate_action(p, size=1).reshape(-1)
             action = np.clip(action, -1, 1)
+            guide_act = get_guide_action(action)
             self.prev_act = action
             self.prev_guide_act = guide_act
             return action, guide_act
