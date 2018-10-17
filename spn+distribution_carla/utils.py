@@ -22,12 +22,9 @@ from sklearn.preprocessing import OneHotEncoder
 from eval_segm import mean_IU, mean_accuracy, pixel_accuracy, frequency_weighted_IU
 
 
-guides = [[1 / 2, -2 / 3],
-          [1 / 2, 0],
-          [1 / 2, 2 / 3],
-          [-1 / 2, -2 / 3],
-          [-1 / 2, 0],
-          [-1 / 2, 2 / 3]]
+def generate_guide_grid(bin_divide, lb=-1.0, ub=1.0):
+    grids = np.meshgrid(*map(lambda x: (np.arange(x) + 0.5) / x * (ub - lb) + lb, bin_divide))
+    return np.concatenate(list(map(lambda x: x.reshape(-1, 1), grids)), axis=-1)
 
 
 def get_from_dict(info, key):
@@ -177,7 +174,7 @@ def draw_action(fig, x, y, l, w, action):
     return fig
 
 
-def visualize_guide_action(data, outputs, label):
+def visualize_guide_action(data, outputs, guides, label):
     if not os.path.isdir('visualize/affordance'):
         os.makedirs('visualize/affordance')
     outputs = torch.argmax(outputs, dim=1)
@@ -191,11 +188,11 @@ def visualize_guide_action(data, outputs, label):
         cv2.imwrite(os.path.join('visualize', 'affordance', 'affordance_%d.png' % i), obs)
 
 
-def train_guide_action(args, train_net, mpc_buffer):
+def train_guide_action(args, train_net, mpc_buffer, guides):
     if mpc_buffer.can_sample_guide(args.batch_size):
         data, label = mpc_buffer.sample_guide(args.batch_size)
         outputs = train_net(data, function='guide_action')
-        visualize_guide_action(data*255.0, outputs, label)
+        visualize_guide_action(data*255.0, outputs, guides, label)
         return nn.CrossEntropyLoss()(outputs, label)
     else:
         print('\033[1;31mInsufficient expert data for imitation learning.\033[0m')
@@ -401,7 +398,7 @@ def draw_from_pred_carla_simple(array):
 
 def visualize(args, target, output):
     if not os.path.isdir('visualize/segmentation'):
-        os.mkdir('visualize/segmentation')
+        os.makedirs('visualize/segmentation')
     batch_id = np.random.randint(args.batch_size)
     if 'torcs' in args.env or 'gta' in args.env:
         draw_from_pred = draw_from_pred_torcs
@@ -588,27 +585,24 @@ def Focal_Loss(probs, target, reduce=True):
     return loss
 
 
-def generate_action(p, size):
+def generate_action(p, size, guides, bin_divide, lb=-1.0, ub=1.0):
     res = []
+    full_range = ub - lb
     for _ in range(size):
         c = np.random.choice(range(len(p)), p=p)
-        action = np.array(guides[c]) + np.array([np.random.uniform(low=-0.5, high=0.5), np.random.uniform(-1/3, 1/3)])
-        res.append(action.reshape(1, 2))
+        action = np.array(guides[c]) + np.array(list(map(lambda x: np.random.uniform(low=-full_range / 2.0 / x, high=full_range / 2.0 / x), bin_divide)))
+        res.append(action.reshape(1, -1))
     return np.concatenate(res, axis=0)
 
 
-def get_guide_action(action):
-    result = 0
-    if action[0] < 0:
-        result += 3
-    if action[1] > -1/3:
-        result += 1
-    if action[1] > 1/3:
-        result += 1
-    return result
+def get_guide_action(bin_divide, action, lb=-1.0, ub=1.0):
+    _bin_divide = np.array(bin_divide)
+    action = ((action - lb) / (ub - lb) * _bin_divide).astype(np.uint8)
+    weight = np.array(list(map(lambda x: np.prod(_bin_divide[:x]), range(len(bin_divide)))))
+    return np.sum(action * weight)
 
 
-def sample_cont_action(args, p, net, imgs, info=None, prev_action=None, testing=False, avg_img=0, std_img=1.0, tt=0, action_var=None):
+def sample_cont_action(args, p, net, imgs, guides, info=None, prev_action=None, testing=False, avg_img=0, std_img=1.0, tt=0, action_var=None):
     imgs = copy.deepcopy(imgs)
     if args.normalize:
         imgs = (imgs.contiguous() - avg_img) / (std_img)
@@ -631,7 +625,7 @@ def sample_cont_action(args, p, net, imgs, info=None, prev_action=None, testing=
         # this_action = torch.stack([torch.ones(100) * 0.5, torch.arange(100) / 50 - 1], dim=1).view(100, 1, 2).repeat(1, args.pred_step, 1)
         # this_action = Variable(this_action.cuda(), requires_grad=False)
 
-        action = generate_action(p, size=300).reshape(30, 10, 2)
+        action = generate_action(p, 300, guides, args.bin_divide).reshape(30, 10, 2)
         this_action0 = action[:, 0, :]
         this_action = Variable(torch.from_numpy(action).cuda().float(), requires_grad=False)
         # this_action0 = np.arange(6) / 2.5 - 1.0

@@ -13,13 +13,6 @@ from dqn_agent import *
 import pickle as pkl
 import pdb
 
-guides = [[1 / 2, -2 / 3],
-          [1 / 2, 0],
-          [1 / 2, 2 / 3],
-          [-1 / 2, -2 / 3],
-          [-1 / 2, 0],
-          [-1 / 2, 2 / 3]]
-
 def init_models(args):
     train_net = ConvLSTMMulti(args)
     for param in train_net.parameters():
@@ -179,13 +172,13 @@ class BufferManager:
             fi.write(' reward_without ' + str(np.mean(self.epi_rewards_without[-1:])))
             fi.write(' std ' + str(np.std(self.epi_rewards_without[-1:])) + '\n')
 
+        epi_len = len(self.idx_buffer)
         idx_buffer = np.array(self.idx_buffer)
-        if len(idx_buffer) < 300:
-            self.mpc_buffer.expert[idx_buffer] = 0
-        else:
-            safe_buffer = np.array(self.safe_buffer)
-            safe_buffer = np.array([np.sum(safe_buffer[i:i+self.args.safe_length]) == 0 for i in range(safe_buffer.shape[0])])
-            self.mpc_buffer.expert[idx_buffer] = safe_buffer
+
+        safe_buffer = np.array(self.safe_buffer)
+        safe_buffer = np.array([np.sum(safe_buffer[i:i+self.args.safe_length]) == 0 for i in range(safe_buffer.shape[0])])
+        self.mpc_buffer.expert[idx_buffer] = safe_buffer * epi_len
+        self.mpc_buffer.epi_lens.append(epi_len)
 
         self.idx_buffer = []
         self.safe_buffer = []
@@ -198,27 +191,28 @@ class BufferManager:
         
 
 class ActionSampleManager:
-    def __init__(self, args):
+    def __init__(self, args, guides):
         self.args = args
         self.prev_act = np.array([1.0, -0.1]) if self.args.continuous else 1
         self.prev_guide_act = 1
+        self.guides = guides
 
     def sample_action(self, net, dqn_net, obs, obs_var, action_var, exploration, tt, avg_img, std_img, info, no_explore=False, must_explore=False):
         if tt % self.args.num_same_step != 0:
             return self.prev_act, self.prev_guide_act
         else:
-            obs = Variable(torch.from_numpy(np.expand_dims(obs.transpose(2, 0, 1), axis=0)).float())
-            if torch.cuda.is_available():
-                obs = obs.cuda()
-            with torch.no_grad():
-                obs = torch.cat([obs, obs, obs, obs, obs, obs], dim=0)
-                p = F.softmax(net(obs, function='guide_action'), dim=1)[0].data.cpu().numpy()
             if (random.random() <= 1 - exploration.value(tt) or no_explore) and not must_explore:
-                action = sample_cont_action(self.args, p, net, obs_var, info=info, prev_action=np.array([0.5, 0.01]), avg_img=avg_img, std_img=std_img, tt=tt, action_var=action_var)
+                obs = Variable(torch.from_numpy(np.expand_dims(obs.transpose(2, 0, 1), axis=0)).float())
+                if torch.cuda.is_available():
+                    obs = obs.cuda()
+                with torch.no_grad():
+                    obs = obs.repeat(max(1, torch.cuda.device_count()), 1, 1, 1)
+                    p = F.softmax(net(obs, function='guide_action'), dim=1)[0].data.cpu().numpy()
+                action = sample_cont_action(self.args, p, net, obs_var, self.guides, info=info, prev_action=np.array([0.5, 0.01]), avg_img=avg_img, std_img=std_img, tt=tt, action_var=action_var)
             else:
-                action = generate_action(p, size=1).reshape(-1)
+                action = np.random.uniform(-1, 1, size=(self.args.num_total_act,))  # generate_action(p, size=1).reshape(-1)
             action = np.clip(action, -1, 1)
-            guide_act = get_guide_action(action)
+            guide_act = get_guide_action(self.args.bin_divide, action)
             self.prev_act = action
             self.prev_guide_act = guide_act
             return action, guide_act
@@ -238,6 +232,8 @@ class ActionSampleManager:
 
 
 def train_policy(args, env, num_steps=40000000):
+    guides = generate_guide_grid(args.bin_divide)
+
     ''' basics '''
     if 'torcs' in args.env:
         env = TorcsWrapper(env, random_reset=args.use_random_reset, continuous = args.continuous)
@@ -247,7 +243,7 @@ def train_policy(args, env, num_steps=40000000):
 
     ''' load buffers '''
     buffer_manager = BufferManager(args)
-    action_manager = ActionSampleManager(args)
+    action_manager = ActionSampleManager(args, guides)
 
     done_cnt = 0
     _, info = env.reset()
@@ -272,13 +268,9 @@ def train_policy(args, env, num_steps=40000000):
             avg_img, std_img = buffer_manager.img_buffer.get_avg_std()
         else:
             avg_img, std_img = None, None
-        # if info['trackPos'] < -7.0:
-        #     must_explore = True
-        # else:
-        #     must_explore = False
+
         action, guide_action = action_manager.sample_action(net, dqn_agent, obs, obs_var, action_var, exploration, tt, avg_img, std_img, info, no_explore=no_explore, must_explore=must_explore)
-        # if num_episode % 3 == 0:
-        #     action[1] = action[1]*-1.0
+
         obs, reward, done, info = env.step(action)
         if 'carla' in args.env:
             obs, seg = obs
@@ -321,7 +313,7 @@ def train_policy(args, env, num_steps=40000000):
         if tt % args.learning_freq == 0 and buffer_manager.mpc_buffer.can_sample(args.batch_size):
             for ep in range(args.num_train_steps):
                 optimizer.zero_grad()
-                loss = train_model(args, train_net, buffer_manager.mpc_buffer, epoch, buffer_manager.avg_img, buffer_manager.std_img) + train_guide_action(args, train_net, buffer_manager.mpc_buffer)
+                loss = train_model(args, train_net, buffer_manager.mpc_buffer, epoch, buffer_manager.avg_img, buffer_manager.std_img) + train_guide_action(args, train_net, buffer_manager.mpc_buffer, guides)
                 print('loss = %0.4f\n' % loss.data.cpu().numpy())
                 loss.backward()
                 optimizer.step()
@@ -358,6 +350,3 @@ def train_policy(args, env, num_steps=40000000):
             action_manager.reset()
             if args.target_speed > 0:
                 args.target_speed = np.random.uniform(20, 30)
-
-        if args.use_dqn:
-            dqn_agent.store_effect(dqn_action, reward['with_pos'], done)

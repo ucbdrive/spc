@@ -48,6 +48,7 @@ class MPCBuffer(object):
         self.otherlane = None
         self.expert = None
         self.guide_action = None
+        self.epi_lens = []
 
     def sample_seg(self, batch_size):
         idxes = np.random.choice(range(self.num_in_buffer), batch_size)
@@ -73,10 +74,14 @@ class MPCBuffer(object):
         return feature, collision
 
     def can_sample_guide(self, batch_size):
-        return np.sum(self.expert[:self.num_in_buffer]) >= batch_size
+        return len(self.epi_lens) > 0 and np.sum(self.expert[:self.num_in_buffer]) >= batch_size
+
+    def get_bar(self):
+        idx = int(len(self.epi_lens) * self.args.expert_ratio)
+        return sorted(self.epi_lens, reverse=True)[idx]
 
     def sample_guide(self, batch_size):
-        indices = np.where(self.expert[:self.num_in_buffer] > 0)[0]
+        indices = np.where(self.expert[:self.num_in_buffer] >= self.get_bar())[0]
         indices = list(np.random.choice(list(indices), batch_size))
         obs = Variable(torch.from_numpy(np.concatenate([self.obs[idx][np.newaxis, :] for idx in indices], axis=0)).float() / 255.0, requires_grad=False)
         guide_action = Variable(torch.from_numpy(self.guide_action[indices]), requires_grad=False)

@@ -89,7 +89,7 @@ class carla_env(object):
         self.ignite = False
         self.scene = self.client.load_settings(default_settings())
         number_of_player_starts = len(self.scene.player_start_spots)
-        player_start = 0  # random.randint(0, max(0, number_of_player_starts - 1))
+        player_start = 1  # random.randint(0, max(0, number_of_player_starts - 1))
         print('Starting new episode at %r...' % self.scene.map_name)
         self.client.start_episode(player_start)
 
@@ -103,6 +103,9 @@ class carla_env(object):
                 reverse=False)
 
         measurements, sensor_data = self.client.read_data()
+        for i in range(np.random.randint(30)):
+            self.client.send_control(measurements.player_measurements.autopilot_control)
+            measurements, sensor_data = self.client.read_data()
         info = self.convert_info(measurements)
         obs, seg = convert_image(sensor_data, self.simple_seg)
         return (obs, seg), info
@@ -114,8 +117,8 @@ class carla_env(object):
         else:
             self.client.send_control(
                 steer=action[1] * 0.5,
-                throttle=0.5 * action[0] + 0.5,
-                brake=0.0,
+                throttle=action[0]*0.5+0.5,#max(0, action[0]),
+                brake=0,#max(0, -action[0]),
                 hand_brake=False,
                 reverse=False)
         measurements, sensor_data = self.client.read_data()

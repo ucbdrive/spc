@@ -185,7 +185,7 @@ class ConvLSTMNet(nn.Module):
             self.cell_encode = nn.Linear(args.hidden_dim+args.hidden_dim, args.hidden_dim)
 
         # output layers
-        self.guide_layer = end_layer(args, args.classes, 6)
+        self.guide_layer = end_layer(args, args.classes, int(np.prod(args.bin_divide)))
         if args.one_hot:
             self.coll_layer = end_layer(args, args.classes, 2)
             self.off_layer = end_layer(args, args.classes, 2)  # if 'torcs' in args.env else 1)

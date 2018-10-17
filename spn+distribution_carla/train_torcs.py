@@ -66,7 +66,7 @@ if __name__ == '__main__':
             args.classes = 4
         from carla.client import make_carla_client
         from carla_env import carla_env
-        with make_carla_client('localhost', 2018) as client:
+        with make_carla_client('localhost', 2000) as client:
             print('\033[1;32mCarla client connected\033[0m')
             env = carla_env(client, args.simple_seg)
             env.reset()
