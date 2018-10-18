@@ -2,6 +2,7 @@ def init_parser(parser):
     parser.add_argument('--eval', action='store_true')
     parser.add_argument('--recording', action='store_true')
     parser.add_argument('--visualize', action='store_true')
+    parser.add_argument('--video-folder', type=str, default='videos')
     
     parser.add_argument('--lr', type=float, default=1e-3, metavar='LR', help='learning rate')
     parser.add_argument('--frame-history-len', type=int, default=3)
@@ -14,7 +15,8 @@ def init_parser(parser):
     parser.add_argument('--num-total-act', type=int, default=2)
     parser.add_argument('--epsilon-frames', type=int, default=50000)
     parser.add_argument('--expert-ratio', type=float, default=0.1)
-    parser.add_argument('--safe-length', type=int, default=30)
+    parser.add_argument('--safe-length-collision', type=int, default=40)
+    parser.add_argument('--safe-length-offroad', type=int, default=15)
     parser.add_argument('--bin-divide', type=list, default=[10, 10])
     parser.add_argument('--learning-starts', type=int, default=100)
     parser.add_argument('--learning-freq', type=int, default=100)

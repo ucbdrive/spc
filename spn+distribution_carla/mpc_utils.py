@@ -77,8 +77,13 @@ class MPCBuffer(object):
         return len(self.epi_lens) > 0 and np.sum(self.expert[:self.num_in_buffer]) >= batch_size
 
     def get_bar(self):
+        print('Getting bar from %s' % str(self.epi_lens))
         idx = int(len(self.epi_lens) * self.args.expert_ratio)
-        return sorted(self.epi_lens, reverse=True)[idx]
+        bar = sorted(self.epi_lens, reverse=True)[idx]
+        while len(np.where(self.expert[:self.num_in_buffer] >= bar)[0]) == 0 and idx < len(self.epi_lens)-1:
+            idx += 1
+            bar = sorted(self.epi_lens, reverse=True)[idx]
+        return bar
 
     def sample_guide(self, batch_size):
         indices = np.where(self.expert[:self.num_in_buffer] >= self.get_bar())[0]

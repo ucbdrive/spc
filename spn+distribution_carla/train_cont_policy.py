@@ -85,7 +85,8 @@ class BufferManager:
         self.rewards_with = 0.0
         self.rewards_without = 0.0
         self.mpc_ret = 0
-        self.safe_buffer = []
+        self.collision_buffer = []
+        self.offroad_buffer = []
         self.idx_buffer = []
 
     def step_first(self, obs, info):
@@ -139,8 +140,9 @@ class BufferManager:
                                          seg=seg)
         return self.mpc_ret, obs_var
 
-    def store_effect(self, guide_action, action, reward, done, safe):
-        self.safe_buffer.append(safe)
+    def store_effect(self, guide_action, action, reward, done, collision, offroad):
+        self.collision_buffer.append(collision)
+        self.offroad_buffer.append(offroad)
         self.prev_act = copy.deepcopy(action)
         act_var = Variable(torch.from_numpy(self.action_buffer.store_frame(action)), requires_grad=False) if self.args.lstm2 else None
         self.mpc_buffer.store_action(self.mpc_ret, guide_action, action, done)
@@ -175,13 +177,18 @@ class BufferManager:
         epi_len = len(self.idx_buffer)
         idx_buffer = np.array(self.idx_buffer)
 
-        safe_buffer = np.array(self.safe_buffer)
-        safe_buffer = np.array([np.sum(safe_buffer[i:i+self.args.safe_length]) == 0 for i in range(safe_buffer.shape[0])])
+        collision_buffer = np.array(self.collision_buffer)
+        collision_buffer = np.array([np.sum(collision_buffer[i:i+self.args.safe_length_collision]) == 0 for i in range(collision_buffer.shape[0])])
+        offroad_buffer = np.array(self.offroad_buffer)
+        offroad_buffer = np.array([np.sum(offroad_buffer[i:i+self.args.safe_length_offroad]) == 0 for i in range(offroad_buffer.shape[0])])
+        safe_buffer = collision_buffer * offroad_buffer
         self.mpc_buffer.expert[idx_buffer] = safe_buffer * epi_len
-        self.mpc_buffer.epi_lens.append(epi_len)
+        if np.sum(safe_buffer) > 0:
+            self.mpc_buffer.epi_lens.append(epi_len)
 
         self.idx_buffer = []
-        self.safe_buffer = []
+        self.collision_buffer = []
+        self.offroad_buffer = []
 
     def save_mpc_buffer(self):
         self.mpc_buffer.save(self.args.save_path)
@@ -245,12 +252,28 @@ def train_policy(args, env, num_steps=40000000):
     buffer_manager = BufferManager(args)
     action_manager = ActionSampleManager(args, guides)
 
+    video_folder = os.path.join(args.video_folder, "%d" % num_imgs_start)
+    if not os.path.isdir(video_folder):
+        os.makedirs(video_folder)
+    video = cv2.VideoWriter(os.path.join(video_folder, 'video.avi'), cv2.VideoWriter_fourcc(*'MJPG'), 10.0, (256, 256), True)
+
     done_cnt = 0
-    _, info = env.reset()
+    (obs, seg), info = env.reset()
+    video.write(obs)
     obs, reward, done, info = env.step(buffer_manager.prev_act)
     if 'carla' in args.env:
         obs, seg = obs
     buffer_manager.step_first(obs, info)
+    video.write(obs)
+    with open(os.path.join(video_folder, 'actions.txt'), 'a') as f:
+        _guide_act = guides[get_guide_action(args.bin_divide, buffer_manager.prev_act)]
+        f.write('affordance %0.2f %0.2f action %0.4f %0.4f\n' % (
+            _guide_act[0],
+            _guide_act[1],
+            buffer_manager.prev_act[0],
+            buffer_manager.prev_act[1]
+        ))
+
     done_cnt = 0
     no_explore = False
     num_episode = 0
@@ -305,7 +328,16 @@ def train_policy(args, env, num_steps=40000000):
                   ' reward_without_pos ', "{0:.2f}".format(reward['without_pos']),
                   ' explore ', "{0:.2f}".format(exploration.value(tt)))
 
-        action_var = buffer_manager.store_effect(guide_action, action, reward, done, info['collision'] or info['offroad'] or done)
+        action_var = buffer_manager.store_effect(guide_action, action, reward, done, info['collision'], info['offroad'])
+        video.write(obs)
+        with open(os.path.join(video_folder, 'actions.txt'), 'a') as f:
+            _guide_act = guides[get_guide_action(args.bin_divide, action)]
+            f.write('affordance %0.2f %0.2f action %0.4f %0.4f\n' % (
+                _guide_act[0],
+                _guide_act[1],
+                action[0],
+                action[1]
+            ))
 
         if tt % 100 == 0 and args.normalize:
             buffer_manager.update_avg_std_img()
@@ -334,6 +366,15 @@ def train_policy(args, env, num_steps=40000000):
         if done:
             num_episode += 1
             print('finished episode ', num_episode)
+
+            video.release()
+            # os.system('ffmpeg -y -i %s %s' % (os.path.join(video_folder, 'video.avi'), os.path.join(video_folder, 'video.mp4')))
+            # os.remove(os.path.join(video_folder, 'video.avi'))
+            video_folder = os.path.join(args.video_folder, "%d" % tt)
+            if not os.path.isdir(video_folder):
+                os.makedirs(video_folder)
+            video = cv2.VideoWriter(os.path.join(video_folder, 'video.avi'), cv2.VideoWriter_fourcc('M','J','P','G'), 10.0, (256, 256), True)
+
             no_explore = not no_explore
             done_cnt += 1
             if 'torcs' in args.env:
