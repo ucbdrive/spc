@@ -3,6 +3,7 @@ from __future__ import print_function, division
 import random
 import numpy as np
 import cv2
+import copy
 
 from carla.client import make_carla_client
 from carla.sensor import Camera
@@ -41,7 +42,7 @@ def convert_image(sensor_data, simple_seg=True):
     seg = labels_to_array(sensor_data['CameraSegmentation'])
     if simple_seg:
         seg = simplify_seg(seg)
-    return obs, seg
+    return copy.deepcopy(obs), seg
 
 
 def simplify_seg(array):

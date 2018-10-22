@@ -203,6 +203,7 @@ class ActionSampleManager:
         self.prev_act = np.array([1.0, -0.1]) if self.args.continuous else 1
         self.prev_guide_act = 1
         self.guides = guides
+        self.p = None
 
     def sample_action(self, net, dqn_net, obs, obs_var, action_var, exploration, tt, avg_img, std_img, info, no_explore=False, must_explore=False):
         if tt % self.args.num_same_step != 0:
@@ -215,8 +216,10 @@ class ActionSampleManager:
                 with torch.no_grad():
                     obs = obs.repeat(max(1, torch.cuda.device_count()), 1, 1, 1)
                     p = F.softmax(net(obs, function='guide_action'), dim=1)[0].data.cpu().numpy()
+                    self.p = p
                 action = sample_cont_action(self.args, p, net, obs_var, self.guides, info=info, prev_action=np.array([0.5, 0.01]), avg_img=avg_img, std_img=std_img, tt=tt, action_var=action_var)
             else:
+                self.p = None
                 action = np.random.uniform(-1, 1, size=(self.args.num_total_act,))  # generate_action(p, size=1).reshape(-1)
             action = np.clip(action, -1, 1)
             guide_act = get_guide_action(self.args.bin_divide, action)
@@ -255,7 +258,7 @@ def train_policy(args, env, num_steps=40000000):
     video_folder = os.path.join(args.video_folder, "%d" % num_imgs_start)
     if not os.path.isdir(video_folder):
         os.makedirs(video_folder)
-    video = cv2.VideoWriter(os.path.join(video_folder, 'video.avi'), cv2.VideoWriter_fourcc(*'MJPG'), 10.0, (256, 256), True)
+    video = cv2.VideoWriter(os.path.join(video_folder, 'video.avi'), cv2.VideoWriter_fourcc(*'MJPG'), 30.0, (256, 256), True)
 
     done_cnt = 0
     (obs, seg), info = env.reset()
@@ -329,7 +332,8 @@ def train_policy(args, env, num_steps=40000000):
                   ' explore ', "{0:.2f}".format(exploration.value(tt)))
 
         action_var = buffer_manager.store_effect(guide_action, action, reward, done, info['collision'], info['offroad'])
-        video.write(obs)
+        # if action_manager.p is not None:
+        #     obs = draw_action2(args, obs, 150, 66, 45, action_manager.p.reshape(-1))
         with open(os.path.join(video_folder, 'actions.txt'), 'a') as f:
             _guide_act = guides[get_guide_action(args.bin_divide, action)]
             f.write('affordance %0.2f %0.2f action %0.4f %0.4f\n' % (
@@ -373,7 +377,7 @@ def train_policy(args, env, num_steps=40000000):
             video_folder = os.path.join(args.video_folder, "%d" % tt)
             if not os.path.isdir(video_folder):
                 os.makedirs(video_folder)
-            video = cv2.VideoWriter(os.path.join(video_folder, 'video.avi'), cv2.VideoWriter_fourcc('M','J','P','G'), 10.0, (256, 256), True)
+            video = cv2.VideoWriter(os.path.join(video_folder, 'video.avi'), cv2.VideoWriter_fourcc('M','J','P','G'), 30.0, (256, 256), True)
 
             no_explore = not no_explore
             done_cnt += 1

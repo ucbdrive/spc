@@ -157,6 +157,21 @@ def visualize2(seg, gt):
     for i in range(seg.shape[0]):
         imsave(os.path.join('visualize', 'step%d.png' % (i+1)), np.concatenate([draw_from_pred(seg[i]), draw_from_pred(gt[i])], 1))
 
+def softmax(x, axis=1):
+    e_x = np.exp(x - np.expand_dims(np.max(x, axis=axis), axis=axis))
+    return e_x / np.expand_dims(np.sum(e_x, axis=axis), axis=axis)
+
+def draw_action2(args, fig, x, y, l, p):
+    square = np.ones((args.bin_divide[0]*6+1, args.bin_divide[1]*6+1, 3), dtype=np.uint8) * 128
+    p = p * 255 * 10
+    for i in range(args.bin_divide[1]):
+        for j in range(args.bin_divide[0]):
+            square[i*6+1:i*6+6, j*6+1:j*6+6, :] = p[j*args.bin_divide[1]+i]
+    square = np.flip(square, axis=0)
+    square = cv2.resize(square, (2*l, 2*l))
+    fig[x-l:x+l, y-l:y+l, :] = square
+    return fig
+
 
 def draw_action(fig, x, y, l, w, action):
     fig[x-l:x+l, y-w:y+w] = 0
@@ -174,14 +189,16 @@ def draw_action(fig, x, y, l, w, action):
     return fig
 
 
-def visualize_guide_action(data, outputs, guides, label):
+def visualize_guide_action(args, data, outputs, guides, label):
     if not os.path.isdir('visualize/affordance'):
         os.makedirs('visualize/affordance')
+    _outputs = F.softmax(outputs, dim=1)
     outputs = torch.argmax(outputs, dim=1)
     label = label.data.cpu().numpy()
     for i in range(data.shape[0]):
         obs = data[i].data.cpu().numpy().transpose(1, 2, 0)
         action = guides[int(outputs[i])]
+        obs = draw_action2(args, obs, 150, 66, 45, _outputs[i].data.cpu().numpy().reshape(-1))
         obs = draw_action(obs, 150, 66, 45, 1, np.array(action))
         gt_action = guides[int(label[i])]
         obs = draw_action(obs, 150, 190, 45, 1, np.array(gt_action))
@@ -192,7 +209,7 @@ def train_guide_action(args, train_net, mpc_buffer, guides):
     if mpc_buffer.can_sample_guide(args.batch_size):
         data, label = mpc_buffer.sample_guide(args.batch_size)
         outputs = train_net(data, function='guide_action')
-        visualize_guide_action(data*255.0, outputs, guides, label)
+        visualize_guide_action(args, data*255.0, outputs, guides, label)
         return nn.CrossEntropyLoss()(outputs, label)
     else:
         print('\033[1;31mInsufficient expert data for imitation learning.\033[0m')
