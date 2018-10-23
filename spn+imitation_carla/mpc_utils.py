@@ -80,7 +80,7 @@ class MPCBuffer(object):
         indices = []
         while len(indices) < batch_size:
             idx = np.random.randint(self.num_in_buffer-1)
-            if idx not in indices and np.sum(self.done[idx:idx+1]) == 0:
+            if idx not in indices and np.sum(self.done[idx:idx+2]) == 0:
                 indices.append(idx)
 
         data = dict()
