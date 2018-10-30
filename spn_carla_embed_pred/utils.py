@@ -691,16 +691,20 @@ def sample_discrete_action(args, net, obs_var, prev_action=None):
     return which_action
 
 
-def tile(action, num_total_act):
-    return action.view(action.size(0), num_total_act, 1, 1).repeat(1, 1, 64, 64)
+def tile_single(x, action):
+    batch_size, c, w, h = x.size()
+    assert action.size(0) == batch_size
+    action = action.view(action.size(0), -1, 1, 1).repeat(1, 1, w, h)
+    return torch.cat([x, action], dim=1)
+
+def tile(x, action):
+    return list(map(lambda t: tile_single(t, action), x))
 
 
-def tile_first(x, a, frame_history_len, classes, num_total_act):
-    result = [x[:, :classes, :, :]]
-    for i in range(frame_history_len - 1):
-        result.append(tile(a[:, i, :].float(), num_total_act))
-        result.append(x[:, (i+1)*classes:(i+2)*classes, :, :])
-    return torch.cat(result, dim=1)
+def tile_first(x, action):
+    for i in range(len(x) - 1):
+        x[i] = tile(x[i], action[:, i, :].float())
+    return x
 
 
 def get_action_loss(args, net, imgs, actions, action_var=None, target=None, hidden=None, cell=None, gpu=0):

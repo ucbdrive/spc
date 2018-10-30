@@ -10,11 +10,11 @@ import dla_up
 import numpy as np
 import math
 import pdb
-from end_layer import end_layer
+from end_layer import end_layer2
 from conv_lstm import convLSTM
 from fcn import fcn
 from utils import weights_init, tile, tile_first
-from convLSTM2 import convLSTM2
+from convLSTM3 import convLSTM3
 
 
 class atari_model(nn.Module):
@@ -133,14 +133,22 @@ class DLASeg(nn.Module):
                 m.bias.data.zero_()
 
     def forward(self, x):
-        x = self.base(x)
-        x = self.dla_up(x[self.first_level:])
-        x = self.fc(x)
+        x = self.base(x)[self.first_level:]
         xx = x
+        x = self.dla_up(x)
+        x = self.fc(x)
         x = self.up(x)
         y = self.logsoftmax(x)
         x = self.softmax(x)
         return xx, x, y
+
+    def infer(self, x):
+        x = self.dla_up(x)
+        x = self.fc(x)
+        x = self.up(x)
+        y = self.logsoftmax(x)
+        x = self.softmax(x)
+        return x, y
 
     def optim_parameters(self, memo=None):
         for param in self.base.parameters():
@@ -158,53 +166,23 @@ class ConvLSTMNet(nn.Module):
         # feature extraction part
         if args.use_seg:
             self.drnseg = DLASeg(args, down_ratio=4)
-            if not args.one_hot:
-                args.classes = 1
+            self.feature_map_predictor = convLSTM3()
 
-            if args.use_lstm:
-                self.action_encode = nn.Linear(args.num_total_act, 1*32*32)
-                self.action_up1 = nn.ConvTranspose2d(1, 2, 4, stride=4)
-                self.action_up2 = nn.ConvTranspose2d(2, 3, 2, stride=2)
-                self.feature_map_predictor = convLSTM(3, args.classes * args.frame_history_len, args.classes)
-
-            elif args.lstm2:
-                self.feature_map_predictor = convLSTM2(args.classes + args.num_total_act, args.frame_history_len, args.classes)
-
-            else:
-                self.actionEncoder = nn.Linear(args.num_total_act, 32)
-                self.feature_map_predictor = fcn(args.classes * args.frame_history_len, args.classes)
-
-        else:
-            self.action_encode = nn.Linear(args.num_total_act, args.info_dim)
-            self.info_encode = nn.Linear(args.info_dim + args.hidden_dim, args.hidden_dim)
-            self.dla = dla.dla46x_c(pretrained = args.pretrained)
-            self.feature_encode = nn.Linear(256 * args.frame_history_len, args.hidden_dim)
-            self.lstm = ConvLSTMCell(args.hidden_dim, args.hidden_dim, True)
-            self.outfeature_encode = nn.Linear(args.hidden_dim + args.info_dim, args.hidden_dim)
-            self.hidden_encode = nn.Linear(args.hidden_dim+args.hidden_dim, args.hidden_dim)
-            self.cell_encode = nn.Linear(args.hidden_dim+args.hidden_dim, args.hidden_dim)
-
-        # output layers
-        if args.one_hot:
-            self.coll_layer = end_layer(args, args.classes, 2)
-            self.off_layer = end_layer(args, args.classes, 2)  # if 'torcs' in args.env else 1)
-            self.dist_layer = end_layer(args, args.classes * args.frame_history_len, 1)
-        else:
-            self.coll_layer = end_layer(args, 1, 2)
-            self.off_layer = end_layer(args, 1, 2)
-            self.dist_layer = end_layer(args, args.frame_history_len, 1)
+        self.coll_layer = end_layer2(args, args.classes, 2)
+        self.off_layer = end_layer2(args, args.classes, 2)  # if 'torcs' in args.env else 1)
+        self.dist_layer = end_layer2(args, args.classes * args.frame_history_len, 1)
 
         # optional layers
         if args.use_otherlane:
-            self.otherlane_layer = end_layer(args, args.classes, 1)
+            self.otherlane_layer = end_layer2(args, args.classes, 1)
         if args.use_pos:
-            self.pos_layer = end_layer(args, args.classes, 1)
+            self.pos_layer = end_layer2(args, args.classes, 1)
         if args.use_angle:
-            self.angle_layer = end_layer(args, args.classes, 1)
+            self.angle_layer = end_layer2(args, args.classes, 1)
         if args.use_speed:
-            self.speed_layer = end_layer(args, args.classes * args.frame_history_len, 1)
+            self.speed_layer = end_layer2(args, args.classes * args.frame_history_len, 1)
         if args.use_xyz:
-            self.xyz_layer = end_layer(args, args.classes, 3)
+            self.xyz_layer = end_layer2(args, args.classes, 3)
 
         self.args = args
 
@@ -220,63 +198,19 @@ class ConvLSTMNet(nn.Module):
         return action_enc
 
     def forward(self, x, action, with_encode=False, hidden=None, cell=None, training=True, action_var=None):
-        if not with_encode:
-            x, rx, ry = self.get_feature(x)
-        # else:
-        #     x = x.detach()
-        if hidden is None or cell is None:
-            hidden = rx  # Variable(torch.zeros(shape))
-            if self.args.use_lstm:
-                cell = Variable(torch.zeros(rx.size(0), self.args.classes, 256, 256), requires_grad=False)  # Variable(torch.zeros(shape))
-                if torch.cuda.is_available():
-                    cell = cell.cuda()
-            else:
-                cell = 1
-
         output_dict = dict()
-        if self.args.use_seg:
-            if not with_encode:
-                output_dict['seg_current'] = ry[:, -self.args.classes:, :, :]
+        if not with_encode:
+            x, hidden, output_dict['seg_current'] = self.get_feature(x)
+            if torch.cuda.is_available():
+                action_var = action_var.cuda()
+            x = tile_first(x, action_var)
 
-            if self.args.use_lstm:
-                action_enc = self.encode_action(action)
-                hx, cell, ry = self.feature_map_predictor(action_enc, (hidden, cell))
-                hidden = torch.cat([hidden[:, self.args.classes:, :, :], hx], dim=1)
+        x[-1] = tile(x[-1], action)
+        hx = self.feature_map_predictor(x)
+        rx, output_dict['seg_pred'] = self.drnseg.infer(hx)
+        nx_feature_enc = x[1:] + [hx]
+        hidden = torch.cat([hidden[:, self.args.classes:, :, :], rx], dim=1)
 
-            elif self.args.lstm2:
-                if not with_encode and torch.cuda.is_available():
-                    action_var = action_var.cuda()
-                xa = x if with_encode else tile_first(x, action_var, self.args.frame_history_len, self.args.classes, self.args.num_total_act)
-                xa = torch.cat([xa, tile(action, self.args.num_total_act)], dim=1)
-                hx = self.feature_map_predictor(xa)
-                if not self.args.use_lstm:
-                    rx = self.drnseg.up(hx)
-                    ry = self.drnseg.logsoftmax(rx)
-                    rx = self.drnseg.softmax(rx)
-                nx_feature_enc = torch.cat([xa[:, (self.args.classes + self.args.num_total_act):, :, :], hx], dim=1)
-                hidden = torch.cat([hidden[:, self.args.classes:, :, :], rx], dim=1)
-
-            else:
-                action_encoding = self.actionEncoder(action)
-                hx = self.feature_map_predictor(x, action_encoding)
-                if not self.args.use_lstm:
-                    rx = self.drnseg.up(hx)
-                    ry = self.drnseg.logsoftmax(rx)
-                    rx = self.drnseg.softmax(rx)
-                nx_feature_enc = torch.cat([x[:, self.args.classes:, :, :], hx], dim=1)
-                hidden = torch.cat([hidden[:, self.args.classes:, :, :], rx], dim=1)
-            output_dict['seg_pred'] = ry
-        else:
-            encode = torch.cat([x, action_enc], dim=1)
-            encode = F.relu(self.info_encode(encode))
-            hidden, cell = self.lstm(encode, [hidden, cell])
-            nx_feature_enc = hidden  # .view(-1, self.args.hidden_dim)
-            output_dict['seg_pred'] = self.outfeature_encode(F.relu(torch.cat([nx_feature_enc, action_enc], dim = 1)))
-
-        # major outputs
-        if self.args.use_seg and not self.args.one_hot:
-            hidden = torch.argmax(hidden, 1)
-            nx_feature_enc = torch.argmax(nx_feature_enc, 1)
         output_dict['coll_prob'] = self.coll_layer(rx.detach())
         output_dict['offroad_prob'] = self.off_layer(rx.detach())
         output_dict['dist'] = self.dist_layer(hidden.detach())
@@ -292,29 +226,20 @@ class ConvLSTMNet(nn.Module):
             output_dict['speed'] = self.speed_layer(hidden.detach())
         if self.args.use_xyz:
             output_dict['xyz'] = self.xyz_layer(nx_feature_enc)
-        return output_dict, nx_feature_enc, hidden, cell
+        return output_dict, nx_feature_enc, hidden, None
 
     def get_feature(self, x):
-        res = []
         batch_size, frame_history_len, height, width = x.size()
         frame_history_len = int(frame_history_len / 3)
-        # if torch.cuda.is_available():
-        #     x = x.cuda(device=torch.device('cuda:0'))
-        if self.args.use_seg:
-            x = x.contiguous().view(batch_size*frame_history_len, 3, height, width)
-            xx, x, y = self.drnseg(x)
-            xx = xx.contiguous().view(batch_size, frame_history_len*self.args.classes, int(height/4), int(width/4))
-            x = x.contiguous().view(batch_size, frame_history_len*self.args.classes, height, width)
-            y = y.contiguous().view(batch_size, frame_history_len*self.args.classes, height, width)
-            return xx, x, y
-        else:
-            for i in range(self.args.frame_history_len):
-                out = self.dla(x[:, i*3: (i+1)*3, :, :])
-                out = out.squeeze().view(batch_size, -1)
-                res.append(out)
-            res = torch.cat(res, dim=1)
-            res = self.feature_encode(res)
-            return res
+        res = []
+        hidden = []
+
+        for i in range(frame_history_len):
+            xx, rx, y = self.drnseg(x[:, i*3:(i+1)*3, :, :])
+            res.append(xx)
+            hidden.append(rx)
+        hidden = torch.cat(hidden, dim=1)
+        return res, hidden, y
 
 
 class ConvLSTMMulti(nn.Module):

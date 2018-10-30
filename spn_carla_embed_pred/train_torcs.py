@@ -23,7 +23,6 @@ if __name__ == '__main__':
     np.random.seed(args.seed)
     random.seed(args.seed)
 
-    os.environ["CUDA_VISIBLE_DEVICES"]="0,1,2"
     if 'torcs' in args.env:
         # For tarasque
         if os.path.exists('/data2/qizhicai/pyTORCS/py_TORCS/py_TORCS/game_config/michigan.xml'):
@@ -66,7 +65,7 @@ if __name__ == '__main__':
             args.classes = 4
         from carla.client import make_carla_client
         from carla_env import carla_env
-        with make_carla_client('localhost', 2018) as client:
+        with make_carla_client('localhost', 2000) as client:
             print('\033[1;32mCarla client connected\033[0m')
             env = carla_env(client, args.simple_seg)
             env.reset()
