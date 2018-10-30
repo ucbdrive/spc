@@ -185,7 +185,8 @@ class ConvLSTMNet(nn.Module):
             self.cell_encode = nn.Linear(args.hidden_dim+args.hidden_dim, args.hidden_dim)
 
         # output layers
-        self.guide_layer = end_layer2(args, args.classes, int(np.prod(args.bin_divide)))
+        # self.guide_layer = end_layer2(args, args.classes, int(np.prod(args.bin_divide)))
+        self.guide_layer = end_layer2(args, args.classes, 4)
         if args.one_hot:
             self.coll_layer = end_layer(args, args.classes, 2)
             self.off_layer = end_layer(args, args.classes, 2)  # if 'torcs' in args.env else 1)
@@ -363,9 +364,9 @@ class ConvLSTMMulti(nn.Module):
         return x, y
 
     def guide_action(self, x):
-        _, _, seg = self.conv_lstm.drnseg(x)
-        logit = self.conv_lstm.guide_layer(seg.detach())
-        return logit
+        _, enc, seg = self.conv_lstm.drnseg(x)
+        logit = self.conv_lstm.guide_layer(enc.detach())
+        return logit, seg
 
     def forward(self, imgs, actions=None, hidden=None, cell=None, get_feature=False, training=True, function='', action_var=None):
         if function == 'guide_action':

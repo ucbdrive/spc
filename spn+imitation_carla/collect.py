@@ -15,14 +15,16 @@ def save_data(obs, seg, action, path):
     cv2.imwrite(os.path.join(path, 'seg.png'), seg)
     np.save(os.path.join(path, 'action.npy'), action)
 
+folder = 'imitation_data3'
+
 if __name__ == '__main__':
-    if not os.path.isdir('imitation_data'):
-        os.makedirs('imitation_data')
+    if not os.path.isdir(folder):
+        os.makedirs(folder)
     with make_carla_client('localhost', 2000) as client:
         print('\033[1;32mCarla client connected\033[0m')
         env = carla_env(client, True)
-        for episode in range(1, 101):
-            episode_folder = os.path.join('imitation_data', 'episode_%d' % episode)
+        for episode in range(1, 11):
+            episode_folder = os.path.join(folder, 'episode_%d' % episode)
             if not os.path.isdir(episode_folder):
                 os.mkdir(episode_folder)
             (obs, seg), info = env.reset()

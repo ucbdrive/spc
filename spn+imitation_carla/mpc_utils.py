@@ -300,13 +300,14 @@ class MPCBuffer(object):
         self.ret = ret
         return ret
 
-    def store_action(self, idx, guide_action, action, done):
+    def store_action(self, idx, guide_action, action, done, reward):
         self.guide_action[idx] = guide_action
         if self.args.continuous:
             self.action[idx, :] = action
         else:
             self.action[idx, int(action)] = 1
         self.done[idx] = int(done)
+        self.reward[idx, :] = reward
 
     def store_effect(self, idx, coll, off, speed, otherlane=None, angle=None, pos=None, xyz=None, seg=None):
         if self.args.use_xyz:

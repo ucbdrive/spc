@@ -20,12 +20,17 @@ import cv2
 import matplotlib.pyplot as plt
 from sklearn.preprocessing import OneHotEncoder
 from eval_segm import mean_IU, mean_accuracy, pixel_accuracy, frequency_weighted_IU
+from dataloader import CarlaDataset
+from torch.utils.data import DataLoader
 
 
 def generate_guide_grid(bin_divide, lb=-1.0, ub=1.0):
-    grids = np.meshgrid(*map(lambda x: (np.arange(x) + 0.5) / x * (ub - lb) + lb, bin_divide))
-    return np.concatenate(list(map(lambda x: x.reshape(-1, 1), grids)), axis=-1)
-
+    return np.array(
+       [[0.7, 0.0],
+        [0.0, -0.4],
+        [0.0, 0.4],
+        [-0.5, 0.0]]
+    )
 
 def get_from_dict(info, key):
     return info[key] if key in info.keys() else None
@@ -161,6 +166,7 @@ def softmax(x, axis=1):
     e_x = np.exp(x - np.expand_dims(np.max(x, axis=axis), axis=axis))
     return e_x / np.expand_dims(np.sum(e_x, axis=axis), axis=axis)
 
+# Not used
 def draw_action2(args, fig, x, y, l, p):
     square = np.ones((args.bin_divide[0]*6+1, args.bin_divide[1]*6+1, 3), dtype=np.uint8) * 128
     p = p * 255 * 10
@@ -198,29 +204,48 @@ def visualize_guide_action(args, data, outputs, guides, label):
     for i in range(data.shape[0]):
         obs = data[i].data.cpu().numpy().transpose(1, 2, 0)
         action = guides[int(outputs[i])]
-        obs = draw_action2(args, obs, 150, 66, 45, _outputs[i].data.cpu().numpy().reshape(-1))
+        # obs = draw_action2(args, obs, 150, 66, 45, _outputs[i].data.cpu().numpy().reshape(-1))
         obs = draw_action(obs, 150, 66, 45, 1, np.array(action))
         gt_action = guides[int(label[i])]
         obs = draw_action(obs, 150, 190, 45, 1, np.array(gt_action))
         cv2.imwrite(os.path.join('visualize', 'affordance', 'affordance_%d.png' % i), obs)
 
 
-def train_guide_action(args, train_net, mpc_buffer, guides):
-    if mpc_buffer.can_sample_guide(args.batch_size):
-        data = mpc_buffer.sample_guide(args.batch_size)
-        q = train_net(data['obs'], function='guide_action')
-        q_a_values = q.gather(1, data['action'].unsqueeze(1))
-        with torch.no_grad():
-            q_a_values_t = train_net(data['next_obs'], function='guide_action').gather(1, data['action'].unsqueeze(1))
-        target_values = data['reward'] + (args.gamma * q_a_values_t)
-        dqn_loss = nn.MSELoss()(q_a_values, target_values)
-        visualize_guide_action(args, data['obs']*255.0, q, guides, data['action'])
-        print('dqn loss=%0.4f' % dqn_loss.data.cpu().numpy())
-        return dqn_loss
-    else:
-        print('\033[1;31mInsufficient expert data for imitation learning.\033[0m')
-        return 0
+def get_acc(output, target):
+    score = float(torch.sum(output == target)) / float(output.shape[0])
+    return float(score) * 100
 
+
+def train_guide_action(model, optimizer):
+    dataset = CarlaDataset(path='../spn+imitation_carla/imitation_data')
+    data_loader = DataLoader(
+        dataset,
+        batch_size=32,
+        pin_memory=True,
+        num_workers=8,
+        shuffle=True
+    )
+    cnt = 0
+    for batch_i, (img, mask, action) in enumerate(data_loader):
+        img = img.cuda()
+        mask = mask.cuda()
+        action = action.cuda()
+        logit, seg = model(img, function='guide_action')
+        seg_loss = nn.NLLLoss()(seg, mask)
+        IL_loss = nn.CrossEntropyLoss()(logit, action)
+        print('seg loss %0.4f, IL loss %0.4f' % (seg_loss.data.cpu().numpy(), IL_loss.data.cpu().numpy()))
+        loss = seg_loss + IL_loss
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+
+        acc = get_acc(torch.argmax(logit, dim=1).long(), action)
+        with open('imitation_log.txt', 'a') as f:
+            print('epoch %d, batch %d, accuracy %0.2f\n' % (0, batch_i, acc))
+            f.write('epoch %d, batch %d, accuracy %0.2f\n' % (0, batch_i, acc))
+        cnt += 1
+        if cnt > 5:
+            break
 
 def train_model(args, train_net, mpc_buffer, epoch, avg_img_t, std_img_t):
     if epoch % 20 == 0:
@@ -615,14 +640,16 @@ def generate_action(p, size, guides, bin_divide, lb=-1.0, ub=1.0):
         c = np.random.choice(range(len(p)), p=p)
         action = np.array(guides[c]) + np.array(list(map(lambda x: np.random.uniform(low=-full_range / 2.0 / x, high=full_range / 2.0 / x), bin_divide)))
         res.append(action.reshape(1, -1))
-    return np.concatenate(res, axis=0)
+    return np.clip(np.concatenate(res, axis=0), -1, 1)
 
 
-def get_guide_action(bin_divide, action, lb=-1.0, ub=1.0):
-    _bin_divide = np.array(bin_divide)
-    action = ((action - lb) / (ub - lb) * _bin_divide).astype(np.uint8)
-    weight = np.array(list(map(lambda x: np.prod(_bin_divide[:x]), range(len(bin_divide)))))
-    return np.sum(action * weight)
+# Not used
+def get_guide_action(guides, action, lb=-1.0, ub=1.0):
+    return np.argmin(np.linalg.norm(guides-action.reshape(1,2), axis=1))
+    #_bin_divide = np.array(bin_divide)
+    #action = ((action - lb) / (ub - lb) * _bin_divide).astype(np.uint8)
+    #weight = np.array(list(map(lambda x: np.prod(_bin_divide[:x]), range(len(bin_divide)))))
+    #return np.sum(action * weight)
 
 
 def sample_cont_action(args, p, net, imgs, guides, info=None, prev_action=None, testing=False, avg_img=0, std_img=1.0, tt=0, action_var=None):

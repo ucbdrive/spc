@@ -70,7 +70,7 @@ def simplify_seg(array):
 
 def reward_from_info(info):
     reward = dict()
-    reward['without_pos'] = info['speed'] / 15 - info['offroad'] * 2.0 - info['collision']
+    reward['without_pos'] = info['speed'] / 30 - info['offroad'] - info['collision'] * 2.0
     reward['with_pos'] = reward['without_pos'] - info['other_lane'] / 2
     return reward
 
@@ -90,7 +90,7 @@ class carla_env(object):
         self.ignite = False
         self.scene = self.client.load_settings(default_settings())
         number_of_player_starts = len(self.scene.player_start_spots)
-        player_start = 1  # random.randint(0, max(0, number_of_player_starts - 1))
+        player_start = np.random.randint(0, max(0, number_of_player_starts - 1))
         print('Starting new episode at %r...' % self.scene.map_name)
         self.client.start_episode(player_start)
 

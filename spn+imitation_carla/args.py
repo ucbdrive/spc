@@ -17,7 +17,7 @@ def init_parser(parser):
     parser.add_argument('--expert-ratio', type=float, default=0.05)
     parser.add_argument('--safe-length-collision', type=int, default=30)
     parser.add_argument('--safe-length-offroad', type=int, default=15)
-    parser.add_argument('--bin-divide', type=list, default=[5, 5])
+    parser.add_argument('--bin-divide', type=list, default=[3, 3])
     parser.add_argument('--learning-starts', type=int, default=100)
     parser.add_argument('--learning-freq', type=int, default=100)
     parser.add_argument('--target-update-freq', type=int, default=1000)

@@ -146,7 +146,7 @@ class BufferManager:
         self.offroad_buffer.append(offroad)
         self.prev_act = copy.deepcopy(action)
         act_var = Variable(torch.from_numpy(self.action_buffer.store_frame(action)), requires_grad=False) if self.args.lstm2 else None
-        self.mpc_buffer.store_action(self.mpc_ret, guide_action, action, done)
+        self.mpc_buffer.store_action(self.mpc_ret, guide_action, action, done, reward['without_pos'])
         self.rewards_with += reward['with_pos']
         self.rewards_without += reward['without_pos']
         self.reward_buffer.append(reward['without_pos'])
@@ -176,20 +176,21 @@ class BufferManager:
             fi.write(' reward_without ' + str(np.mean(self.epi_rewards_without[-1:])))
             fi.write(' std ' + str(np.std(self.epi_rewards_without[-1:])) + '\n')
 
-        epi_len = len(self.idx_buffer)
-        idx_buffer = np.array(self.idx_buffer)
+        # epi_len = len(self.idx_buffer)
+        # idx_buffer = np.array(self.idx_buffer)
 
         # collision_buffer = np.array(self.collision_buffer)
         # collision_buffer = np.array([np.sum(collision_buffer[i:i+self.args.safe_length_collision]) == 0 for i in range(collision_buffer.shape[0])])
         # offroad_buffer = np.array(self.offroad_buffer)
         # offroad_buffer = np.array([np.sum(offroad_buffer[i:i+self.args.safe_length_offroad]) == 0 for i in range(offroad_buffer.shape[0])])
         # safe_buffer = collision_buffer * offroad_buffer
-        reward_buffer = np.array(self.reward_buffer)
+        # reward_buffer = np.array(self.reward_buffer)
+        # print(epi_len, len(reward_buffer), reward_buffer)
         # value_buffer = reward_buffer.copy()
         #
         # for i in range(epi_len-1, 0, -1):
         #     value_buffer[i-1] += value_buffer[i] * self.args.gamma
-        self.mpc_buffer.reward[idx_buffer, :] = reward_buffer.reshape(-1, 1)
+        # self.mpc_buffer.reward[idx_buffer, :] = reward_buffer.reshape(-1, 1)
 
         self.idx_buffer = []
         self.collision_buffer = []
@@ -215,20 +216,20 @@ class ActionSampleManager:
         if tt % self.args.num_same_step != 0:
             return self.prev_act, self.prev_guide_act
         else:
-            if (random.random() <= 1 - exploration.value(tt) or no_explore) and not must_explore:
+            if no_explore and not must_explore:
                 obs = Variable(torch.from_numpy(np.expand_dims(obs.transpose(2, 0, 1), axis=0)).float())
                 if torch.cuda.is_available():
                     obs = obs.cuda()
                 with torch.no_grad():
                     obs = obs.repeat(max(1, torch.cuda.device_count()), 1, 1, 1)
-                    p = F.softmax(net(obs, function='guide_action'), dim=1)[0].data.cpu().numpy()
+                    p = F.softmax(net(obs, function='guide_action')[0], dim=1)[0].data.cpu().numpy()
                     self.p = p
                 action = sample_cont_action(self.args, p, net, obs_var, self.guides, info=info, prev_action=np.array([0.5, 0.01]), avg_img=avg_img, std_img=std_img, tt=tt, action_var=action_var)
             else:
                 self.p = None
                 action = np.array([info['expert_control'].steer*2, info['expert_control'].throttle])
             action = np.clip(action, -0.99, 0.99)
-            guide_act = get_guide_action(self.args.bin_divide, action)
+            guide_act = get_guide_action(self.guides, action)
             self.prev_act = action
             self.prev_guide_act = guide_act
             return action, guide_act
@@ -264,7 +265,7 @@ def train_policy(args, env, num_steps=40000000):
     video_folder = os.path.join(args.video_folder, "%d" % num_imgs_start)
     if not os.path.isdir(video_folder):
         os.makedirs(video_folder)
-    video = cv2.VideoWriter(os.path.join(video_folder, 'video.avi'), cv2.VideoWriter_fourcc(*'MJPG'), 30.0, (256, 256), True)
+    video = cv2.VideoWriter(os.path.join(video_folder, 'video.avi'), cv2.VideoWriter_fourcc(*'MJPG'), 24.0, (256, 256), True)
 
     done_cnt = 0
     (obs, seg), info = env.reset()
@@ -352,10 +353,14 @@ def train_policy(args, env, num_steps=40000000):
         if tt % 100 == 0 and args.normalize:
             buffer_manager.update_avg_std_img()
 
+        if tt % 100 == 10:
+            train_guide_action(train_net, optimizer)
+            net.load_state_dict(train_net.state_dict())
+
         if tt % args.learning_freq == 0 and buffer_manager.mpc_buffer.can_sample(args.batch_size):
             for ep in range(args.num_train_steps):
                 optimizer.zero_grad()
-                loss = train_model(args, train_net, buffer_manager.mpc_buffer, epoch, buffer_manager.avg_img, buffer_manager.std_img) + train_guide_action(args, train_net, buffer_manager.mpc_buffer, guides)
+                loss = train_model(args, train_net, buffer_manager.mpc_buffer, epoch, buffer_manager.avg_img, buffer_manager.std_img)# + train_guide_action(args, train_net, buffer_manager.mpc_buffer, guides)
                 print('loss = %0.4f\n' % loss.data.cpu().numpy())
                 loss.backward()
                 optimizer.step()
@@ -383,7 +388,7 @@ def train_policy(args, env, num_steps=40000000):
             video_folder = os.path.join(args.video_folder, "%d" % tt)
             if not os.path.isdir(video_folder):
                 os.makedirs(video_folder)
-            video = cv2.VideoWriter(os.path.join(video_folder, 'video.avi'), cv2.VideoWriter_fourcc('M','J','P','G'), 30.0, (256, 256), True)
+            video = cv2.VideoWriter(os.path.join(video_folder, 'video.avi'), cv2.VideoWriter_fourcc('M','J','P','G'), 24.0, (256, 256), True)
 
             no_explore = not no_explore
             done_cnt += 1
