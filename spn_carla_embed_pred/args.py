@@ -2,7 +2,8 @@ def init_parser(parser):
     parser.add_argument('--eval', action='store_true')
     parser.add_argument('--recording', action='store_true')
     parser.add_argument('--visualize', action='store_true')
-    
+    parser.add_argument('--video-folder', type=str, default='videos')
+
     parser.add_argument('--lr', type=float, default=1e-3, metavar='LR', help='learning rate')
     parser.add_argument('--frame-history-len', type=int, default=3)
     parser.add_argument('--pred-step', type=int, default=10)

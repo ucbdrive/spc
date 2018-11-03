@@ -239,12 +239,25 @@ def train_policy(args, env, num_steps=40000000):
     buffer_manager = BufferManager(args)
     action_manager = ActionSampleManager(args)
 
+    video_folder = os.path.join(args.video_folder, "%d" % num_imgs_start)
+    if not os.path.isdir(video_folder):
+        os.makedirs(video_folder)
+    video = cv2.VideoWriter(os.path.join(video_folder, 'video.avi'), cv2.VideoWriter_fourcc(*'MJPG'), 24.0, (256, 256), True)
+
     done_cnt = 0
-    _, info = env.reset()
+    obs, info = env.reset()
+    if 'carla' in args.env:
+        obs, seg = obs
+    video.write(obs)
+
     obs, reward, done, info = env.step(buffer_manager.prev_act)
     if 'carla' in args.env:
         obs, seg = obs
     buffer_manager.step_first(obs, info)
+    video.write(obs)
+    with open(os.path.join(video_folder, 'actions.txt'), 'a') as f:
+        f.write('%0.4f %0.4f\n' % (buffer_manager.prev_act[0], buffer_manager.prev_act[1]))
+
     done_cnt = 0
     no_explore = False
     num_episode = 0
@@ -271,6 +284,7 @@ def train_policy(args, env, num_steps=40000000):
         obs, reward, done, info = env.step(action)
         if 'carla' in args.env:
             obs, seg = obs
+
         if args.target_speed > 0:
             with open(os.path.join(args.save_path, 'speedlog.txt'), 'a') as f:
                 f.write('step %d speed %0.4f target %0.4f\n' % (tt, info['speed'], args.target_speed))
@@ -303,6 +317,10 @@ def train_policy(args, env, num_steps=40000000):
                   ' explore ', "{0:.2f}".format(exploration.value(tt)))
 
         action_var = buffer_manager.store_effect(action, reward, done)
+        video.write(obs)
+        with open(os.path.join(video_folder, 'actions.txt'), 'a') as f:
+            f.write('%0.4f %0.4f\n' % (action[0], action[1]))
+
 
         if tt % 100 == 0 and args.normalize:
             buffer_manager.update_avg_std_img()
@@ -310,7 +328,7 @@ def train_policy(args, env, num_steps=40000000):
         if done:
             print('done, episode terminates')
 
-        if buffer_manager.mpc_buffer.can_sample(args.batch_size):
+        if tt % args.learning_freq == 0 and buffer_manager.mpc_buffer.can_sample(args.batch_size):
             # if (tt % args.learning_freq == 0 or ('gta' in args.env and done)) and tt > args.learning_starts and buffer_manager.mpc_buffer.can_sample(args.batch_size):
             # train_model_new(args, train_net, buffer_manager.mpc_buffer, tt)
             for ep in range(args.num_train_steps):
@@ -337,6 +355,15 @@ def train_policy(args, env, num_steps=40000000):
             # train_model_new(args, train_net, buffer_manager.mpc_buffer, optimizer, tt)
             num_episode += 1
             print('finished episode ', num_episode)
+
+            video.release()
+            # os.system('ffmpeg -y -i %s %s' % (os.path.join(video_folder, 'video.avi'), os.path.join(video_folder, 'video.mp4')))
+            # os.remove(os.path.join(video_folder, 'video.avi'))
+            video_folder = os.path.join(args.video_folder, "%d" % tt)
+            if not os.path.isdir(video_folder):
+                os.makedirs(video_folder)
+            video = cv2.VideoWriter(os.path.join(video_folder, 'video.avi'), cv2.VideoWriter_fourcc('M','J','P','G'), 24.0, (256, 256), True)
+
             no_explore = not no_explore
             done_cnt += 1
             if 'torcs' in args.env:
@@ -351,6 +378,11 @@ def train_policy(args, env, num_steps=40000000):
                 obs, seg = obs
             buffer_manager.reset(prev_info, tt)
             action_manager.reset()
+
+            video.write(obs)
+            with open(os.path.join(video_folder, 'actions.txt'), 'a') as f:
+                f.write('-1.0000 0.0000\n')
+
             if args.target_speed > 0:
                 args.target_speed = np.random.uniform(20, 30)
 

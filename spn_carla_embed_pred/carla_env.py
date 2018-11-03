@@ -69,7 +69,7 @@ def simplify_seg(array):
 
 def reward_from_info(info):
     reward = dict()
-    reward['without_pos'] = info['speed'] / 15 - info['offroad'] * 2.0 - info['collision']
+    reward['without_pos'] = info['speed'] / 15 - info['offroad'] - info['collision'] * 2.0
     reward['with_pos'] = reward['without_pos'] - info['other_lane'] / 2
     return reward
 
@@ -88,8 +88,9 @@ class carla_env(object):
         self.offroad_cnt = 0
         self.ignite = False
         self.scene = self.client.load_settings(default_settings())
-        number_of_player_starts = len(self.scene.player_start_spots)
-        player_start = 0  # random.randint(0, max(0, number_of_player_starts - 1))
+        interval = lambda x, y: list(range(x, y+1))
+        player_starts = interval(29, 32) + interval(34, 43) + interval(45, 54) + interval(56, 57) + interval(64, 85) + interval(87, 96) + interval(98, 107) + interval(109, 118) + interval(120, 121)
+        player_start = np.random.choice(player_starts)
         print('Starting new episode at %r...' % self.scene.map_name)
         self.client.start_episode(player_start)
 
@@ -113,9 +114,9 @@ class carla_env(object):
             self.client.send_control(action)
         else:
             self.client.send_control(
-                steer=action[1] * 0.5,
-                throttle=0.5 * action[0] + 0.5,
-                brake=0.0,
+                steer=action[1] * 0.4,
+                throttle=max(0, 0.6 * action[0] + 0.1),
+                brake=max(0, -0.6 * action[0] - 0.1),
                 hand_brake=False,
                 reverse=False)
         measurements, sensor_data = self.client.read_data()

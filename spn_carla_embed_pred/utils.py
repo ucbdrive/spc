@@ -300,7 +300,7 @@ def train_model(args, train_net, mpc_buffer, epoch, avg_img_t, std_img_t):
     loss_value = float(loss.data.cpu().numpy())
     if np.isnan(loss_value):
         pdb.set_trace()
-    # visualize(args, target, output)
+    visualize(args, target, output)
     return loss
 
 
@@ -368,7 +368,7 @@ def visualize(args, target, output):
         _, prediction = torch.max(output['seg_pred'][batch_id], 1)
         prediction = from_variable_to_numpy(prediction)
         for i in range(args.pred_step):
-            imsave('visualize/%d.png' % i, np.concatenate([cv2.cvtColor(observation[i], cv2.COLOR_BGR2GRAY), draw_from_pred(segmentation[i]), draw_from_pred(prediction[i])], 1))
+            imsave('visualize/%d.png' % i, np.concatenate([cv2.cvtColor(observation[i], cv2.COLOR_RGB2BGR), draw_from_pred(segmentation[i]), draw_from_pred(prediction[i])], 1))
 
     with open(args.save_path+'/report.txt', 'a') as f:
         f.write('target collision:\n')
