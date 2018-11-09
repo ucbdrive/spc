@@ -45,13 +45,20 @@ def train_guide_action(args, train_net, mpc_buffer, guides):
         return 0
 
 
-def generate_action(p, size, guides, bin_divide, lb=-1.0, ub=1.0):
+def generate_episode(args, mean, lb=-1.0, ub=1.0):
     res = []
     full_range = ub - lb
+    for i in range(args.pred_step):
+        res.append(np.array(mean) + np.array(list(map(lambda x: np.random.uniform(low=-full_range / 2.0 / x, high=full_range / 2.0 / x), args.bin_divide))))
+    res = list(map(lambda x: x.reshape(1, -1), res))
+    return np.concatenate(res, axis=0)
+
+
+def generate_action(args, p, size, guides, lb=-1.0, ub=1.0):
+    res = []
     for _ in range(size):
         c = np.random.choice(range(len(p)), p=p)
-        action = np.array(guides[c]) + np.array(list(map(lambda x: np.random.uniform(low=-full_range / 2.0 / x, high=full_range / 2.0 / x), bin_divide)))
-        res.append(action.reshape(1, -1))
+        res.append(np.expand_dims(generate_episode(args, guides[c], lb, ub), axis=0))
     return np.concatenate(res, axis=0)
 
 
@@ -534,7 +541,7 @@ def sample_cont_action(args, p, net, imgs, guides, info=None, prev_action=None, 
         imgs = imgs.repeat(30, 1, 1, 1, 1)
         action_var = action_var.repeat(30, 1, 1)
 
-        action = generate_action(p, 300, guides, args.bin_divide).reshape(30, 10, 2)
+        action = generate_action(args, p, 30, guides)
         this_action0 = action[:, 0, :]
         this_action = Variable(torch.from_numpy(action).cuda().float(), requires_grad=False)
 
