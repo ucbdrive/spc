@@ -89,6 +89,7 @@ class BufferManager:
         self.collision_buffer = []
         self.offroad_buffer = []
         self.idx_buffer = []
+        self.dist_sum = 0.0
 
     def step_first(self, obs, info):
         if self.args.normalize:
@@ -138,6 +139,7 @@ class BufferManager:
                                         off=info['off_flag'],
                                         speed=info['speed'],
                                         seg=seg)
+        self.dist_sum += info['speed']
         return self.mpc_ret, obs_var
 
     def store_effect(self, guide_action, action, reward, done, collision, offroad):
@@ -179,14 +181,14 @@ class BufferManager:
         collision_buffer = np.array([np.sum(collision_buffer[i:i+self.args.safe_length_collision]) == 0 for i in range(collision_buffer.shape[0])])
         offroad_buffer = np.array(self.offroad_buffer)
         offroad_buffer = np.array([np.sum(offroad_buffer[i:i+self.args.safe_length_offroad]) == 0 for i in range(offroad_buffer.shape[0])])
-        safe_buffer = collision_buffer * offroad_buffer * epi_len
+        safe_buffer = collision_buffer * offroad_buffer * self.dist_sum
         self.mpc_buffer.expert[idx_buffer] = safe_buffer
         self.mpc_buffer.epi_lens.append(epi_len)
 
         self.idx_buffer = []
         self.collision_buffer = []
         self.offroad_buffer = []
-
+        self.dist_sum = 0.0
 
     def save_mpc_buffer(self):
         self.mpc_buffer.save(self.args.save_path)

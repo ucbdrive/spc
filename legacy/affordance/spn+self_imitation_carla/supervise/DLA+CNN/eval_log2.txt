@@ -1,0 +1,1 @@
+Epoch 11 Accuracy 97.43
