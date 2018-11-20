@@ -245,19 +245,18 @@ class ConvLSTMNet(nn.Module):
         hidden = torch.cat(hidden, dim=1)
         return res, hidden, y
 
-    def bbox_predictor(self, bbox, images):
+    def bbox_predictor(self, bboxes, images):
         lstm = nn.LSTM(input_size=1024, hidden_size=5, num_layers=1)
         hx = Variable(torch.zeros(batch_size, 5))
         cx = Variable(torch.zeros(batch_size, 5))
-        feature = self.bbox_features_extractor(bbox, images[0])
         for step in range(len(images)):
+            bboxObj = BoxList(bboxes[step], self.image_size, mode="xyxy")
+            feature = self.bbox_features_extractor(bboxObj, images[step])
             _, (hx, cx) = lstm(feature, (hx, cx))
-            bbox += hx[:4]
-            bboxObj = BoxList(bbox, self.image_size, mode="xyxy")
-            feature = self.bbox_features_extractor(bboxObj)
-            if (hx[-1] <= 0) and (step < len(feature) - 1):
+            hx[:4] += bboxes[step] 
+            if (torch.nn.sigmoid(hx[-1]) <= 0.5) and (step < len(feature) - 1):
                 feature = torch.zeros_like(feature)
-        return bbox
+        return hx
             
 
 class ConvLSTMMulti(nn.Module):
