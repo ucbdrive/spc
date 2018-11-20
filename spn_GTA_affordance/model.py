@@ -15,7 +15,8 @@ from conv_lstm import convLSTM
 from fcn import fcn
 from utils import weights_init, tile, tile_first
 from convLSTM3 import convLSTM3
-
+from maskrcnn_benchmark.utils.bbox_featureExtractor import Box_feature_extractor
+from maskrcnn_benchmark.structures.bounding_box import BoxList
 
 class atari_model(nn.Module):
     def __init__(self, inc=12, num_actions=9, frame_history_len=4):
@@ -198,23 +199,26 @@ class ConvLSTMNet(nn.Module):
             action_enc = F.relu(self.action_encode(action))
         return action_enc
 
-    def forward(self, x, action, with_encode=False, hidden=None, cell=None, training=True, action_var=None):
+    def forward(self, x, bbox, action, with_encode=False, hidden=None, cell=None, training=True, action_var=None):
         output_dict = dict()
         if not with_encode:
             x, hidden, output_dict['seg_current'] = self.get_feature(x)
             if torch.cuda.is_available():
                 action_var = action_var.cuda()
             x = tile_first(x, action_var)
-
+        output_dcit[]
         x[-1] = tile(x[-1], action)
         hx = self.feature_map_predictor(x)
         rx, output_dict['seg_pred'] = self.drnseg.infer(hx)
         nx_feature_enc = x[1:] + [hx]
         hidden = torch.cat([hidden[:, self.args.classes:, :, :], rx], dim=1)
-
+        
         output_dict['coll_prob'] = self.coll_layer(rx.detach())
         output_dict['offroad_prob'] = self.off_layer(rx.detach())
         output_dict['dist'] = self.dist_layer(hidden.detach())
+
+        output_dict['bbox_current'] = bbox
+        output_dict['bbox_pred'] = self.bbox_predictor(bbox, x)
 
         # optional outputs
         if self.args.use_otherlane:
@@ -234,7 +238,6 @@ class ConvLSTMNet(nn.Module):
         frame_history_len = int(frame_history_len / 3)
         res = []
         hidden = []
-
         for i in range(frame_history_len):
             xx, rx, y = self.drnseg(x[:, i*3:(i+1)*3, :, :])
             res.append(xx)
@@ -242,6 +245,20 @@ class ConvLSTMNet(nn.Module):
         hidden = torch.cat(hidden, dim=1)
         return res, hidden, y
 
+    def bbox_predictor(self, bbox, images):
+        lstm = nn.LSTM(input_size=1024, hidden_size=5, num_layers=1)
+        hx = Variable(torch.zeros(batch_size, 5))
+        cx = Variable(torch.zeros(batch_size, 5))
+        feature = self.bbox_features_extractor(bbox, images[0])
+        for step in range(len(images)):
+            _, (hx, cx) = lstm(feature, (hx, cx))
+            bbox += hx[:4]
+            bboxObj = BoxList(bbox, self.image_size, mode="xyxy")
+            feature = self.bbox_features_extractor(bboxObj)
+            if (hx[-1] <= 0) and (step < len(feature) - 1):
+                feature = torch.zeros_like(feature)
+        return bbox
+            
 
 class ConvLSTMMulti(nn.Module):
     def __init__(self, args):
