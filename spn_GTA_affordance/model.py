@@ -246,9 +246,13 @@ class ConvLSTMNet(nn.Module):
         return res, hidden, y
 
     def bbox_predictor(self, bboxes, images):
+        batch_size = images[0].shape[0]
         lstm = nn.LSTM(input_size=1024, hidden_size=5, num_layers=1)
-        hx = Variable(torch.zeros(batch_size, 5))
+        hx = Variable(torch.zeros(batch_size, 5))# I am not sure about the shape here
         cx = Variable(torch.zeros(batch_size, 5))
+        if torch.cuda.is_available():
+            hx = hx.cuda()
+            cx = cx.cuda()
         for step in range(len(images)):
             bboxObj = BoxList(bboxes[step], self.image_size, mode="xyxy")
             feature = self.bbox_features_extractor(bboxObj, images[step])
