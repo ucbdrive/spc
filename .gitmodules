@@ -1,3 +1,6 @@
 [submodule "pyTORCS"]
 	path = pyTORCS
 	url = https://github.com/cxy1997/pyTORCS
+[submodule "spn_GTA_affordance/maskrcnn-benchmark"]
+	path = spn_GTA_affordance/maskrcnn-benchmark
+	url = https://github.com/xuanyuzhou98/maskrcnn-benchmark.git
