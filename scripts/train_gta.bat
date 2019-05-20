@@ -1,0 +1,23 @@
+cd ..
+python main.py ^
+    --env gta ^
+    --num-train-steps 10 ^
+    --num-total-act 2 ^
+    --pred-step 10 ^
+    --buffer-size 50000 ^
+    --epsilon-frames 100000 ^
+    --batch-size 16 ^
+    --use-collision ^
+    --use-offroad ^
+    --use-speed ^
+    --sample-with-collision ^
+    --sample-with-offroad ^
+    --speed-threshold 10 ^
+    --use-guidance ^
+    --expert-bar 50 ^
+    --safe-length-collision 5 ^
+    --safe-length-offroad 5 ^
+    --data-parallel ^
+    --recording ^
+    --verbose ^
+    --resume
