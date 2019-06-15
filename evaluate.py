@@ -16,13 +16,13 @@ mp = _mp.get_context('spawn')
 def draw(action, step, obs_var, net, args, action_var, name):
     if not os.path.isdir(os.path.join('demo', str(step), name)):
         os.makedirs(os.path.join('demo', str(step), name))
-    s = 'Next Action: [%0.1f, %0.1f]\n' % (action[0], action[1])
+    s = 'Next Action: [%0.1f, %0.1f]\n' % (action[0][0], action[0][1])
     # cv2.putText(raw_obs, 'Next Action: [%0.1f, %0.1f]' % (action[0], action[1]), (70, 400), cv2.FONT_HERSHEY_DUPLEX, 1.2, (255, 255, 0), 2)
 
-    action = torch.from_numpy(action).view(1, args.pred_step, 1)
+    action = torch.from_numpy(action).view(1, args.pred_step, args.num_total_act)
     action = Variable(action.cuda().float(), requires_grad=False)
     obs_var = obs_var / 255.0
-    obs_var = obs_var.view(1, 1, 9, 256, 256)
+    obs_var = obs_var.view(1, 1, 9, args.frame_height, args.frame_width)
     with torch.no_grad():
         output = net(obs_var, action, training=False, action_var=action_var)
         output['offroad_prob'] = F.softmax(output['offroad_prob'], -1)
@@ -87,7 +87,8 @@ def evaluate_policy(args, env):
                                                             testing=True)
         draw(action, step, obs_var, net, args, action_var, 'outcome')
         cv2.imwrite(os.path.join('demo', str(step), 'obs.png'), cv2.cvtColor(obs, cv2.COLOR_BGR2RGB))
-        obs, reward, done, info = env.step(action[0])
+        action = action[0]
+        obs, reward, done, info = env.step(action)
 
         action_var = buffer_manager.store_effect(guide_action=guide_action,
                                                  action=action,
