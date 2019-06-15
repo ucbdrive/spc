@@ -30,13 +30,13 @@ def draw(action, step, obs_var, net, args, action_var, name):
 
     for i in range(args.pred_step):
         img = draw_from_pred(args, from_variable_to_numpy(torch.argmax(output['seg_pred'][0, i+1], 0)))
-        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        # img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
         # cv2.putText(img, 'OffRoad: %0.2f%%' % float(100*output['offroad_prob'][0, i, 1]), (20, 160), cv2.FONT_HERSHEY_DUPLEX, 0.8, (255, 255, 0), 2)
         # cv2.putText(img, 'Collision: %0.2f%%' % float(100*output['coll_prob'][0, i, 1]), (20, 200), cv2.FONT_HERSHEY_DUPLEX, 0.8, (255, 255, 0), 2)
         s += 'Step %d\n' % i
         s += 'OffRoad: %0.2f%%\n' % float(100*output['offroad_prob'][0, i, 1])
         s += 'Collision: %0.2f%%\n' % float(100*output['coll_prob'][0, i, 1])
-        s += 'Distance: %0.2f%%\n' % float(output['dist'][0, i, 0])
+        # s += 'Distance: %0.2f%%\n' % float(output['dist'][0, i, 0])
         cv2.imwrite(os.path.join('demo', str(step), name, 'seg%d.png' % (i+1)), img)
 
     with open(os.path.join('demo', str(step), name, 'log.txt'), 'w') as f:
@@ -91,13 +91,13 @@ def evaluate_policy(args, env):
         obs, reward, done, info = env.step(action)
 
         action_var = buffer_manager.store_effect(guide_action=guide_action,
-                                                 action=action,
+                                                 action=action[0],
                                                  reward=reward,
                                                  done=done,
                                                  collision=info['collision'],
                                                  offroad=info['offroad'])
         if args.recording:
-            log_frame(obs, action, video_folder, video)
+            log_frame(obs, action[0], video_folder, video)
 
         if done:
             print('Episode finished ...')
