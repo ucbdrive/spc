@@ -47,6 +47,7 @@ def init_parser(parser):
     parser.add_argument('--sample-with-offroad', action='store_true')
     parser.add_argument('--sample-with-collision', action='store_true')
     parser.add_argument('--speed-threshold', type=float, default=20)
+    parser.add_argument('--port', type=int, default=2000)
 
 
 def post_processing(args):

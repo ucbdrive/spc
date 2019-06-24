@@ -23,7 +23,7 @@ if __name__ == '__main__':
         from carla.client import make_carla_client
         from envs.CARLA.carla_env import CarlaEnv
 
-        with make_carla_client('localhost', 2019) as client:
+        with make_carla_client('localhost', args.port) as client:
             env = CarlaEnv(client)
             if args.eval:
                 evaluate_policy(args, env)
