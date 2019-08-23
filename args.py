@@ -31,9 +31,17 @@ def init_parser(parser):
     parser.add_argument('--data-parallel', action='store_true')
     parser.add_argument('--id', type=int, default=0)
     parser.add_argument('--num-train-steps', type=int, default=10)
+    parser.add_argument('--max-steps', type=int, default=4000000000)
     # enviroument configurations
     parser.add_argument('--env', type=str, default='torcs')
     parser.add_argument('--server', type=bool, default=False)
+    parser.add_argument('--weather-id', type=int, default=1)
+    parser.add_argument('--vehicle-num', type=int, default=10)
+    parser.add_argument('--ped-num', type=int, default=10)
+    parser.add_argument('--notify', type=bool, default=False)
+    parser.add_argument('--autopilot', type=bool, default=False)
+    parser.add_argument('--monitor-video-dir', type=str, default="monitor_record")
+    parser.add_argument('--port', type=int, default=6000)
 
     # model configurations
     parser.add_argument('--pretrained', type=bool, default=True)
@@ -47,7 +55,6 @@ def init_parser(parser):
     parser.add_argument('--sample-with-offroad', action='store_true')
     parser.add_argument('--sample-with-collision', action='store_true')
     parser.add_argument('--speed-threshold', type=float, default=20)
-    parser.add_argument('--port', type=int, default=2000)
 
 
 def post_processing(args):

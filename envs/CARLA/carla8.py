@@ -3,9 +3,9 @@ from __future__ import print_function, division
 import random
 import numpy as np
 
-from carla.sensor import Camera
-from carla.settings import CarlaSettings
-from carla.image_converter import labels_to_array
+from .carla.sensor import Camera
+from .carla.settings import CarlaSettings
+from .carla.image_converter import labels_to_array
 
 
 def default_settings():

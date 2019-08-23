@@ -19,19 +19,19 @@ if __name__ == '__main__':
     np.random.seed(args.seed)
     random.seed(args.seed)
 
-    if 'carla' in args.env:
-        from carla.client import make_carla_client
-        from envs.CARLA.carla_env import CarlaEnv
-
-        with make_carla_client('localhost', args.port) as client:
+    if 'carla8' in args.env:
+        # run spc on carla0.9 simulator, currently only 0.9.4 is supported
+        from envs.CARLA.carla.client import make_carla_client
+        from envs.CARLA.carla8 import CarlaEnv
+        with make_carla_client('localhost', args.port, 10000) as client:
             env = CarlaEnv(client)
             if args.eval:
                 evaluate_policy(args, env)
             else:
-                train_policy(args, env, max_steps=40000000)
+                train_policy(args, env, max_steps=args.max_steps)
     else:
         with make_env(args) as env:
             if args.eval:
                 evaluate_policy(args, env)
             else:
-                train_policy(args, env, max_steps=40000000)
+                train_policy(args, env, max_steps=args.max_steps)

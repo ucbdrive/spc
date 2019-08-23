@@ -2,14 +2,14 @@
 cd ..
 #while true; do
     python main.py \
-        --env carla \
+        --env carla8 \
         --learning-freq 100 \
         --num-train-steps 10 \
         --num-total-act 2 \
         --pred-step 10 \
         --buffer-size 50000 \
         --epsilon-frames 100000 \
-        --batch-size 24 \
+        --batch-size 1 \
         --use-collision \
         --use-offroad \
         --use-speed \
@@ -22,7 +22,8 @@ cd ..
         --safe-length-offroad 30 \
         --data-parallel \
         --id 25 \
-        --recording \
-        --verbose \
-        --resume
+        # --recording-frame \
+        # --verbose \
+	# --monitor \
+        # --resume \
 #done
