@@ -60,7 +60,7 @@ To use some advanced features provided in CARLA v0.9, we also support it but cur
 We recommend to install carla client api for v0.9.4 with pip:
 
 ```
-pip install carla=0.9.4
+pip install carla==0.9.4
 ```
 
 To start a CARLA9 simulator :
