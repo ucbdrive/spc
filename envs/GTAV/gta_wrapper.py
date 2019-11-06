@@ -168,7 +168,7 @@ class GTAWrapper:
         reward['without_pos'] = info['speed'] if coll_flag == False else 0
         info['collision'] = bool(coll_flag)
         info['offroad'] = bool(off_flag)
-        return obs, reward, done, info
+        return obs, reward['with_pos'], done, info
 
     def close(self):
         self.env.close()
